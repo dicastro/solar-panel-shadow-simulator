@@ -98,10 +98,7 @@ function SolarPanel({
   hasOptimizer,
   orientation,
   showPoints,
-  density,
-  threshold,
-  peakPower,
-  onPowerUpdate
+  density
 }: any) {
   const shadedPointsMap = useRef<Map<string, boolean>>(new Map());
 
@@ -559,7 +556,6 @@ export default function App() {
 
   // simulation status
   const [isRunning, setIsRunning] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [showPoints, setShowPoints] = useState(false);
   const [threshold, setThreshold] = useState(1);
   const [density, setDensity] = useState(4); // 4x4 por defecto
