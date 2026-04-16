@@ -566,7 +566,7 @@ export default function App() {
   }, [date, config]);
 
   useEffect(() => {
-    fetch('/config.json')
+    fetch(`${import.meta.env.BASE_URL}config.json`)
       .then(res => res.json())
       .then(data => {
         setConfig(data);
