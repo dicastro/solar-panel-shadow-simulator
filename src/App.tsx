@@ -529,7 +529,7 @@ function SimulationControls({
         <p>Puntos por panel: {zonesPerPanel * pointsPerZone}</p>
         <p>Pasos de tiempo: {timeSteps.toLocaleString()}</p>
         <p><strong>Total rayos: {totalRays.toLocaleString()}</strong></p>
-        {isRunning && <progress value={progress} max={100} style={{ width: '100%' }} />}
+        {isRunning && <progress value={0} max={100} style={{ width: '100%' }} />}
       </div>
 
       <div className="instant-results" style={{ marginTop: '10px', borderTop: '1px solid #444', paddingTop: '10px' }}>
