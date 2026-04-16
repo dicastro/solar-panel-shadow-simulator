@@ -466,7 +466,7 @@ function MainControls({ date, setDate, isPlaying, setIsPlaying, adjustDate, conf
 }
 
 function SimulationControls({ 
-  onRun, onStop, isRunning, progress, 
+  onRun, onStop, isRunning, 
   showPoints, setShowPoints, density, setDensity,
   threshold, setThreshold, config
 }: any) {
@@ -628,8 +628,7 @@ export default function App() {
       />
 
       <SimulationControls 
-        isRunning={isRunning} 
-        progress={progress} 
+        isRunning={isRunning}
         onRun={handleRunSimulation} 
         onStop={handleStopSimulation}
         showPoints={showPoints}
