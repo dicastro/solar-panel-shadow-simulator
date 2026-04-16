@@ -1,0 +1,13 @@
+{
+    "title": "Simulador Solar",
+    "date_label": "Día del año",
+    "time_label": "Hora",
+    "lang_label": "Idioma",
+    "loading": "Cargando configuración...",
+    "coordinates": {
+        "north": "N",
+        "south": "S",
+        "west": "O",
+        "east": "E"
+    }
+}

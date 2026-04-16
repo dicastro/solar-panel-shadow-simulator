@@ -1,0 +1,83 @@
+.controls-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 10;
+    background: rgba(30, 30, 30, 0.9);
+    color: white;
+    padding: 20px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    font-family: sans-serif;
+    width: 380px;
+    /* Un poco más ancho para la botonera */
+    border: 1px solid #444;
+}
+
+.control-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.button-group {
+    display: flex;
+    gap: 4px;
+    width: 100%;
+}
+
+.button-group button {
+    flex: 1;
+    padding: 8px 0;
+    cursor: pointer;
+    background: #444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+    outline: 0px solid transparent;
+}
+
+.button-group button:hover {
+    background: #555;
+    /* El outline es mejor que border porque no cambia el tamaño del botón al aparecer */
+    outline: 2px solid rgba(255, 255, 255, 0.4);
+    outline-offset: -2px;
+    filter: brightness(1.1);
+}
+
+.button-group .play-btn {
+    background: #2e7d32;
+}
+
+.button-group .play-btn:hover {
+    background: #388e3c;
+    outline: 2px solid rgba(255, 255, 255, 0.8);
+    outline-offset: -2px;
+}
+
+.button-group .pause-btn {
+    background: #fbc02d;
+    color: #333;
+}
+
+.button-group .pause-btn:hover {
+    background: #fdd835;
+    outline: 2px solid rgba(0, 0, 0, 0.3);
+    outline-offset: -2px;
+}
+
+.date-display {
+    text-align: center;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #4caf50;
+    background: #111;
+    padding: 5px;
+    border-radius: 4px;
+}

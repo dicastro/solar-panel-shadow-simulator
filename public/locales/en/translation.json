@@ -1,0 +1,13 @@
+{
+    "title": "Solar Simulator",
+    "date_label": "Date",
+    "time_label": "Time",
+    "lang_label": "Language",
+    "loading": "Loading configuration...",
+    "coordinates": {
+        "north": "N",
+        "south": "S",
+        "west": "W",
+        "east": "E"
+    }
+}
