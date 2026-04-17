@@ -1,9 +1,11 @@
 {
-  "geometry": {
-    "latitude": 40.625207,
-    "longitude": -4.0141301,
+  "installation": {
+    "location": {
+      "latitude": 40.625207,
+      "longitude": -4.0141301
+    },
     "timezone": "Europe/Madrid",
-    "points": [
+    "wallPoints": [
       [0, 0],
       [3.7, 0],
       [3.7, -6.6],
@@ -24,12 +26,12 @@
        "thickness": 0.05, 
        "shape": "round" 
     },
-    "segmentsSettings": [
-      { "segment": 1, "trimEnd": 0.5 },
-      { "segment": 2, "trimStart": 0.5, "height": 1.8, "railing": { "active": false } },
-      { "segment": 5, "trimEnd": 1 },
-      { "segment": 6, "trimStart": 1, "trimEnd": 1 },
-      { "segment": 7, "trimStart": 1 }
+    "wallOverrides": [
+      { "wall": 1, "trimEnd": 0.5 },
+      { "wall": 2, "trimStart": 0.5, "height": 1.8, "railing": { "active": false } },
+      { "wall": 5, "trimEnd": 1 },
+      { "wall": 6, "trimStart": 1, "trimEnd": 1 },
+      { "wall": 7, "trimStart": 1 }
     ]
   },
   "panels": {
@@ -39,7 +41,8 @@
       "peakPower": 415,
       "zones": 2,
       "zonesDisposition": "horizontal",
-      "hasOptimizer": false
+      "hasOptimizer": false,
+      "string": "S1"
     },
     "arrays": [{
       "position": [0.2, -0.1],

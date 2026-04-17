@@ -13,8 +13,9 @@ import * as THREE from 'three';
 import './i18n'
 import './App.css'
 import { calculateSunState } from './solarEngine';
-import { Config, SunState } from './types'
+import { Config, InstallationLocationConfiguration, SolarInstallation, SunState } from './types'
 import { PointWithShadow } from './components/PointWithShadow'
+import { SolarInstallationFactory } from './factory/SolarInstallationFactory'
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -48,9 +49,9 @@ function Compass() {
   );
 }
 
-function Sun({ config, date }: { config: Config, date: Date }) {
+function Sun({ installationLocation, date }: { installationLocation: InstallationLocationConfiguration, date: Date }) {
   // get sun position
-  const sunPos = SunCalc.getPosition(date, config.geometry.latitude, config.geometry.longitude);
+  const sunPos = SunCalc.getPosition(date, installationLocation.latitude, installationLocation.longitude);
 
   // conver spherical coordinates (returned by SunCalc) to cartesian coordinates (required by Three.js)
   // In Three.js: Y is UP, X es EAST/WEST, Z es NORTH/SOUTH
@@ -246,43 +247,45 @@ function SolarArray({ sun, array, arrayIndex, defaults, settings, centerX, cente
   );
 }
 
-function Scene({ config, sun, date, showPoints, density }: { config: Config; sun: SunState | null; date: Date, showPoints: boolean, density: number }) {
-  const { points, wallDefaults, railingDefaults, segmentsSettings } = config.geometry;
-  const { panelDefaults, arrays, arraysSettings } = config.panels;
-  const wallThickness = wallDefaults.thickness;
+function Scene({
+  installation,
+  sun,
+  date,
+  showPoints,
+  density
+}: {
+  installation: SolarInstallation,
+  sun: SunState | null,
+  date: Date,
+  showPoints: boolean,
+  density: number
+}) {
+  const { panelDefaults, arrays, arraysSettings } = installation.panels;
 
-  const centerX = points.reduce((sum, p) => sum + p[0], 0) / points.length;
-  const centerZ = points.reduce((sum, p) => sum + p[1], 0) / points.length;
+  // El Suelo ya usa los puntos centrados del modelo
+  const floorShape = useMemo(() => {
+    const shape = new THREE.Shape();
 
-  const getSegmentConfig = (index: number) => 
-    segmentsSettings?.find((s: any) => s.segment === index);
-
-  const getNextPoint = (points: [number, number][], currentPos: number) =>
-    points[(currentPos + 1) % points.length];
-
-  const floorShape = new THREE.Shape();
-  
-  points.forEach((p, i) => {
-    const x = p[0] - centerX;
-    const z = p[1] - centerZ;
-
-    if (i === 0) {
-      floorShape.moveTo(x, z);
-    } else {
-      floorShape.lineTo(x, z);
-    }
-  });
-  
-  floorShape.closePath();
+    installation.wallIntersections.forEach((wallIntersection, i) => {
+      if (i === 0) {
+        shape.moveTo(wallIntersection.position.x, wallIntersection.position.z);
+      } else {
+        shape.lineTo(wallIntersection.position.x, wallIntersection.position.z);
+      }
+    });
+    
+    return shape.closePath();
+  }, [installation.wallIntersections]);
 
   return (
     <>
       <OrbitControls zoomSpeed={0.2} minDistance={2} maxDistance={ORBIT_MAX_DISTANCE} />
       <Grid infiniteGrid fadeDistance={50} cellColor="#444" sectionColor="#666" />
       <Compass />
-      <Sun config={config} date={date} />
+      <Sun installationLocation={installation.location} date={date} />
 
       {/* floor */}
+      {/*
       <mesh receiveShadow position={[0, 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <extrudeGeometry args={[
           floorShape, 
@@ -290,104 +293,43 @@ function Scene({ config, sun, date, showPoints, density }: { config: Config; sun
         ]} />
         <meshStandardMaterial color="#b45d16" side={THREE.DoubleSide} />
       </mesh>
+      */}
 
       {/* wall intersections */}
-      {points.map((p, i) => {
-        const pX = p[0] - centerX;
-        const pZ = p[1] - centerZ;
-
-        const prevP = points[(i - 1 + points.length) % points.length];
-        const nextP = getNextPoint(points, i);
-
-        // normalize segment
-        const getNormal = (pA: [number, number], pB: [number, number]) => {
-          const dx = pB[0] - pA[0];
-          const dz = pB[1] - pA[1];
-          const d = Math.sqrt(dx * dx + dz * dz) || 1;
-          return { nx: -dz / d, nz: dx / d };
-        };
-
-        const nPrev = getNormal(prevP, p);
-        const nNext = getNormal(p, nextP);
-
-        // determine if the point is part of a line or a corner
-        // use dot product to see if they are parallel (dot product ≈ 1)
-        const dot = nPrev.nx * nNext.nx + nPrev.nz * nNext.nz;
-        const isStraight = dot > 0.999; 
-
-        let offX, offZ;
-
-        if (isStraight) {
-          // case: point in the middle of line. Only offset in the common normal
-          offX = nNext.nx * (wallThickness / 2);
-          offZ = nNext.nz * (wallThickness / 2);
-        } else {
-          // case: corner. Sum both normal
-          offX = (nPrev.nx + nNext.nx) * (wallThickness / 2);
-          offZ = (nPrev.nz + nNext.nz) * (wallThickness / 2);
-        }
-
-        // limitation: only 90 degrees corners are supported
-
-        const segmentConfig = getSegmentConfig(i);
-        const h = segmentConfig?.height ?? wallDefaults.height;
-
-        return (
-          <mesh key={`post-${i}`} position={[pX + offX, h / 2, pZ + offZ]} castShadow>
-            <boxGeometry args={[wallThickness, h, wallThickness]} />
-            <meshStandardMaterial color="#777" />
-          </mesh>
-        );
-      })}
+      {/*
+      {installation.wallIntersections.map((wallIntersection) => (
+        <mesh
+          key={`post-${wallIntersection.index}`}
+          position={[wallIntersection.position.x + wallIntersection.offset.x, wallIntersection.height / 2, wallIntersection.position.z + wallIntersection.offset.z]}
+          castShadow
+        >
+          <boxGeometry args={[wallIntersection.thickness, wallIntersection.height, wallIntersection.thickness]} />
+          <meshStandardMaterial color="#777" />
+        </mesh>
+      ))}
+      */}
 
       {/* walls (with trim) and offset */}
-      {points.map((p, i) => {
-        const p1 = [p[0] - centerX, p[1] - centerZ];
-        const nextP = getNextPoint(points, i);
-        const p2 = [nextP[0] - centerX, nextP[1] - centerZ];
-        const dx = p2[0] - p1[0];
-        const dz = p2[1] - p1[1];
-        const fullDist = Math.sqrt(dx * dx + dz * dz);
-        const angle = Math.atan2(dx, dz);
-
-        const segmentConfig = getSegmentConfig(i);
-        const wallHeight = segmentConfig?.height ?? wallDefaults.height;
-        const trimStart = segmentConfig?.trimStart ?? 0;
-        const trimEnd = segmentConfig?.trimEnd ?? 0;
-
-        const currentDist = fullDist - (trimStart * wallThickness) - (trimEnd * wallThickness);
-        const offsetFromCenter = (trimStart * wallThickness / 2) - (trimEnd * wallThickness / 2);
-        
-        const ux = dx / fullDist;
-        const uz = dz / fullDist;
-        const nx = -uz;
-        const nz = ux;
-
-        const posX = (p1[0] + p2[0]) / 2 + (nx * wallThickness / 2) + (ux * offsetFromCenter);
-        const posZ = (p1[1] + p2[1]) / 2 + (nz * wallThickness / 2) + (uz * offsetFromCenter);
-
-        const railingActive = segmentConfig?.railing?.active ?? railingDefaults.active;
-        const railingHeight = segmentConfig?.railing?.heightOffset ?? railingDefaults.heightOffset;
-        const railingThickness = segmentConfig?.railing?.thickness ?? railingDefaults.thickness;
-        const railingShape = segmentConfig?.railing?.shape ?? railingDefaults.shape;
+      {/*
+      {installation.walls.map((wall) => {
+        const { posX, posZ, angle, currentDist } = wall.geometryData;
 
         return (
-          <group key={`wall-${i}`} position={[posX, 0, posZ]} rotation-y={angle}>
-            <mesh position={[0, wallHeight / 2, 0]} castShadow>
-              <boxGeometry args={[wallThickness, wallHeight, currentDist]} />
+          <group key={`wall-${wall.index}`} position={[posX, 0, posZ]} rotation-y={angle}>
+            <mesh position={[0, wall.height / 2, 0]} castShadow>
+              <boxGeometry args={[wall.thickness, wall.height, currentDist]} />
               <meshStandardMaterial color="#777" />
             </mesh>
             
-            {/* railing adjusted to the trimmed wall */}
-            {railingActive && (
+            {wall.railing.active && (
               <mesh 
-                position={[0, wallHeight + railingHeight, 0]} 
-                rotation={railingShape === 'round' ? [Math.PI / 2, 0, 0] : [0, 0, 0]}
+                position={[0, wall.height + wall.railing.heightOffset, 0]} 
+                rotation={wall.railing.shape === 'round' ? [Math.PI / 2, 0, 0] : [0, 0, 0]}
                 castShadow
               >
-                {railingShape === 'round'
-                  ? <cylinderGeometry args={[railingThickness, railingThickness, currentDist, 8]} />
-                  : <boxGeometry args={[railingThickness, railingThickness, currentDist]} />
+                {wall.railing.shape === 'round'
+                  ? <cylinderGeometry args={[wall.railing.thickness, wall.railing.thickness, currentDist, 8]} />
+                  : <boxGeometry args={[wall.railing.thickness, wall.railing.thickness, currentDist]} />
                 }
                 <meshStandardMaterial color="#333" />
               </mesh>
@@ -395,8 +337,10 @@ function Scene({ config, sun, date, showPoints, density }: { config: Config; sun
           </group>
         );
       })}
+      */}
 
       {/* Solar Arrays */}
+      {/*
       {arrays.map((array, index) => (
         <SolarArray
           sun={sun}
@@ -405,19 +349,20 @@ function Scene({ config, sun, date, showPoints, density }: { config: Config; sun
           arrayIndex={index}
           defaults={panelDefaults}
           settings={arraysSettings}
-          centerX={centerX}
-          centerZ={centerZ}
+          centerX={installation.centerX}
+          centerZ={installation.centerZ}
           showPoints={showPoints}
           density={density}
         />
       ))}
+      */}
     </>
   );
 }
 
 function MainControls({ date, setDate, isPlaying, setIsPlaying, adjustDate, config }: any) {
   const { t, i18n } = useTranslation();
-  const displayDate = config ? date.tz(config.geometry.timezone) : date;
+  const displayDate = config ? date.tz(config.installation.timezone) : date;
 
   return (
     <div className="controls-panel main-controls">
@@ -550,6 +495,7 @@ function SimulationControls({
 export default function App() {
   const { t, i18n } = useTranslation();
   const [config, setConfig] = useState<Config | null>(null);
+  const [installation, setInstallation] = useState<SolarInstallation | null>(null);
   const [date, setDate] = useState(dayjs());
   const [isPlaying, setIsPlaying] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -562,21 +508,22 @@ export default function App() {
 
   const sun = useMemo(() => {
         if (!config) return null;
-        return calculateSunState(date.toDate(), config.geometry.latitude, config.geometry.longitude);
+        return calculateSunState(date.toDate(), config.installation.location.latitude, config.installation.location.longitude);
   }, [date, config]);
+
+  useEffect(() => {
+    dayjs.locale(i18n.language); }, [i18n.language]
+  );
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}config.json`)
       .then(res => res.json())
       .then(data => {
         setConfig(data);
-        setDate(dayjs.tz(data.geometry.timezone).second(0))
+        setInstallation(SolarInstallationFactory.create(data));
+        setDate(dayjs.tz(data.installation.timezone).second(0))
       });
   }, []);
-
-  useEffect(() => {
-    dayjs.locale(i18n.language); }, [i18n.language]
-  );
 
   // Play/Loop Logic
   useEffect(() => {
@@ -593,6 +540,8 @@ export default function App() {
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isPlaying]);
+
+  if (!config || !installation) return <div style={{ color: 'white', padding: 20 }}>{t('loading')}</div>;
 
   const adjustDate = (amount: number, unit: dayjs.ManipulateType) => {
     setIsPlaying(false);
@@ -613,8 +562,6 @@ export default function App() {
   const handleStopSimulation = () => {
     setIsRunning(false);
   };
-
-  if (!config) return <div style={{ color: 'white', padding: 20 }}>{t('loading')}</div>;
 
   return (
     <div className="main-container" style={{ width: '100vw', height: '100vh', background: '#050505', position: 'relative' }}>
@@ -642,7 +589,7 @@ export default function App() {
 
       {/* Three.js Canvas */}
       <Canvas shadows camera={{ position: [0, ORBIT_MAX_DISTANCE, 70], fov: 40 }}>
-        <Scene config={config} sun={sun} date={date.toDate()} showPoints={showPoints} density={density} />
+        <Scene installation={installation} sun={sun} date={date.toDate()} showPoints={showPoints} density={density} />
       </Canvas>
     </div>
   )
