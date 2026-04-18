@@ -34,7 +34,10 @@ export const WallIntersectionFactory = {
             position: p,
             height: height,
             thickness: wallThickness,
-            offset: offset
+            geometryData: {
+              position: [p.x + offset.x, height / 2, p.z + offset.z],
+              boxArgs: [wallThickness, height, wallThickness]
+            }
         }
       }
 };

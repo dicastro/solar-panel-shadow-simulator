@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { OffsetXZ, PointXZ } from './types/geometry';
+import { PointXZ } from './types/geometry';
 
 export type ZonesDisposition = 'vertical' | 'horizontal';
 
@@ -84,10 +84,10 @@ export interface InstallationConfiguration {
   location: InstallationLocationConfiguration;
   azimut: number;
   timezone: string;
-  wallPoints: PointXZ[];
+  wallPoints: [number, number][];
   wallDefaults: WallConfiguration,
   railingDefaults: RailingConfiguration;
-  wallSettings?: WallSettingsConfiguration[];
+  wallsSettings?: WallSettingsConfiguration[];
 }
 
 export interface Config {
@@ -96,12 +96,21 @@ export interface Config {
 }
 
 export interface WallGeometryData {
-  posX: number;
-  posZ: number;
-  angle: number;
-  currentDist: number;
-  nx: number;
-  nz: number;
+  groupPosition: [number, number, number];
+  meshPosition: [number, number, number];
+  boxArgs: [number, number, number];
+  yAngle: number;
+}
+
+export interface WallIntersectionGeometryData {
+  position: [number, number, number];
+  boxArgs: [number, number, number];
+}
+
+export interface RailingGeometryData {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  boxArgs: [number, number, number] | [number, number, number, number];
 }
 
 export interface SunState {
@@ -125,7 +134,14 @@ export interface WallIntersection {
   readonly position: PointXZ;
   readonly height: number;
   readonly thickness: number;
-  readonly offset: OffsetXZ;
+  readonly geometryData: WallIntersectionGeometryData;
+}
+
+export interface WallRailing {
+  active: boolean;
+  thickness: number;
+  shape: RailingShape;
+  geometryData: RailingGeometryData;
 }
 
 export interface Wall {
@@ -136,7 +152,7 @@ export interface Wall {
   readonly thickness: number;
   readonly trimStart: number;
   readonly trimEnd: number;
-  readonly railing: RailingConfiguration;
+  readonly railing: WallRailing;
   readonly geometryData: WallGeometryData;
 }
 

@@ -23,5 +23,5 @@ export const PointXZUtils = {
   },
   getPreviousPoint: (to: number, fromPoints: PointXZ[]): PointXZ => fromPoints[(to - 1 + fromPoints.length) % fromPoints.length],
     
-  getNextPoint: (to:number, fromPoints: PointXZ[]): PointXZ => fromPoints[(to - 1 + fromPoints.length) % fromPoints.length]
+  getNextPoint: (to:number, fromPoints: PointXZ[]): PointXZ => fromPoints[(to + 1) % fromPoints.length]
 }

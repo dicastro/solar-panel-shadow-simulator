@@ -285,7 +285,6 @@ function Scene({
       <Sun installationLocation={installation.location} date={date} />
 
       {/* floor */}
-      {/*
       <mesh receiveShadow position={[0, 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <extrudeGeometry args={[
           floorShape, 
@@ -293,43 +292,44 @@ function Scene({
         ]} />
         <meshStandardMaterial color="#b45d16" side={THREE.DoubleSide} />
       </mesh>
-      */}
-
+      
       {/* wall intersections */}
-      {/*
-      {installation.wallIntersections.map((wallIntersection) => (
-        <mesh
-          key={`post-${wallIntersection.index}`}
-          position={[wallIntersection.position.x + wallIntersection.offset.x, wallIntersection.height / 2, wallIntersection.position.z + wallIntersection.offset.z]}
-          castShadow
-        >
-          <boxGeometry args={[wallIntersection.thickness, wallIntersection.height, wallIntersection.thickness]} />
-          <meshStandardMaterial color="#777" />
-        </mesh>
-      ))}
-      */}
-
-      {/* walls (with trim) and offset */}
-      {/*
-      {installation.walls.map((wall) => {
-        const { posX, posZ, angle, currentDist } = wall.geometryData;
+      {installation.wallIntersections.map((wallIntersection) => {
+        const { position, boxArgs } = wallIntersection.geometryData;
 
         return (
-          <group key={`wall-${wall.index}`} position={[posX, 0, posZ]} rotation-y={angle}>
-            <mesh position={[0, wall.height / 2, 0]} castShadow>
-              <boxGeometry args={[wall.thickness, wall.height, currentDist]} />
+          <mesh
+            key={`post-${wallIntersection.index}`}
+            position={position}
+            castShadow
+          >
+            <boxGeometry args={boxArgs} />
+            <meshStandardMaterial color="#777" />
+          </mesh>
+        );
+      })}
+      
+      {/* walls (with trim) and offset */}
+      {installation.walls.map((wall) => {
+        const wallRailing = wall.railing;
+        const { groupPosition, meshPosition, boxArgs, yAngle } = wall.geometryData;
+
+        return (
+          <group key={`wall-${wall.index}`} position={groupPosition} rotation-y={yAngle}>
+            <mesh position={meshPosition} castShadow>
+              <boxGeometry args={boxArgs} />
               <meshStandardMaterial color="#777" />
             </mesh>
             
-            {wall.railing.active && (
+            {wallRailing.active && (
               <mesh 
-                position={[0, wall.height + wall.railing.heightOffset, 0]} 
-                rotation={wall.railing.shape === 'round' ? [Math.PI / 2, 0, 0] : [0, 0, 0]}
+                position={wallRailing.geometryData.position} 
+                rotation={wallRailing.geometryData.rotation}
                 castShadow
               >
-                {wall.railing.shape === 'round'
-                  ? <cylinderGeometry args={[wall.railing.thickness, wall.railing.thickness, currentDist, 8]} />
-                  : <boxGeometry args={[wall.railing.thickness, wall.railing.thickness, currentDist]} />
+                {wallRailing.shape === 'round'
+                  ? <cylinderGeometry args={wallRailing.geometryData.boxArgs} />
+                  : <boxGeometry args={wallRailing.geometryData.boxArgs} />
                 }
                 <meshStandardMaterial color="#333" />
               </mesh>
@@ -337,10 +337,8 @@ function Scene({
           </group>
         );
       })}
-      */}
 
       {/* Solar Arrays */}
-      {/*
       {arrays.map((array, index) => (
         <SolarArray
           sun={sun}
@@ -355,7 +353,6 @@ function Scene({
           density={density}
         />
       ))}
-      */}
     </>
   );
 }

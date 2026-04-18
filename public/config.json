@@ -27,7 +27,7 @@
        "thickness": 0.05, 
        "shape": "round" 
     },
-    "wallOverrides": [
+    "wallsSettings": [
       { "wall": 1, "trimEnd": 0.5 },
       { "wall": 2, "trimStart": 0.5, "override": { "height": 1.8, "railing": { "active": false } } },
       { "wall": 5, "trimEnd": 1 },

@@ -3,11 +3,6 @@ export interface PointXZ {
   readonly z: number;
 }
 
-export interface OffsetXZ {
-  readonly x: number;
-  readonly z: number;
-}
-
 export interface PointXZAlignedResult {
   readonly isStraight: boolean;
   readonly normalizedPrev: PointXZ;
