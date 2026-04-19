@@ -1,34 +1,47 @@
 import { SamplePoint } from '../types/installation';
+import { ZoneRenderData } from '../types/installation';
 import { ZonesDisposition } from '../types/config';
 
-interface ZoneLayout {
-  readonly zoneIndex: number;
-  readonly posX: number;
-  readonly posZ: number;
-  readonly zWidth: number;
-  readonly zHeight: number;
-}
+/**
+ * Naming convention for zonesDisposition:
+ *
+ *  'horizontal' → zones stack on top of each other (split along the Z axis).
+ *                 Each zone is a horizontal band. This is how most residential
+ *                 panels with bypass diodes are physically wired.
+ *
+ *  'vertical'   → zones sit side by side (split along the X axis).
+ *                 Each zone is a vertical column.
+ *
+ * Previous code had this inverted — the fix is here so all consumers that use
+ * ZoneRenderData get the correct geometry automatically.
+ */
 
-const computeZoneLayouts = (
+const GAP = 0.01;
+
+/**
+ * Pre-computes the render geometry for every diode zone of a panel.
+ * Exported so SolarPanelFactory can embed these in PanelRenderData.
+ */
+export const computeZoneLayouts = (
   actualW: number,
   actualH: number,
   zones: number,
   zonesDisposition: ZonesDisposition,
-): ZoneLayout[] => {
-  const gap = 0.01;
-  const isVert = zonesDisposition === 'vertical';
+): ZoneRenderData[] => {
+  // 'horizontal' → split along Z (height axis) → isHoriz = true
+  const isHoriz = zonesDisposition === 'horizontal';
 
   return Array.from({ length: zones }, (_, i) => {
-    const zWidth  = isVert ? (actualW / zones) - gap : actualW - gap;
-    const zHeight = isVert ? actualH - gap : (actualH / zones) - gap;
-    const offset  = (i - (zones - 1) / 2) * (isVert ? actualW / zones : actualH / zones);
+    const width = isHoriz ? actualW - GAP : (actualW / zones) - GAP;
+    const height = isHoriz ? (actualH / zones) - GAP : actualH - GAP;
+    const offset = (i - (zones - 1) / 2) * (isHoriz ? actualH / zones : actualW / zones);
 
     return {
       zoneIndex: i,
-      posX: isVert ? offset : 0,
-      posZ: isVert ? 0 : offset,
-      zWidth,
-      zHeight,
+      posX: isHoriz ? 0 : offset,
+      posZ: isHoriz ? offset : 0,
+      width,
+      height,
     };
   });
 };
@@ -36,7 +49,7 @@ const computeZoneLayouts = (
 export const SamplePointFactory = {
   /**
    * Creates all sample points for a single panel.
-   * Positions are local to the panel (relative to its center).
+   * Positions are local to the panel (relative to its centre).
    */
   createForPanel: (
     panelId: string,
@@ -59,9 +72,9 @@ export const SamplePointFactory = {
             id: `${panelId}-z${layout.zoneIndex}-r${row}-c${col}`,
             zoneIndex: layout.zoneIndex,
             localPosition: {
-              x: layout.posX + ratioCol * layout.zWidth,
+              x: layout.posX + ratioCol * layout.width,
               y: 0.02,
-              z: layout.posZ + ratioRow * layout.zHeight,
+              z: layout.posZ + ratioRow * layout.height,
             },
           });
         }

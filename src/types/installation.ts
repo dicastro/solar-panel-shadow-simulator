@@ -22,9 +22,25 @@ export interface WallRenderData {
 export interface RailingRenderData {
   readonly localPosition: [number, number, number];
   readonly localRotation: [number, number, number];
-  // cylinder: [radiusTop, radiusBottom, height, segments] - box: [w, h, d]
+  // box: [w, h, d] - cylinder: [radiusTop, radiusBottom, height, segments]
   readonly boxArgs: [number, number, number] | [number, number, number, number];
   readonly color: string;
+}
+
+/**
+ * Pre-computed render data for a single diode zone within a panel.
+ * Calculated once in the factory so components stay purely presentational.
+ */
+export interface ZoneRenderData {
+  readonly zoneIndex: number;
+  /** Local X offset from panel centre */
+  readonly posX: number;
+  /** Local Z offset from panel centre */
+  readonly posZ: number;
+  /** Width of the zone plane */
+  readonly width: number;
+  /** Height (depth) of the zone plane */
+  readonly height: number;
 }
 
 export interface PanelRenderData {
@@ -32,6 +48,8 @@ export interface PanelRenderData {
   readonly actualHeight: number;
   readonly frameColor: string;
   readonly emissiveColor: string;
+  /** One entry per diode zone — order matches zone indices */
+  readonly zones: readonly ZoneRenderData[];
 }
 
 // ── Domain models ───────────────────────────────────────────────────────────
@@ -66,13 +84,13 @@ export interface Wall {
 }
 
 export interface SamplePoint {
-  readonly id: string; // "a0-p1-2-z0-r1-c2" (array-panel-zone-row-column)
-  readonly zoneIndex: number; // to which diode zone belongs to
-  readonly localPosition: Vector3; // relative position to the panel
+  readonly id: string;       // "a0-r1-c2-z0-r1-c2"  (array · panel row/col · zone · sample row/col)
+  readonly zoneIndex: number;
+  readonly localPosition: Vector3;
 }
 
 export interface SolarPanel {
-  readonly id: string; // "a0-r1-c2" (array-row-column)
+  readonly id: string;       // "a0-r1-c2"  (array · row · column)
   readonly arrayIndex: number;
   readonly row: number;
   readonly col: number;
@@ -96,14 +114,16 @@ export interface SolarPanelArray {
 /**
  * Represents the physical, immutable space where panels are installed.
  * Walls, railings and intersections belong here.
- * The site azimut (in radians) is applied as a rotation to the site group in the scene.
+ * The site azimuth (in radians) is applied as a Y-rotation to the site group in the scene.
  */
 export interface Site {
   readonly location: LocationConfiguration;
-  readonly azimutRad: number;
+  /** Azimuth in radians. 0 = South, positive = West, negative = East. */
+  readonly azimuthRad: number;
   readonly timezone: string;
   readonly centerX: number;
   readonly centerZ: number;
+  readonly boundingRadius: number;
   readonly walls: readonly Wall[];
   readonly wallIntersections: readonly WallIntersection[];
 }
@@ -111,7 +131,7 @@ export interface Site {
 /**
  * A specific panel layout for a given site.
  * Multiple setups can exist for the same site.
- * Recalculated when active setup or density changes.
+ * Recalculated when the active setup or density changes.
  */
 export interface PanelSetup {
   readonly id: string;

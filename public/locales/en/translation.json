@@ -1,13 +1,28 @@
 {
-    "title": "Solar Simulator",
-    "date_label": "Date",
-    "time_label": "Time",
-    "lang_label": "Language",
-    "loading": "Loading configuration...",
-    "coordinates": {
-        "north": "N",
-        "south": "S",
-        "west": "W",
-        "east": "E"
-    }
+  "title": "Solar Simulator",
+  "date_label": "Date",
+  "time_label": "Time",
+  "lang_label": "Language",
+  "loading": "Loading configuration...",
+  "coordinates": {
+    "north": "N",
+    "south": "S",
+    "west": "W",
+    "east": "E"
+  },
+  "simulationControls": {
+    "title": "Annual Simulation",
+    "interval": "Interval",
+    "pointsPerZone": "NxN points per zone",
+    "showPoints": "Show sample points",
+    "threshold": "Zone shadow threshold",
+    "thresholdTooltip": "Minimum number of shaded points to consider a zone as shaded",
+    "pointsPerPanel": "Points per panel",
+    "timeSteps": "Time steps",
+    "totalRays": "Total rays",
+    "instantPower": "Estimated instant output",
+    "theoreticalPeak": "Theoretical peak",
+    "run": "RUN CALCULATION",
+    "stop": "STOP"
+  }
 }

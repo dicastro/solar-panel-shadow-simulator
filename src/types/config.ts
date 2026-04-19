@@ -43,14 +43,25 @@ export interface WallSettingsConfiguration {
 export interface InstallationConfiguration {
   readonly location: LocationConfiguration;
   /**
-   * Site azimut in degrees. Reference: South = 0.
+   * Site azimuth in degrees. Reference: South = 0.
    * Positive values = rotated towards West.
    * Negative values = rotated towards East.
-   * Tip: use a compass app pointing South and read the deviation from 180°,
-   * then subtract 180° to get this value (or use a solar azimut app directly).
    */
-  readonly azimut: number;
+  readonly azimuth: number;
   readonly timezone: string;
+  /**
+   * Wall corner points in site-local coordinates (metres).
+   *
+   * Coordinate system:
+   *   +X → East,  +Z → North  (before site azimuth rotation)
+   *
+   * Walk the perimeter counter-clockwise when viewed from above, starting
+   * from the South-West corner.  The segment index (used in wallsSettings)
+   * is the index of the point that *starts* that segment, so segment 0 goes
+   * from wallPoints[0] to wallPoints[1], and so on.
+   *
+   * Example walk order: SW → S → SE → E → NE → N → NW → W → (back to SW)
+   */
   readonly wallPoints: [number, number][];
   readonly wallDefaults: WallConfiguration;
   readonly railingDefaults: RailingConfiguration;
@@ -70,12 +81,12 @@ export interface PanelDefinition {
 export interface PanelArrayConfiguration {
   readonly position: [number, number];
   /**
-   * Panel array azimut in degrees. Reference: South = 0.
+   * Panel array azimuth in degrees. Reference: South = 0.
    * Positive values = panels facing West.
    * Negative values = panels facing East.
-   * Independent from site azimut — this is absolute, not relative to the site.
+   * This is an absolute angle, independent of the site azimuth.
    */
-  readonly azimut: number;
+  readonly azimuth: number;
   readonly elevation: number;
   readonly inclination: number;
   readonly rows: number;

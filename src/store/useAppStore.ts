@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import dayjs, { Dayjs } from 'dayjs';
-import { Config, Site, PanelSetup, SunState } from '../types';
+import { Config, PanelSetup, Site, SimulationResult, SunState } from '../types';
 import { SiteFactory } from '../factory/SiteFactory';
 import { PanelSetupFactory } from '../factory/PanelSetupFactory';
 import { calculateSunState } from '../solarEngine';
 
 const CURRENT_YEAR = dayjs().year();
+
+/** Time interval (in minutes) used when stepping through the year simulation. */
+export type SimulationInterval = 15 | 30 | 60;
 
 interface AppState {
   // Config & derived static models
@@ -18,14 +21,16 @@ interface AppState {
   date: Dayjs;
   isPlaying: boolean;
 
-  // Derived from time (not state, but kept here for global access)
+  // Sun (derived from time + location, kept here for global access)
   sun: SunState | null;
 
   // UI / Simulation settings
   showPoints: boolean;
-  density:    number;
-  threshold:  number;
-  isRunning:  boolean;
+  density: number;
+  threshold: number;
+  isRunning: boolean;
+  simulationInterval: SimulationInterval;
+  simulationResult: SimulationResult | null;
 
   // Actions
   loadConfig: (config: Config) => void;
@@ -38,6 +43,8 @@ interface AppState {
   setDensity: (density: number) => void;
   setThreshold: (threshold: number) => void;
   setIsRunning: (running: boolean) => void;
+  setSimulationInterval: (interval: SimulationInterval) => void;
+  setSimulationResult: (result: SimulationResult) => void;
 }
 
 /** Recalculates PanelSetup when setup selection or density changes. */
@@ -49,7 +56,8 @@ const buildActiveSetup = (
 ): PanelSetup | null => {
   const setupConfig = config.setups.find(s => s.id === setupId);
   if (!setupConfig) return null;
-  return PanelSetupFactory.create(setupConfig, density, site.centerX, site.centerZ);
+  // Site is passed directly — no need to spread centerX / centerZ manually
+  return PanelSetupFactory.create(setupConfig, site, density);
 };
 
 /** Recalculates SunState from current date and site location. */
@@ -79,13 +87,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   density: 4,
   threshold: 1,
   isRunning: false,
+  simulationInterval: 60,
+  simulationResult: null,
 
   // Actions
 
   loadConfig: (config) => {
     const site = SiteFactory.create(config);
     const firstSetupId = config.setups[0].id;
-    const date = dayjs.tz(config.site.timezone).second(0);
+    const date = dayjs().tz(config.site.timezone).second(0);
     const activeSetup = buildActiveSetup(config, site, firstSetupId, get().density);
     const sun = buildSun(date, config);
 
@@ -107,8 +117,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   adjustDate: (amount, unit) => {
     const { date, config } = get();
-    const next  = clampToCurrentYear(date.add(amount, unit));
-    const sun   = config ? buildSun(next, config) : null;
+    const next = clampToCurrentYear(date.add(amount, unit));
+    const sun = config ? buildSun(next, config) : null;
     set({ date: next, isPlaying: false, sun });
   },
 
@@ -116,8 +126,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   tickHour: () => {
     const { date, config } = get();
-    const next  = clampToCurrentYear(date.add(1, 'hour'));
-    const sun   = config ? buildSun(next, config) : null;
+    const next = clampToCurrentYear(date.add(1, 'hour'));
+    const sun = config ? buildSun(next, config) : null;
     set({ date: next, sun });
   },
 
@@ -130,6 +140,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ density, activeSetup });
   },
 
-  setThreshold:  (threshold)  => set({ threshold }),
-  setIsRunning:  (isRunning)  => set({ isRunning }),
+  setThreshold: (threshold) => set({ threshold }),
+
+  setIsRunning: (isRunning) => set({ isRunning }),
+
+  setSimulationInterval: (simulationInterval) => set({ simulationInterval }),
+
+  setSimulationResult: (simulationResult) => set({ simulationResult }),
 }));

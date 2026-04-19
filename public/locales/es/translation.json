@@ -1,13 +1,28 @@
 {
-    "title": "Simulador Solar",
-    "date_label": "Día del año",
-    "time_label": "Hora",
-    "lang_label": "Idioma",
-    "loading": "Cargando configuración...",
-    "coordinates": {
-        "north": "N",
-        "south": "S",
-        "west": "O",
-        "east": "E"
-    }
+  "title": "Simulador Solar",
+  "date_label": "Día del año",
+  "time_label": "Hora",
+  "lang_label": "Idioma",
+  "loading": "Cargando configuración...",
+  "coordinates": {
+    "north": "N",
+    "south": "S",
+    "west": "O",
+    "east": "E"
+  },
+  "simulationControls": {
+    "title": "Simulación anual",
+    "interval": "Intervalo",
+    "pointsPerZone": "Puntos NxN por zona",
+    "showPoints": "Visualizar puntos",
+    "threshold": "Umbral sombra zona",
+    "thresholdTooltip": "Número mínimo de puntos en sombra para anular una zona",
+    "pointsPerPanel": "Puntos por panel",
+    "timeSteps": "Pasos de tiempo",
+    "totalRays": "Total rayos",
+    "instantPower": "Producción estimada instante",
+    "theoreticalPeak": "Pico teórico",
+    "run": "EJECUTAR CÁLCULO",
+    "stop": "PARAR"
+  }
 }
