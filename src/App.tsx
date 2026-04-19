@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Grid, Sphere, Text } from '@react-three/drei'
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import SunCalc from 'suncalc'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
@@ -12,15 +12,21 @@ import * as THREE from 'three';
 
 import './i18n'
 import './App.css'
-import { calculateSunState } from './solarEngine';
-import { Config, InstallationLocationConfiguration, SolarInstallation, SunState } from './types'
 import { PointWithShadow } from './components/PointWithShadow'
-import { SolarInstallationFactory } from './factory/SolarInstallationFactory'
+import { useAppStore } from './store/useAppStore'
+import {
+  Config,
+  Site,
+  PanelSetup,
+  SunState,
+  ZonesDisposition,
+  PanelRenderData,
+  SamplePoint
+} from './types'
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-const CURRENT_YEAR = dayjs().year();
 const ORBIT_MAX_DISTANCE = 80;
 
 function Compass() {
@@ -49,9 +55,12 @@ function Compass() {
   );
 }
 
-function Sun({ installationLocation, date }: { installationLocation: InstallationLocationConfiguration, date: Date }) {
+function Sun({ date }: { date: Date }) {
+  const site = useAppStore(s => s.site);
+  if (!site) return null;
+
   // get sun position
-  const sunPos = SunCalc.getPosition(date, installationLocation.latitude, installationLocation.longitude);
+  const sunPos = SunCalc.getPosition(date, site.location.latitude, site.location.longitude);
 
   // conver spherical coordinates (returned by SunCalc) to cartesian coordinates (required by Three.js)
   // In Three.js: Y is UP, X es EAST/WEST, Z es NORTH/SOUTH
@@ -90,90 +99,64 @@ function Sun({ installationLocation, date }: { installationLocation: Installatio
  * Individual Solar Panel Component
  * Represents the glass surface and diode zones.
  */
-function SolarPanel({
-  sun,
-  width,
-  height,
-  zones,
-  zonesDisposition,
-  hasOptimizer,
-  orientation,
-  showPoints,
-  density
-}: any) {
+function SolarPanelComponent({ sun, zones, zonesDisposition, hasOptimizer, showPoints, density, renderData, samplePoints }: {
+  sun: SunState,
+  zones: number,
+  zonesDisposition: ZonesDisposition,
+  hasOptimizer: boolean,
+  showPoints: boolean,
+  density: number,
+  renderData: PanelRenderData,
+  samplePoints: readonly SamplePoint[]
+}) {
   const shadedPointsMap = useRef<Map<string, boolean>>(new Map());
+  const raycaster = useRef(new THREE.Raycaster());
+  const gap = 0.01;
+  const { actualWidth, actualHeight, frameColor, emissiveColor } = renderData;
 
   const handlePointStatus = (pointId: string, isShaded: boolean) => {
     shadedPointsMap.current.set(pointId, isShaded);
-    
-    // TODO: Aquí es donde en el futuro llamaremos a una función 
-    // que calcule la producción de este panel específico
-    // basándose en el conteo de puntos en 'shadedPointsMap'
   };
-
-  const gap = 0.01;
-  
-  const actualW = orientation === 'portrait' ? width : height;
-  const actualH = orientation === 'portrait' ? height : width;
-
-  const frameColor = hasOptimizer ? "#2ecc71" : "#121e36"; // Verde esmeralda si hay optimizador
-  const emissiveColor = hasOptimizer ? "#0a2a16" : "#050a15";
-
-  // Referencia para el Raycaster (instanciado una sola vez fuera para rendimiento)
-  const raycaster = useRef(new THREE.Raycaster());
 
   return (
     <group>
       {/* frame and cristal */}
       <mesh castShadow receiveShadow>
-        <boxGeometry args={[actualW, 0.03, actualH]} />
-        <meshStandardMaterial 
-          color={frameColor} 
-          metalness={hasOptimizer ? 0.4 : 0.7}
-          roughness={0.2} 
-          emissive={emissiveColor}
-        />
+        <boxGeometry args={[actualWidth, 0.03, actualHeight]} />
+        <meshStandardMaterial color={frameColor} metalness={hasOptimizer ? 0.4 : 0.7} roughness={0.2} emissive={emissiveColor} />
       </mesh>
 
       {/* diode zones */}
-      {[...Array(zones)].map((_, zIdx) => {
+      {[...Array(zones)].map((_, zoneIndex) => {
         const isVert = zonesDisposition === 'vertical';
-        const zWidth = isVert ? (actualW / zones) - gap : actualW - gap;
-        const zHeight = isVert ? actualH - gap : (actualH / zones) - gap;
+        const zWidth = isVert ? (actualWidth / zones) - gap : actualWidth - gap;
+        const zHeight = isVert ? actualHeight - gap : (actualHeight / zones) - gap;
         
-        const offset = (zIdx - (zones - 1) / 2) * (isVert ? actualW / zones : actualH / zones);
+        const offset = (zoneIndex - (zones - 1) / 2) * (isVert ? actualWidth / zones : actualHeight / zones);
         const posX = isVert ? offset : 0;
         const posZ = isVert ? 0 : offset;
 
+        const zonePoints = showPoints
+          ? samplePoints.filter((sp: SamplePoint) => sp.zoneIndex === zoneIndex)
+          : [];
+
         return (
-          <group key={zIdx}>
+          <group key={zoneIndex}>
             <mesh position={[posX, 0.016, posZ]} rotation={[-Math.PI / 2, 0, 0]}>
               <planeGeometry args={[zWidth, zHeight]} />
               <meshStandardMaterial color="#1a3a6d" transparent opacity={0.4} side={THREE.DoubleSide} />
             </mesh>
 
             {/* points per zone */}
-            {showPoints && [...Array(density)].map((_, row) => 
-              [...Array(density)].map((_, col) => {
-                const pId = `${zIdx}-${row}-${col}`;
-
-                const ratioCol = density > 1 ? col / (density - 1) - 0.5 : 0;
-                const ratioRow = density > 1 ? row / (density - 1) - 0.5 : 0;
-                
-                const pX = posX + ratioCol * zWidth;
-                const pZ = posZ + ratioRow * zHeight;
-                
-                return (
-                  <PointWithShadow 
-                    key={pId}
-                    position={[pX, 0.02, pZ]}
-                    sun={sun}
-                    raycaster={raycaster.current}
-                    onStatusChange={(isShaded: boolean) => handlePointStatus(pId, isShaded)}
-                  />
-                );
-              })
-            )}
+            {zonePoints.map((sp: SamplePoint) => (
+              <PointWithShadow
+                key={sp.id}
+                position={[sp.localPosition.x, sp.localPosition.y, sp.localPosition.z]}
+                sun={sun}
+                raycaster={raycaster.current}
+                onStatusChange={(isShaded: boolean) => handlePointStatus(sp.id, isShaded)}
+              />
+            ))}
           </group>
         );
       })}
@@ -181,185 +164,115 @@ function SolarPanel({
   );
 }
 
-/**
- * Solar Array Component
- * Manages the layout of multiple panels and handles the tilt/elevation math.
- */
-function SolarArray({ sun, array, arrayIndex, defaults, settings, centerX, centerZ, showPoints, density }: any) {
-  const { rows, columns, inclination, azimut, elevation, position } = array;
-  
-  const orientation = array.orientation ?? 'portrait';
-  const spacing = array.spacing ?? [0.02, 0.02]; // [X, Z] default
-  
-  // Dimensiones base según orientación
-  const baseW = array.width ?? defaults.width;
-  const baseH = array.height ?? defaults.height;
-  const pWidth = orientation === 'portrait' ? baseW : baseH;
-  const pHeight = orientation === 'portrait' ? baseH : baseW;
-
-  const radInc = (inclination * Math.PI) / 180;
-  const radAzi = (azimut * Math.PI) / 180;
-
-  // Tamaño total incluyendo los huecos (spacing)
-  const totalArrayWidth = (columns * pWidth) + ((columns - 1) * spacing[0]);
-  const totalArrayHeight = (rows * pHeight) + ((rows - 1) * spacing[1]);
-
-  const yOffset = (Math.sin(radInc) * totalArrayHeight) / 2;
-  const zVisualContraction = (Math.cos(radInc) * totalArrayHeight) / 2;
-
-  return (
-    <group 
-      position={[
-        (position[0] - centerX) + totalArrayWidth / 2,
-        elevation + yOffset,
-        (position[1] - centerZ) - zVisualContraction
-      ]}
-      rotation={[radInc, -radAzi, 0]}
-    >
-      {[...Array(rows)].map((_, r) => 
-        [...Array(columns)].map((_, c) => {
-          const hasOptimizer = settings?.find((s: any) => 
-            s.array === arrayIndex && s.panel[0] === r && s.panel[1] === c
-          )?.hasOptimizer ?? (array.hasOptimizer ?? defaults.hasOptimizer);
-
-          // Posicionamiento local considerando el spacing
-          const x = (c - (columns - 1) / 2) * (pWidth + spacing[0]);
-          const z = (r - (rows - 1) / 2) * (pHeight + spacing[1]);
-
-          return (
-            <group key={`${r}-${c}`} position={[x, 0, z]}>
-              <SolarPanel
-                sun={sun}
-                width={baseW} 
-                height={baseH} 
-                zones={array.zones ?? defaults.zones} 
-                zonesDisposition={array.zonesDisposition ?? defaults.zonesDisposition}
-                hasOptimizer={hasOptimizer}
-                orientation={orientation}
-                showPoints={showPoints}
-                density={density}
-              />
-            </group>
-          );
-        })
-      )}
-    </group>
-  );
-}
-
-function Scene({
-  installation,
-  sun,
-  date,
-  showPoints,
-  density
-}: {
-  installation: SolarInstallation,
-  sun: SunState | null,
+function Scene({ site, activeSetup, sun, date, showPoints, density }: {
+  site: Site,
+  activeSetup: PanelSetup,
+  sun: SunState,
   date: Date,
   showPoints: boolean,
   density: number
 }) {
-  const { panelDefaults, arrays, arraysSettings } = installation.panels;
-
-  // El Suelo ya usa los puntos centrados del modelo
   const floorShape = useMemo(() => {
     const shape = new THREE.Shape();
 
-    installation.wallIntersections.forEach((wallIntersection, i) => {
+    site.wallIntersections.forEach((wi, i) => {
       if (i === 0) {
-        shape.moveTo(wallIntersection.position.x, wallIntersection.position.z);
+        shape.moveTo(wi.position.x, wi.position.z);
       } else {
-        shape.lineTo(wallIntersection.position.x, wallIntersection.position.z);
+        shape.lineTo(wi.position.x, wi.position.z);
       }
     });
     
     return shape.closePath();
-  }, [installation.wallIntersections]);
+  }, [site.wallIntersections]);
 
   return (
     <>
       <OrbitControls zoomSpeed={0.2} minDistance={2} maxDistance={ORBIT_MAX_DISTANCE} />
       <Grid infiniteGrid fadeDistance={50} cellColor="#444" sectionColor="#666" />
       <Compass />
-      <Sun installationLocation={installation.location} date={date} />
+      <Sun date={date} />
 
-      {/* floor */}
-      <mesh receiveShadow position={[0, 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <extrudeGeometry args={[
-          floorShape, 
-          { depth: 0.02, bevelEnabled: false }
-        ]} />
-        <meshStandardMaterial color="#b45d16" side={THREE.DoubleSide} />
-      </mesh>
-      
-      {/* wall intersections */}
-      {installation.wallIntersections.map((wallIntersection) => {
-        const { position, boxArgs } = wallIntersection.geometryData;
+      <group rotation-y={site.azimutRad}>
+        {/* floor */}
+        <mesh receiveShadow position={[0, 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <extrudeGeometry args={[
+            floorShape, 
+            { depth: 0.02, bevelEnabled: false }
+          ]} />
+          <meshStandardMaterial color="#b45d16" side={THREE.DoubleSide} />
+        </mesh>
 
-        return (
-          <mesh
-            key={`post-${wallIntersection.index}`}
-            position={position}
-            castShadow
-          >
-            <boxGeometry args={boxArgs} />
-            <meshStandardMaterial color="#777" />
-          </mesh>
-        );
-      })}
-      
-      {/* walls (with trim) and offset */}
-      {installation.walls.map((wall) => {
-        const wallRailing = wall.railing;
-        const { groupPosition, meshPosition, boxArgs, yAngle } = wall.geometryData;
-
-        return (
-          <group key={`wall-${wall.index}`} position={groupPosition} rotation-y={yAngle}>
-            <mesh position={meshPosition} castShadow>
-              <boxGeometry args={boxArgs} />
-              <meshStandardMaterial color="#777" />
+        {/* wall intersections */}
+        {site.wallIntersections.map((wi) => {
+          return (
+            <mesh key={`post-${wi.index}`} position={[wi.worldPosition.x, wi.worldPosition.y, wi.worldPosition.z]} castShadow>
+              <boxGeometry args={wi.renderData.boxArgs} />
+              <meshStandardMaterial color={wi.renderData.color} />
             </mesh>
-            
-            {wallRailing.active && (
-              <mesh 
-                position={wallRailing.geometryData.position} 
-                rotation={wallRailing.geometryData.rotation}
-                castShadow
-              >
-                {wallRailing.shape === 'round'
-                  ? <cylinderGeometry args={wallRailing.geometryData.boxArgs} />
-                  : <boxGeometry args={wallRailing.geometryData.boxArgs} />
-                }
-                <meshStandardMaterial color="#333" />
-              </mesh>
-            )}
-          </group>
-        );
-      })}
+          );
+        })}
 
-      {/* Solar Arrays */}
-      {arrays.map((array, index) => (
-        <SolarArray
-          sun={sun}
-          key={`array-${index}`}
-          array={array}
-          arrayIndex={index}
-          defaults={panelDefaults}
-          settings={arraysSettings}
-          centerX={installation.centerX}
-          centerZ={installation.centerZ}
-          showPoints={showPoints}
-          density={density}
-        />
-      ))}
+        {/* walls (with trim) and offset */}
+        {site.walls.map((wall) => {
+          return (
+            <group key={`wall-${wall.index}`} position={[wall.worldPosition.x, wall.worldPosition.y, wall.worldPosition.z]} rotation-y={wall.worldRotation.y}>
+              <mesh position={wall.renderData.meshLocalPosition} castShadow>
+                <boxGeometry args={wall.renderData.boxArgs} />
+                <meshStandardMaterial color={wall.renderData.color} />
+              </mesh>
+              
+              {wall.railing && (
+                <mesh position={wall.railing.renderData.localPosition} rotation={wall.railing.renderData.localRotation} castShadow>
+                  {wall.railing.shape === 'round'
+                    ? <cylinderGeometry args={wall.railing.renderData.boxArgs as [number, number, number, number]} />
+                    : <boxGeometry args={wall.railing.renderData.boxArgs as [number, number, number]} />
+                  }
+                  <meshStandardMaterial color={wall.railing.renderData.color} />
+                </mesh>
+              )}
+            </group>
+          );
+        })}
+      </group>
+      
+      {/* Panels - outsite site group, use their own absolute azimut */}
+      {activeSetup.panelArrays.map((panelArray) => 
+        panelArray.panels.map((panel) => (
+          <group
+            key={panel.id}
+            position={[panel.worldPosition.x, panel.worldPosition.y, panel.worldPosition.z]}
+            rotation={[panel.worldRotation.x, panel.worldRotation.y, panel.worldRotation.z]}
+          >
+            <SolarPanelComponent
+              sun={sun}
+              zones={panel.zones}
+              zonesDisposition={panel.zonesDisposition}
+              hasOptimizer={panel.hasOptimizer}
+              showPoints={showPoints}
+              density={density}
+              renderData={panel.renderData}
+              samplePoints={panel.samplePoints}
+            />
+          </group>
+        ))
+      )}
     </>
   );
 }
 
-function MainControls({ date, setDate, isPlaying, setIsPlaying, adjustDate, config }: any) {
+function MainControls() {
   const { t, i18n } = useTranslation();
-  const displayDate = config ? date.tz(config.installation.timezone) : date;
+
+  const date         = useAppStore(s => s.date);
+  const isPlaying    = useAppStore(s => s.isPlaying);
+  const config       = useAppStore(s => s.config);
+  const setDate      = useAppStore(s => s.setDate);
+  const setIsPlaying = useAppStore(s => s.setIsPlaying);
+  const adjustDate   = useAppStore(s => s.adjustDate);
+
+  const displayDate = config ? date.tz(config.site.timezone) : date;
+  const CURRENT_YEAR = dayjs().year();
 
   return (
     <div className="controls-panel main-controls">
@@ -407,26 +320,31 @@ function MainControls({ date, setDate, isPlaying, setIsPlaying, adjustDate, conf
   );
 }
 
-function SimulationControls({ 
-  onRun, onStop, isRunning, 
-  showPoints, setShowPoints, density, setDensity,
-  threshold, setThreshold, config
-}: any) {
-  const [interval, setIntervalMins] = useState(60);
+function SimulationControls() {
+  const showPoints   = useAppStore(s => s.showPoints);
+  const setShowPoints= useAppStore(s => s.setShowPoints);
+  const density      = useAppStore(s => s.density);
+  const setDensity   = useAppStore(s => s.setDensity);
+  const threshold    = useAppStore(s => s.threshold);
+  const setThreshold = useAppStore(s => s.setThreshold);
+  const isRunning    = useAppStore(s => s.isRunning);
+  const setIsRunning = useAppStore(s => s.setIsRunning);
+  const config       = useAppStore(s => s.config);
+
+  const [interval, setIntervalMins] = [60, (_: number) => {}];
 
   const maxPointsPerZone = density * density;
 
   // points in scene
-  const totalPanels = config.panels.arrays.reduce((acc: number, arr: any) => acc + (arr.rows * arr.columns), 0);
-  const zonesPerPanel = config.panels.panelDefaults.zones;
+  const totalPanels = config?.setups[0].arrays.reduce((acc, arr) => acc + (arr.rows * arr.columns), 0) ?? 0;
+  const zonesPerPanel = config?.setups[0].panelDefaults.zones ?? 0;
   const pointsPerZone = density * density;
-  const pointsInScene = totalPanels * zonesPerPanel * pointsPerZone;
-
+  
   // time steps
   const timeSteps = Math.floor((365 * 24 * 60) / interval);
 
   // total calculation operations
-  const totalRays = timeSteps * pointsInScene;
+  const totalRays = timeSteps * totalPanels * zonesPerPanel * pointsPerZone;
 
   return (
     <div className="controls-panel simulation-panel" style={{ top: 'auto', bottom: '20px' }}>
@@ -479,11 +397,10 @@ function SimulationControls({
       </div>
 
       <div className="button-group">
-        {!isRunning ? (
-          <button className="play-btn" onClick={() => onRun({ interval, density })}>EJECUTAR CÁLCULO</button>
-        ) : (
-          <button className="pause-btn" onClick={onStop}>STOP</button>
-        )}
+        {!isRunning
+          ? <button className="play-btn" onClick={() => setIsRunning(true)}>EJECUTAR CÁLCULO</button>
+          : <button className="pause-btn" onClick={() => setIsRunning(false)}>STOP</button>
+        }
       </div>
     </div>
   );
@@ -491,102 +408,50 @@ function SimulationControls({
 
 export default function App() {
   const { t, i18n } = useTranslation();
-  const [config, setConfig] = useState<Config | null>(null);
-  const [installation, setInstallation] = useState<SolarInstallation | null>(null);
-  const [date, setDate] = useState(dayjs());
-  const [isPlaying, setIsPlaying] = useState(false);
+
+  const site         = useAppStore(s => s.site);
+  const activeSetup  = useAppStore(s => s.activeSetup);
+  const sun          = useAppStore(s => s.sun);
+  const date         = useAppStore(s => s.date);
+  const isPlaying    = useAppStore(s => s.isPlaying);
+  const showPoints   = useAppStore(s => s.showPoints);
+  const density      = useAppStore(s => s.density);
+  const tickHour     = useAppStore(s => s.tickHour);
+  const loadConfig   = useAppStore(s => s.loadConfig);
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // simulation status
-  const [isRunning, setIsRunning] = useState(false);
-  const [showPoints, setShowPoints] = useState(false);
-  const [threshold, setThreshold] = useState(1);
-  const [density, setDensity] = useState(4); // 4x4 por defecto
-
-  const sun = useMemo(() => {
-        if (!config) return null;
-        return calculateSunState(date.toDate(), config.installation.location.latitude, config.installation.location.longitude);
-  }, [date, config]);
-
-  useEffect(() => {
-    dayjs.locale(i18n.language); }, [i18n.language]
-  );
+  useEffect(() => { dayjs.locale(i18n.language); }, [i18n.language]);
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}config.json`)
       .then(res => res.json())
-      .then(data => {
-        setConfig(data);
-        setInstallation(SolarInstallationFactory.create(data));
-        setDate(dayjs.tz(data.installation.timezone).second(0))
-      });
+      .then(data => loadConfig(data));
   }, []);
 
   // Play/Loop Logic
   useEffect(() => {
     if (isPlaying) {
-      timerRef.current = setInterval(() => {
-        setDate(prev => {
-          let next = prev.add(1, 'hour');
-          if (next.year() > CURRENT_YEAR) return next.year(CURRENT_YEAR).month(0).date(1);
-          return next;
-        });
-      }, 100);
+      timerRef.current = setInterval(() => tickHour(), 100);
     } else if (timerRef.current) {
       clearInterval(timerRef.current);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isPlaying]);
 
-  if (!config || !installation) return <div style={{ color: 'white', padding: 20 }}>{t('loading')}</div>;
+  if (!site || !activeSetup || !sun) return <div style={{ color: 'white', padding: 20 }}>{t('loading')}</div>;
 
-  const adjustDate = (amount: number, unit: dayjs.ManipulateType) => {
-    setIsPlaying(false);
-    setDate(prev => {
-      let next = prev.add(amount, unit);
-      if (next.year() > CURRENT_YEAR) return next.year(CURRENT_YEAR).month(0).date(1);
-      if (next.year() < CURRENT_YEAR) return next.year(CURRENT_YEAR).month(11).date(31);
-      return next;
-    });
-  };
-
-  const handleRunSimulation = (params: any) => {
-    console.log("Iniciando cálculo con:", params);
-    setIsRunning(true);
-    // Aquí irá la lógica de Raycasting
-  };
-
-  const handleStopSimulation = () => {
-    setIsRunning(false);
-  };
+  console.log('App render:', {site: !!site, activeSetup: !!activeSetup, sun: !!sun});
 
   return (
     <div className="main-container" style={{ width: '100vw', height: '100vh', background: '#050505', position: 'relative' }}>
-      <MainControls 
-        date={date}
-        setDate={setDate}
-        isPlaying={isPlaying}
-        setIsPlaying={setIsPlaying} 
-        adjustDate={adjustDate}
-        config={config} 
-      />
+      <MainControls />
 
-      <SimulationControls 
-        isRunning={isRunning}
-        onRun={handleRunSimulation} 
-        onStop={handleStopSimulation}
-        showPoints={showPoints}
-        setShowPoints={setShowPoints}
-        density={density}
-        setDensity={setDensity}
-        threshold={threshold}
-        setThreshold={setThreshold}
-        config={config}
-      />
+      <SimulationControls />
 
       {/* Three.js Canvas */}
       <Canvas shadows camera={{ position: [0, ORBIT_MAX_DISTANCE, 70], fov: 40 }}>
-        <Scene installation={installation} sun={sun} date={date.toDate()} showPoints={showPoints} density={density} />
+        <Scene site={site} activeSetup={activeSetup} sun={sun} date={date.toDate()} showPoints={showPoints} density={density} />
       </Canvas>
     </div>
   )

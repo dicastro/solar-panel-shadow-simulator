@@ -1,17 +1,20 @@
-import { Config, SolarInstallation } from "../types";
+import { Site } from "../types/installation";
+import { Config } from "../types/config";
 import { PointXZUtils } from "../utils/PointXZUtils";
 import { PointXZFactory } from "./PointXZFactory";
 import { WallFactory } from "./WallFactory";
 import { WallIntersectionFactory } from "./WallIntersectionFactory";
 
-export const SolarInstallationFactory = {
-  create: (config: Config): SolarInstallation => {
-    const { wallPoints, wallDefaults, railingDefaults, wallsSettings } = config.installation;
+export const SiteFactory = {
+  create: (config: Config): Site => {
+    const { wallPoints, wallDefaults, railingDefaults, wallsSettings, azimut } = config.site;
 
     const centerX = wallPoints.reduce((sum, p) => sum + p[0], 0) / wallPoints.length;
     const centerZ = wallPoints.reduce((sum, p) => sum + p[1], 0) / wallPoints.length;
 
-    const centeredPoints = wallPoints.map(p => PointXZFactory.createCentered(p[0], p[1], centerX, centerZ));
+    const centeredPoints = wallPoints.map(p =>
+      PointXZFactory.createCentered(p[0], p[1], centerX, centerZ)
+    );
 
     const wallIntersections = centeredPoints.map((p, i) => {
       const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
@@ -29,14 +32,18 @@ export const SolarInstallationFactory = {
       return WallFactory.create(i, p1, p2, wallDefaults, railingDefaults, wallSettings);
     });
 
+    // South = 0, positive = West. SunCalc uses the same convention so no
+    // additional transformation is needed beyond degrees → radians.
+    const azimutRad = (azimut * Math.PI) / 180;
+
     return {
-      location: config.installation.location,
-      azimut: config.installation.azimut,
-      walls: walls,
-      wallIntersections: wallIntersections,
+      location: config.site.location,
+      azimutRad,
+      timezone: config.site.timezone,
       centerX: centerX,
       centerZ: centerZ,
-      panels: config.panels
+      walls,
+      wallIntersections,
     }
   }
 };

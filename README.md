@@ -1,5 +1,8 @@
 # Improvements
 
+- En la función `SolarPanel` de `App.tsx` veo muchos cálculos que no sé por qué no se hacen en los correspondientes factory y aquí solo se consumen los datos pre-calculados
+- `SolarPanel` debería tener dentro de `renderData` el `boxArgs` como en otros sitios
+- Por qué hay que pasar `centerX` y `centerZ` en `PanelSetupFactory.create(activeSetupConfig, density, site.centerX, site.centerZ)`, quién invoca a esto debe saber que site tiene centerX y centerZ para pasarlo? Creo que esto es mejorable
 - `zonesDisposition` is interpreted in the inverted way, the actual logic for `horizontal` value should be the logic for `vertical` and viceversa
 - positioning elements in the scene (panels or points for walls) should be easier if the second coordinate is positive, right now it has to be negative to go to the north ([0.2, -0.1])
 - document how positioning coordinates work in the WE direction, 0 is in the West and when it increments it goes to the East
@@ -8,6 +11,8 @@
 - crear un tipo para `config`
 - tratar de refactorizar funciones
 - dividir `App.tsx` en distintas clases
+- document azimut (0 - South, positive - West, negative - East)
+- review warnings in the browser console regarding three version and deprecation
 
 # Documentation
 

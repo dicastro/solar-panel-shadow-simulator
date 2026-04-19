@@ -1,16 +1,19 @@
 import SunCalc from 'suncalc';
 import * as THREE from 'three';
-import { SunState } from './types';
+import { SunState } from './types/simulation';
+import { Vector3 } from './types/geometry';
 
 export const calculateSunState = (date: Date, lat: number, lon: number): SunState => {
     const sunPos = SunCalc.getPosition(date, lat, lon);
     const isDaylight = sunPos.altitude > 0;
     
-    const direction = new THREE.Vector3(
+    const threeDirection = new THREE.Vector3(
         Math.cos(sunPos.altitude) * Math.sin(-sunPos.azimuth),
         Math.sin(sunPos.altitude),
         Math.cos(sunPos.altitude) * Math.cos(sunPos.azimuth)
     ).normalize();
+
+    const direction: Vector3 = { x: threeDirection.x, y: threeDirection.y, z: threeDirection.z };
 
     return {
         altitude: sunPos.altitude,
@@ -23,8 +26,8 @@ export const calculateSunState = (date: Date, lat: number, lon: number): SunStat
 /**
  * Calculates panel efficiency based uniquely in sun angle
  */
-export const calculateIncidenceFactor = (sunDir: THREE.Vector3, panelNormal: THREE.Vector3): number => {
-    const dot = panelNormal.dot(sunDir);
+export const calculateIncidenceFactor = (sunDir: Vector3, panelNormal: Vector3): number => {
+    const dot = sunDir.x * panelNormal.x + sunDir.y * panelNormal.y + sunDir.z * panelNormal.z;
     return Math.max(0, dot); // if it is negative, the sun is behind the panel
 };
 
@@ -45,14 +48,12 @@ export const calculatePanelOutput = (
     if (shadedCount === 0) return basePower;
     if (shadedCount === zonesCount) return 0;
 
-    if (hasOptimizer) {
-        // ESCENARIO A: Con Optimizador
+    if (hasOptimizer) { // Scenario A: With Optimizer
         // La pérdida es puramente proporcional. 
         // Si tienes 3 zonas y falla 1, produces exactamente el 66.6%.
         const efficiency = (zonesCount - shadedCount) / zonesCount;
         return basePower * efficiency;
-    } else {
-        // ESCENARIO B: Sin Optimizador (Diodos de Bypass tradicionales)
+    } else { // Scenario B: Without Optimizador (Traditional Bypass Diodes)
         // En muchos paneles reales, si una zona entra en sombra, el diodo 
         // "salta" y la producción de esa zona cae a 0, pero además suele haber 
         // una pequeña penalización por desajuste de voltaje (mismatch).
@@ -60,7 +61,7 @@ export const calculatePanelOutput = (
         // sobre la capacidad restante por no tener optimización activa.
         
         const efficiency = (zonesCount - shadedCount) / zonesCount;
-        const mismatchLoss = 0.9; // Penalización del 10% por falta de optimizador
+        const mismatchLoss = 0.9; // Penalty of 10% because of the absence of an optimizer
         return basePower * efficiency * mismatchLoss;
     }
 };

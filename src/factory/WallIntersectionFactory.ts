@@ -1,43 +1,44 @@
-import { WallIntersection } from "../types";
+import { WallIntersection } from "../types/installation";
 import { PointXZ } from "../types/geometry";
 import { PointXZUtils } from "../utils/PointXZUtils";
 
+const WALL_INTERSECTION_COLOR = '#777';
+
 export const WallIntersectionFactory = {
-    create: (
-        index: number,
-        p: PointXZ,
-        pPrev: PointXZ,
-        pNext: PointXZ,
-        wallThickness: number,
-        height: number
-      ): WallIntersection => {
-        const { isStraight, normalizedPrev, normalizedNext } = PointXZUtils.pointAlignedWithPreviousAndNext(p, pPrev, pNext);
-    
-        let offset;
+  create: (
+      index: number,
+      p: PointXZ,
+      pPrev: PointXZ,
+      pNext: PointXZ,
+      wallThickness: number,
+      height: number
+    ): WallIntersection => {
+      const { isStraight, normalizedPrev, normalizedNext } = PointXZUtils.pointAlignedWithPreviousAndNext(p, pPrev, pNext);
 
-        if (isStraight) {
-          // case: point in the middle of line. Only offset in the common normal
-          offset = {
-            x: normalizedNext.x * (wallThickness / 2),
-            z: normalizedNext.z * (wallThickness / 2)
-          }
-        } else {
-          // case: corner. Sum both normal
-          offset = {
-            x: (normalizedPrev.x + normalizedNext.x) * (wallThickness / 2),
-            z: (normalizedPrev.z + normalizedNext.z) * (wallThickness / 2)
-          }
+      const offset = isStraight
+        ? { // Scenario: point in the middle of line - only offset in the common normal
+          x: normalizedNext.x * (wallThickness / 2),
+          z: normalizedNext.z * (wallThickness / 2)
         }
+        : { // Scenario: corner -> sum both normal
+          x: (normalizedPrev.x + normalizedNext.x) * (wallThickness / 2),
+          z: (normalizedPrev.z + normalizedNext.z) * (wallThickness / 2)
+        };
 
-        return {
-            index: index,
-            position: p,
-            height: height,
-            thickness: wallThickness,
-            geometryData: {
-              position: [p.x + offset.x, height / 2, p.z + offset.z],
-              boxArgs: [wallThickness, height, wallThickness]
-            }
-        }
+      return {
+          index: index,
+          position: p,
+          height: height,
+          thickness: wallThickness,
+          worldPosition: {
+            x: p.x + offset.x,
+            y: height / 2,
+            z: p.z + offset.z
+          },
+          renderData: {
+            boxArgs: [wallThickness, height, wallThickness],
+            color: WALL_INTERSECTION_COLOR,
+          }
       }
+    }
 };
