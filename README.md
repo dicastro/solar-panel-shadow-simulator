@@ -1,18 +1,24 @@
 # Improvements
 
-- En la función `SolarPanel` de `App.tsx` veo muchos cálculos que no sé por qué no se hacen en los correspondientes factory y aquí solo se consumen los datos pre-calculados
-- `SolarPanel` debería tener dentro de `renderData` el `boxArgs` como en otros sitios
-- Por qué hay que pasar `centerX` y `centerZ` en `PanelSetupFactory.create(activeSetupConfig, density, site.centerX, site.centerZ)`, quién invoca a esto debe saber que site tiene centerX y centerZ para pasarlo? Creo que esto es mejorable
-- `zonesDisposition` is interpreted in the inverted way, the actual logic for `horizontal` value should be the logic for `vertical` and viceversa
-- positioning elements in the scene (panels or points for walls) should be easier if the second coordinate is positive, right now it has to be negative to go to the north ([0.2, -0.1])
-- document how positioning coordinates work in the WE direction, 0 is in the West and when it increments it goes to the East
-- document the order of points that goes from SW > S > SE > E > NE > N > NW > W, this is also needed to know the number to the segment to override settings
-- cambiar los `any` de algunos argumentos de funciones por los tipos concretos
-- crear un tipo para `config`
-- tratar de refactorizar funciones
-- dividir `App.tsx` en distintas clases
-- document azimut (0 - South, positive - West, negative - East)
-- review warnings in the browser console regarding three version and deprecation
+* En la función `SolarPanel` de `App.tsx` veo muchos cálculos que no sé por qué no se hacen en los correspondientes factory y aquí solo se consumen los datos pre-calculados
+* `SolarPanel` debería tener dentro de `renderData` el `boxArgs` como en otros sitios
+* Por qué hay que pasar `centerX` y `centerZ` en `PanelSetupFactory.create(activeSetupConfig, density, site.centerX, site.centerZ)`, quién invoca a esto debe saber que site tiene centerX y centerZ para pasarlo? Creo que esto es mejorable
+* `zonesDisposition` is interpreted in the inverted way, the actual logic for `horizontal` value should be the logic for `vertical` and viceversa
+* positioning elements in the scene (panels or points for walls) should be easier if the second coordinate is positive, right now it has to be negative to go to the north ([0.2, -0.1])
+* document how positioning coordinates work in the WE direction, 0 is in the West and when it increments it goes to the East
+* document the order of points that goes from SW > S > SE > E > NE > N > NW > W, this is also needed to know the number to the segment to override settings
+* change all `any` ocurrencies from function arguments
+* split `App.tsx` in different clases
+* 
+* document azimut (0 - South, positive - West, negative - East)
+* review warnings in the browser console regarding three version and deprecation
+  ```
+  THREE.THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.
+  THREE.WebGLShadowMap: PCFSoftShadowMap has been deprecated. Using PCFShadowMap instead.
+
+  WebGL warning: drawArraysInstanced: Depth texture comparison requests (e.g. `LINEAR`) Filtering, but behavior is implementation-defined, and so on some systems will sometimes behave as `NEAREST`. (warns once)
+  ```
+* review types for the simulation
 
 # Documentation
 
@@ -63,3 +69,8 @@ Para tu simulación, el cálculo debe seguir este orden jerárquico:
 * **Umbral de Zona**: Debes decidir en tu código: ¿Cuántos puntos rojos hacen que una zona caiga?
   * *Lógica estricta*: 1 punto rojo = zona al 0%
   * *Lógica permisiva*: Si > 20% de los puntos de la zona son rojos = zona al 0%. (Es más realista, ya que sombras muy pequeñas a veces no activan el diodo)
+
+## Hooks
+
+* **useBVH hook**: construye el BVH una sola vez cuando cambia la escena (muros/paneles), y lo reconstruye solo si cambia `activeSetup` o `site`. El BVH es una estructura de aceleración sobre la geometría estática — los muros no se mueven, así que el BVH de los muros se construye una vez y nunca se recalcula
+* **useShadowSampler hook**: en cada frame (o cada N ms), lanza todos los rayos de todos los sample points en una sola pasada usando el BVH. Devuelve un `Map<pointId, isShaded>`

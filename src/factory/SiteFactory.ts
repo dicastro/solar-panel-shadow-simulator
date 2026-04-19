@@ -12,6 +12,11 @@ export const SiteFactory = {
     const centerX = wallPoints.reduce((sum, p) => sum + p[0], 0) / wallPoints.length;
     const centerZ = wallPoints.reduce((sum, p) => sum + p[1], 0) / wallPoints.length;
 
+    // Bounding radius: max distance from center to any wall point
+    const boundingRadius = Math.max(...wallPoints.map(p => 
+      Math.sqrt(Math.pow(p[0] - centerX, 2) + Math.pow(p[1] - centerZ, 2))
+    ));
+
     const centeredPoints = wallPoints.map(p =>
       PointXZFactory.createCentered(p[0], p[1], centerX, centerZ)
     );
@@ -42,6 +47,7 @@ export const SiteFactory = {
       timezone: config.site.timezone,
       centerX: centerX,
       centerZ: centerZ,
+      boundingRadius,
       walls,
       wallIntersections,
     }

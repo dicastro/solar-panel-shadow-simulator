@@ -9,5 +9,8 @@
         "south": "S",
         "west": "W",
         "east": "E"
+    },
+    "simulationControls": {
+      "title": "Yearly simulation"
     }
 }

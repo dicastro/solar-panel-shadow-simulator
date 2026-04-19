@@ -3,8 +3,6 @@ import { OrbitControls, Grid, Sphere, Text } from '@react-three/drei'
 import { useEffect, useRef, useMemo } from 'react'
 import SunCalc from 'suncalc'
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
 import 'dayjs/locale/es';
 import 'dayjs/locale/en';
 import { useTranslation } from 'react-i18next'
@@ -12,22 +10,18 @@ import * as THREE from 'three';
 
 import './i18n'
 import './App.css'
-import { PointWithShadow } from './components/PointWithShadow'
 import { useAppStore } from './store/useAppStore'
 import {
-  Config,
   Site,
   PanelSetup,
   SunState,
   ZonesDisposition,
   PanelRenderData,
-  SamplePoint
+  SamplePoint,
+  SimulationResult
 } from './types'
-
-dayjs.extend(utc);
-dayjs.extend(timezone);
-
-const ORBIT_MAX_DISTANCE = 80;
+import { ShadowMap } from './hooks/useShadowSampler'
+import { ShadowedScene } from './components/ShadowedScene'
 
 function Compass() {
   const { t } = useTranslation();
@@ -99,24 +93,17 @@ function Sun({ date }: { date: Date }) {
  * Individual Solar Panel Component
  * Represents the glass surface and diode zones.
  */
-function SolarPanelComponent({ sun, zones, zonesDisposition, hasOptimizer, showPoints, density, renderData, samplePoints }: {
-  sun: SunState,
+function SolarPanelComponent({ zones, zonesDisposition, hasOptimizer, showPoints, renderData, samplePoints, shadowMap }: {
   zones: number,
   zonesDisposition: ZonesDisposition,
   hasOptimizer: boolean,
   showPoints: boolean,
-  density: number,
   renderData: PanelRenderData,
-  samplePoints: readonly SamplePoint[]
+  samplePoints: readonly SamplePoint[],
+  shadowMap: ShadowMap,
 }) {
-  const shadedPointsMap = useRef<Map<string, boolean>>(new Map());
-  const raycaster = useRef(new THREE.Raycaster());
   const gap = 0.01;
   const { actualWidth, actualHeight, frameColor, emissiveColor } = renderData;
-
-  const handlePointStatus = (pointId: string, isShaded: boolean) => {
-    shadedPointsMap.current.set(pointId, isShaded);
-  };
 
   return (
     <group>
@@ -148,15 +135,16 @@ function SolarPanelComponent({ sun, zones, zonesDisposition, hasOptimizer, showP
             </mesh>
 
             {/* points per zone */}
-            {zonePoints.map((sp: SamplePoint) => (
-              <PointWithShadow
-                key={sp.id}
-                position={[sp.localPosition.x, sp.localPosition.y, sp.localPosition.z]}
-                sun={sun}
-                raycaster={raycaster.current}
-                onStatusChange={(isShaded: boolean) => handlePointStatus(sp.id, isShaded)}
-              />
-            ))}
+            {zonePoints.map((sp: SamplePoint) => {
+              const isShaded = shadowMap.get(sp.id) ?? false;
+
+              return (
+                <mesh key={sp.id} position={[sp.localPosition.x, sp.localPosition.y, sp.localPosition.z]}>
+                  <sphereGeometry args={[0.01, 8, 8]} />
+                  <meshBasicMaterial color={isShaded ? '#ff4444' : '#ccff00'} />
+                </mesh>
+              );
+            })}
           </group>
         );
       })}
@@ -164,14 +152,18 @@ function SolarPanelComponent({ sun, zones, zonesDisposition, hasOptimizer, showP
   );
 }
 
-function Scene({ site, activeSetup, sun, date, showPoints, density }: {
-  site: Site,
-  activeSetup: PanelSetup,
-  sun: SunState,
-  date: Date,
-  showPoints: boolean,
-  density: number
+function Scene({ site, activeSetup, sun, date, showPoints, density, threshold, onProductionUpdate }: {
+  site: Site;
+  activeSetup: PanelSetup;
+  sun: SunState;
+  date: Date;
+  showPoints: boolean;
+  density: number;
+  threshold: number;
+  onProductionUpdate: (result: SimulationResult) => void;
 }) {
+  const gridSize = site.boundingRadius * 3;
+
   const floorShape = useMemo(() => {
     const shape = new THREE.Shape();
 
@@ -188,8 +180,16 @@ function Scene({ site, activeSetup, sun, date, showPoints, density }: {
 
   return (
     <>
-      <OrbitControls zoomSpeed={0.2} minDistance={2} maxDistance={ORBIT_MAX_DISTANCE} />
-      <Grid infiniteGrid fadeDistance={50} cellColor="#444" sectionColor="#666" />
+      <OrbitControls zoomSpeed={0.2} minDistance={2} maxDistance={site.boundingRadius * 8} />
+      <Grid
+        infiniteGrid={false}
+        cellSize={1}
+        cellThickness={0.5}
+        sectionSize={5}
+        fadeDistance={gridSize * 2}
+        cellColor="#444"
+        sectionColor="#666"
+      />
       <Compass />
       <Sun date={date} />
 
@@ -236,27 +236,30 @@ function Scene({ site, activeSetup, sun, date, showPoints, density }: {
         })}
       </group>
       
-      {/* Panels - outsite site group, use their own absolute azimut */}
-      {activeSetup.panelArrays.map((panelArray) => 
-        panelArray.panels.map((panel) => (
-          <group
-            key={panel.id}
-            position={[panel.worldPosition.x, panel.worldPosition.y, panel.worldPosition.z]}
-            rotation={[panel.worldRotation.x, panel.worldRotation.y, panel.worldRotation.z]}
-          >
-            <SolarPanelComponent
-              sun={sun}
-              zones={panel.zones}
-              zonesDisposition={panel.zonesDisposition}
-              hasOptimizer={panel.hasOptimizer}
-              showPoints={showPoints}
-              density={density}
-              renderData={panel.renderData}
-              samplePoints={panel.samplePoints}
-            />
-          </group>
-        ))
-      )}
+      <ShadowedScene site={site} activeSetup={activeSetup} sun={sun} showPoints={showPoints} density={density} threshold={threshold} onProductionUpdate={onProductionUpdate}>
+        {(shadowMap: ShadowMap) =>
+          /* Panels - outsite site group, use their own absolute azimut */
+          activeSetup.panelArrays.map((pa) => 
+            pa.panels.map((panel) => (
+              <group
+                key={panel.id}
+                position={[panel.worldPosition.x, panel.worldPosition.y, panel.worldPosition.z]}
+                rotation={[panel.worldRotation.x, panel.worldRotation.y, panel.worldRotation.z]}
+              >
+                <SolarPanelComponent
+                  zones={panel.zones}
+                  zonesDisposition={panel.zonesDisposition}
+                  hasOptimizer={panel.hasOptimizer}
+                  showPoints={showPoints}
+                  renderData={panel.renderData}
+                  samplePoints={panel.samplePoints}
+                  shadowMap={shadowMap}
+                />
+              </group>
+            ))
+          )
+        }
+      </ShadowedScene>
     </>
   );
 }
@@ -264,12 +267,12 @@ function Scene({ site, activeSetup, sun, date, showPoints, density }: {
 function MainControls() {
   const { t, i18n } = useTranslation();
 
-  const date         = useAppStore(s => s.date);
-  const isPlaying    = useAppStore(s => s.isPlaying);
-  const config       = useAppStore(s => s.config);
-  const setDate      = useAppStore(s => s.setDate);
+  const date = useAppStore(s => s.date);
+  const isPlaying = useAppStore(s => s.isPlaying);
+  const config = useAppStore(s => s.config);
+  const setDate = useAppStore(s => s.setDate);
   const setIsPlaying = useAppStore(s => s.setIsPlaying);
-  const adjustDate   = useAppStore(s => s.adjustDate);
+  const adjustDate = useAppStore(s => s.adjustDate);
 
   const displayDate = config ? date.tz(config.site.timezone) : date;
   const CURRENT_YEAR = dayjs().year();
@@ -321,15 +324,20 @@ function MainControls() {
 }
 
 function SimulationControls() {
-  const showPoints   = useAppStore(s => s.showPoints);
-  const setShowPoints= useAppStore(s => s.setShowPoints);
-  const density      = useAppStore(s => s.density);
-  const setDensity   = useAppStore(s => s.setDensity);
-  const threshold    = useAppStore(s => s.threshold);
+  const { t } = useTranslation();
+
+  const showPoints = useAppStore(s => s.showPoints);
+  const setShowPoints = useAppStore(s => s.setShowPoints);
+  const density = useAppStore(s => s.density);
+  const setDensity = useAppStore(s => s.setDensity);
+  const threshold = useAppStore(s => s.threshold);
   const setThreshold = useAppStore(s => s.setThreshold);
-  const isRunning    = useAppStore(s => s.isRunning);
+  const isRunning = useAppStore(s => s.isRunning);
   const setIsRunning = useAppStore(s => s.setIsRunning);
-  const config       = useAppStore(s => s.config);
+  const config = useAppStore(s => s.config);
+  const simulationResult = useAppStore(s => s.simulationResult);
+  const instantPower = simulationResult?.instantPower ?? 0;
+  const activeSetup = useAppStore(s => s.activeSetup);
 
   const [interval, setIntervalMins] = [60, (_: number) => {}];
 
@@ -346,9 +354,11 @@ function SimulationControls() {
   // total calculation operations
   const totalRays = timeSteps * totalPanels * zonesPerPanel * pointsPerZone;
 
+  const theoreticalPeak = (activeSetup?.panelArrays.flatMap(pa => pa.panels).reduce((sum, p) => sum + p.peakPower / 1000, 0) ?? 0);
+
   return (
     <div className="controls-panel simulation-panel" style={{ top: 'auto', bottom: '20px' }}>
-      <h3>Simulación Anual</h3>
+      <h3>{t('simulationControls.title')}</h3>
       
       <div className="control-row">
         <label>Intervalo:</label>
@@ -393,7 +403,15 @@ function SimulationControls() {
       </div>
 
       <div className="instant-results" style={{ marginTop: '10px', borderTop: '1px solid #444', paddingTop: '10px' }}>
-         <p>Producción estimada instante: <span id="instant-prod">0.00</span> kW</p>
+        <p>
+          Producción estimada instante:{' '}
+          <strong style={{ color: '#4caf50', opacity: 0.6}}>
+            {instantPower.toFixed(2)} kW
+          </strong>
+        </p>
+        <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+          Pico teórico: {theoreticalPeak.toFixed(2)} kW
+        </p>
       </div>
 
       <div className="button-group">
@@ -409,15 +427,17 @@ function SimulationControls() {
 export default function App() {
   const { t, i18n } = useTranslation();
 
-  const site         = useAppStore(s => s.site);
-  const activeSetup  = useAppStore(s => s.activeSetup);
-  const sun          = useAppStore(s => s.sun);
-  const date         = useAppStore(s => s.date);
-  const isPlaying    = useAppStore(s => s.isPlaying);
-  const showPoints   = useAppStore(s => s.showPoints);
-  const density      = useAppStore(s => s.density);
-  const tickHour     = useAppStore(s => s.tickHour);
-  const loadConfig   = useAppStore(s => s.loadConfig);
+  const site = useAppStore(s => s.site);
+  const activeSetup = useAppStore(s => s.activeSetup);
+  const sun = useAppStore(s => s.sun);
+  const date = useAppStore(s => s.date);
+  const isPlaying = useAppStore(s => s.isPlaying);
+  const showPoints = useAppStore(s => s.showPoints);
+  const density = useAppStore(s => s.density);
+  const threshold = useAppStore(s => s.threshold);
+  const setSimulationResult = useAppStore(s => s.setSimulationResult);
+  const tickHour = useAppStore(s => s.tickHour);
+  const loadConfig = useAppStore(s => s.loadConfig);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -441,7 +461,8 @@ export default function App() {
 
   if (!site || !activeSetup || !sun) return <div style={{ color: 'white', padding: 20 }}>{t('loading')}</div>;
 
-  console.log('App render:', {site: !!site, activeSetup: !!activeSetup, sun: !!sun});
+  const cameraDistance = site.boundingRadius * 4;
+  const cameraHeight = site.boundingRadius * 3;
 
   return (
     <div className="main-container" style={{ width: '100vw', height: '100vh', background: '#050505', position: 'relative' }}>
@@ -450,8 +471,8 @@ export default function App() {
       <SimulationControls />
 
       {/* Three.js Canvas */}
-      <Canvas shadows camera={{ position: [0, ORBIT_MAX_DISTANCE, 70], fov: 40 }}>
-        <Scene site={site} activeSetup={activeSetup} sun={sun} date={date.toDate()} showPoints={showPoints} density={density} />
+      <Canvas shadows camera={{ position: [0, cameraHeight, cameraDistance], fov: 40 }}>
+        <Scene site={site} activeSetup={activeSetup} sun={sun} date={date.toDate()} showPoints={showPoints} density={density} threshold={threshold} onProductionUpdate={setSimulationResult} />
       </Canvas>
     </div>
   )

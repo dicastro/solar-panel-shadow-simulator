@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import dayjs, { Dayjs } from 'dayjs';
-import { Config, Site, PanelSetup, SunState } from '../types';
+import { Config, Site, PanelSetup, SunState, SimulationResult } from '../types';
 import { SiteFactory } from '../factory/SiteFactory';
 import { PanelSetupFactory } from '../factory/PanelSetupFactory';
 import { calculateSunState } from '../solarEngine';
@@ -23,9 +23,10 @@ interface AppState {
 
   // UI / Simulation settings
   showPoints: boolean;
-  density:    number;
-  threshold:  number;
-  isRunning:  boolean;
+  density: number;
+  threshold: number;
+  isRunning: boolean;
+  simulationResult: SimulationResult | null;
 
   // Actions
   loadConfig: (config: Config) => void;
@@ -38,6 +39,7 @@ interface AppState {
   setDensity: (density: number) => void;
   setThreshold: (threshold: number) => void;
   setIsRunning: (running: boolean) => void;
+  setSimulationResult: (result: SimulationResult) => void;
 }
 
 /** Recalculates PanelSetup when setup selection or density changes. */
@@ -79,13 +81,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   density: 4,
   threshold: 1,
   isRunning: false,
+  simulationResult: null,
 
   // Actions
 
   loadConfig: (config) => {
     const site = SiteFactory.create(config);
     const firstSetupId = config.setups[0].id;
-    const date = dayjs.tz(config.site.timezone).second(0);
+    const date = dayjs().tz(config.site.timezone).second(0);
     const activeSetup = buildActiveSetup(config, site, firstSetupId, get().density);
     const sun = buildSun(date, config);
 
@@ -130,6 +133,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ density, activeSetup });
   },
 
-  setThreshold:  (threshold)  => set({ threshold }),
-  setIsRunning:  (isRunning)  => set({ isRunning }),
+  setThreshold: (threshold) => set({ threshold }),
+
+  setIsRunning: (isRunning) => set({ isRunning }),
+
+  setSimulationResult: (simulationResult) => set({ simulationResult }),
 }));

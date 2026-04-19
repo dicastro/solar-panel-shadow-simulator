@@ -104,6 +104,7 @@ export interface Site {
   readonly timezone: string;
   readonly centerX: number;
   readonly centerZ: number;
+  readonly boundingRadius: number;
   readonly walls: readonly Wall[];
   readonly wallIntersections: readonly WallIntersection[];
 }

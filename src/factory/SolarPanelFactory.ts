@@ -47,6 +47,13 @@ export const SolarPanelFactory = {
     const localX = (col - (cols - 1) / 2) * (pWidth + spacing[0]);
     const localZ = (row - (rows - 1) / 2) * (pHeight + spacing[1]);
 
+    // localZ needs to be projected onto world Y and Z axes
+    // because the array group is rotated by radInc around the X axis.
+    // Without this, all panels share the same Y and just shift in Z.
+    const worldX = groupX + localX;
+    const worldY = groupY - localZ * Math.sin(radInc);
+    const worldZ = groupZ + localZ * Math.cos(radInc);
+
     const id = `a${arrayIndex}-r${row}-c${col}`;
 
     const actualW = orientation === 'portrait' ? baseW : baseH;
@@ -65,7 +72,7 @@ export const SolarPanelFactory = {
       zones,
       zonesDisposition: zonesDisp,
       orientation,
-      worldPosition: { x: groupX + localX, y: groupY, z: groupZ + localZ },
+      worldPosition: { x: worldX, y: worldY, z: worldZ },
       worldRotation: { x: radInc, y: -radAzi, z: 0 },
       samplePoints,
       renderData: {

@@ -7,11 +7,13 @@ export interface SunState {
   readonly direction: Vector3;
 }
 
+export interface PanelSimulationResult {
+  readonly id: string;
+  readonly power: number;
+  readonly isShaded: boolean;
+}
+
 export interface SimulationResult {
   readonly instantPower: number; // kW
-  readonly panels: {
-    readonly id: string;
-    readonly power: number;
-    readonly isShaded: boolean;
-  }[];
+  readonly panels: readonly PanelSimulationResult[];
 }
