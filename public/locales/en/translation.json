@@ -2,6 +2,8 @@
   "title": "Solar Simulator",
   "date_label": "Date",
   "time_label": "Time",
+  "timezone_label": "Timezone",
+  "setup_label": "Setup",
   "lang_label": "Language",
   "loading": "Loading configuration...",
   "coordinates": {
@@ -24,5 +26,10 @@
     "theoreticalPeak": "Theoretical peak",
     "run": "RUN CALCULATION",
     "stop": "STOP"
+  },
+  "footer": {
+    "madeBy": "Made by",
+    "donate": "Buy me a coffee",
+    "donateTitle": "Support this project on Ko-fi"
   }
 }

@@ -6,8 +6,6 @@ import {
   ZonesDisposition,
 } from './config';
 
-// ── Render data shapes ──────────────────────────────────────────────────────
-
 export interface WallIntersectionRenderData {
   readonly boxArgs: [number, number, number];
   readonly color: string;
@@ -19,27 +17,58 @@ export interface WallRenderData {
   readonly color: string;
 }
 
-export interface RailingRenderData {
+export type RailingRailRenderDataSquare = {
+  readonly kind: 'square';
   readonly localPosition: [number, number, number];
   readonly localRotation: [number, number, number];
-  // box: [w, h, d] - cylinder: [radiusTop, radiusBottom, height, segments]
-  readonly boxArgs: [number, number, number] | [number, number, number, number];
+  readonly args: [number, number, number]; // [width, height, length]
   readonly color: string;
-}
+};
 
-/**
- * Pre-computed render data for a single diode zone within a panel.
- * Calculated once in the factory so components stay purely presentational.
- */
+export type RailingRailRenderDataCylinder = {
+  readonly kind: 'cylinder';
+  readonly localPosition: [number, number, number];
+  readonly localRotation: [number, number, number];
+  readonly args: [number, number, number, number]; // [rTop, rBottom, length, segments]
+  readonly color: string;
+};
+
+export type RailingRailRenderDataHalfCylinder = {
+  readonly kind: 'half-cylinder';
+  readonly localPosition: [number, number, number];
+  readonly localRotation: [number, number, number];
+  readonly args: [number, number, number, number, number, number]; // [r,r,len,seg,thetaStart,thetaLen]
+  readonly color: string;
+};
+
+export type RailingRailRenderData =
+  | RailingRailRenderDataSquare
+  | RailingRailRenderDataCylinder
+  | RailingRailRenderDataHalfCylinder;
+
+export type RailingSupportRenderDataSquare = {
+  readonly kind: 'square';
+  readonly localPosition: [number, number, number];
+  readonly args: [number, number, number]; // [width, height, depth]
+  readonly color: string;
+};
+
+export type RailingSupportRenderDataCylinder = {
+  readonly kind: 'cylinder';
+  readonly localPosition: [number, number, number];
+  readonly args: [number, number, number, number]; // [rTop, rBottom, height, segments]
+  readonly color: string;
+};
+
+export type RailingSupportRenderData =
+  | RailingSupportRenderDataSquare
+  | RailingSupportRenderDataCylinder;
+
 export interface ZoneRenderData {
   readonly zoneIndex: number;
-  /** Local X offset from panel centre */
   readonly posX: number;
-  /** Local Z offset from panel centre */
   readonly posZ: number;
-  /** Width of the zone plane */
   readonly width: number;
-  /** Height (depth) of the zone plane */
   readonly height: number;
 }
 
@@ -48,16 +77,14 @@ export interface PanelRenderData {
   readonly actualHeight: number;
   readonly frameColor: string;
   readonly emissiveColor: string;
-  /** One entry per diode zone — order matches zone indices */
   readonly zones: readonly ZoneRenderData[];
 }
 
-// ── Domain models ───────────────────────────────────────────────────────────
-
 export interface WallRailing {
   readonly shape: RailingShape;
-  readonly thickness: number;
-  readonly renderData: RailingRenderData;
+  readonly autoConnect: boolean;
+  readonly rail: RailingRailRenderData;
+  readonly supports: readonly RailingSupportRenderData[];
 }
 
 export interface WallIntersection {
@@ -67,6 +94,12 @@ export interface WallIntersection {
   readonly thickness: number;
   readonly worldPosition: Vector3;
   readonly renderData: WallIntersectionRenderData;
+  /**
+   * Small railing segment that fills the corner gap between adjacent wall
+   * railings. Null when autoConnect is false on both adjacent railings, or
+   * when neither adjacent wall has an active railing.
+   */
+  readonly railingConnect: RailingRailRenderData | null;
 }
 
 export interface Wall {
@@ -75,6 +108,7 @@ export interface Wall {
   readonly p2: PointXZ;
   readonly height: number;
   readonly thickness: number;
+  /** Internal use only — calculated by SiteFactory, not user-configured. */
   readonly trimStart: number;
   readonly trimEnd: number;
   readonly worldPosition: Vector3;
@@ -84,13 +118,13 @@ export interface Wall {
 }
 
 export interface SamplePoint {
-  readonly id: string;       // "a0-r1-c2-z0-r1-c2"  (array · panel row/col · zone · sample row/col)
+  readonly id: string;
   readonly zoneIndex: number;
   readonly localPosition: Vector3;
 }
 
 export interface SolarPanel {
-  readonly id: string;       // "a0-r1-c2"  (array · row · column)
+  readonly id: string;
   readonly arrayIndex: number;
   readonly row: number;
   readonly col: number;
@@ -112,15 +146,12 @@ export interface SolarPanelArray {
 }
 
 /**
- * Represents the physical, immutable space where panels are installed.
- * Walls, railings and intersections belong here.
- * The site azimuth (in radians) is applied as a Y-rotation to the site group in the scene.
+ * Site geometry. Timezone is intentionally absent — it lives in the store
+ * as UI state and never affects geometric calculations.
  */
 export interface Site {
   readonly location: LocationConfiguration;
-  /** Azimuth in radians. 0 = South, positive = West, negative = East. */
   readonly azimuthRad: number;
-  readonly timezone: string;
   readonly centerX: number;
   readonly centerZ: number;
   readonly boundingRadius: number;
@@ -128,11 +159,6 @@ export interface Site {
   readonly wallIntersections: readonly WallIntersection[];
 }
 
-/**
- * A specific panel layout for a given site.
- * Multiple setups can exist for the same site.
- * Recalculated when the active setup or density changes.
- */
 export interface PanelSetup {
   readonly id: string;
   readonly label: string;

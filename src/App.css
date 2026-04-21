@@ -12,7 +12,6 @@
     gap: 15px;
     font-family: sans-serif;
     width: 380px;
-    /* Un poco más ancho para la botonera */
     border: 1px solid #444;
 }
 
@@ -45,7 +44,6 @@
 
 .button-group button:hover {
     background: #555;
-    /* El outline es mejor que border porque no cambia el tamaño del botón al aparecer */
     outline: 2px solid rgba(255, 255, 255, 0.4);
     outline-offset: -2px;
     filter: brightness(1.1);
@@ -80,4 +78,57 @@
     background: #111;
     padding: 5px;
     border-radius: 4px;
+}
+
+/* ── Developer footer ──────────────────────────────────────────────────────── */
+
+.developer-footer {
+    position: fixed;
+    bottom: 12px;
+    right: 16px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: sans-serif;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.45);
+    pointer-events: none; /* let clicks pass through to the canvas by default */
+}
+
+/* Re-enable pointer events only on interactive children */
+.developer-footer a,
+.developer-footer__kofi-link {
+    pointer-events: auto;
+}
+
+.developer-footer__separator {
+    opacity: 0.4;
+}
+
+.developer-footer__site-link {
+    color: rgba(255, 255, 255, 0.55);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.developer-footer__site-link:hover {
+    color: #4caf50;
+    text-decoration: underline;
+}
+
+.developer-footer__kofi-link {
+    color: rgba(255, 255, 255, 0.55);
+    text-decoration: none;
+    padding: 3px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.developer-footer__kofi-link:hover {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.1);
 }

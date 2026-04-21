@@ -20,12 +20,36 @@ const _matrix = new THREE.Matrix4();
  * state, casts rays for all sample points and returns a ShadowMap.
  *
  * Performance notes:
- * - All THREE scratch objects are allocated once (module scope) and reused.
- * - BVH acceleration must be set up separately via `useBVH`.
- * - `raycaster.firstHitOnly = true` stops traversal after the first BVH hit.
+ *
+ * - **BVH acceleration** must be set up separately via `useBVH`. After patching
+ *   THREE.Mesh.prototype.raycast, every intersectObjects call uses the BVH
+ *   automatically if a bounds tree exists on the geometry.
+ *
+ * - **`raycaster.firstHitOnly = true`** stops BVH traversal after the first
+ *   hit, saving work when we only care whether something is between the sample
+ *   point and the sun (not how many things are).
+ *
+ * - **Shadow mesh cache**: the list of shadow-casting meshes is built once via
+ *   `scene.traverse` and stored in a ref. It is only invalidated when
+ *   `rebuildKey` changes (same trigger as `useBVH`). Without this, every
+ *   raycasting pass would traverse the entire scene graph, which is O(nodes)
+ *   overhead repeated thousands of times per frame during simulation.
+ *
+ * - **Scratch THREE objects** (Vector3, Matrix4, Quaternion) are allocated once
+ *   at module scope and reused for every ray, avoiding GC pressure.
+ *
+ * @param panels     All panels in the active setup.
+ * @param rebuildKey Changes when the scene topology changes (setup or site
+ *                   switch). Must match the key passed to `useBVH`.
  */
-export function useShadowSampler(panels: readonly SolarPanel[]) {
+export function useShadowSampler(panels: readonly SolarPanel[], rebuildKey: string) {
   const raycaster = useRef(new THREE.Raycaster());
+
+  // Cache of shadow-casting meshes. Populated lazily on the first
+  // computeShadows call after a rebuildKey change, then reused until the
+  // key changes again.
+  const meshCacheKey = useRef<string | null>(null);
+  const castShadowMeshes = useRef<THREE.Mesh[]>([]);
 
   const computeShadows = useCallback((
     scene: THREE.Scene,
@@ -40,34 +64,36 @@ export function useShadowSampler(panels: readonly SolarPanel[]) {
       return result;
     }
 
+    // Rebuild the mesh cache only when the scene topology has changed.
+    // rebuildKey is the same signal used by useBVH so they stay in sync.
+    if (meshCacheKey.current !== rebuildKey) {
+      castShadowMeshes.current = [];
+      scene.traverse(obj => {
+        if (obj instanceof THREE.Mesh && obj.castShadow) {
+          castShadowMeshes.current.push(obj);
+        }
+      });
+      meshCacheKey.current = rebuildKey;
+    }
+
     const sunDir = ThreeConverter.toVector3(sun.direction);
 
-    raycaster.current.set(_origin, sunDir); // origin will be overwritten per point
+    raycaster.current.set(_origin, sunDir);
     raycaster.current.firstHitOnly = true;
 
-    // Collect shadow-casting meshes once per call (scene topology is stable
-    // between calls because BVH is rebuilt on setup/site change).
-    const castShadowMeshes: THREE.Mesh[] = [];
-    scene.traverse(obj => {
-      if (obj instanceof THREE.Mesh && obj.castShadow) {
-        castShadowMeshes.push(obj);
-      }
-    });
-
     panels.forEach(panel => {
-      // Build the panel's world matrix once per panel using scratch objects.
       _quat.setFromEuler(ThreeConverter.toEuler(panel.worldRotation));
       _worldPos.set(panel.worldPosition.x, panel.worldPosition.y, panel.worldPosition.z);
       _matrix.compose(_worldPos, _quat, _scale);
 
       panel.samplePoints.forEach(sp => {
         _localPos.set(sp.localPosition.x, sp.localPosition.y, sp.localPosition.z);
-        _localPos.applyMatrix4(_matrix); // now in world space
+        _localPos.applyMatrix4(_matrix);
 
         raycaster.current.ray.origin.copy(_localPos);
         raycaster.current.ray.direction.copy(sunDir);
 
-        const hits = raycaster.current.intersectObjects(castShadowMeshes, false);
+        const hits = raycaster.current.intersectObjects(castShadowMeshes.current, false);
         const isShaded = hits.some(h => h.distance > 0.01);
 
         result.set(sp.id, isShaded);
@@ -75,7 +101,7 @@ export function useShadowSampler(panels: readonly SolarPanel[]) {
     });
 
     return result;
-  }, [panels]);
+  }, [panels, rebuildKey]);
 
   return { computeShadows };
 }

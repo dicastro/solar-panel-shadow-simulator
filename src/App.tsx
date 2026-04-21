@@ -10,6 +10,7 @@ import './App.css';
 import { useAppStore } from './store/useAppStore';
 import { MainControls } from './components/MainControls';
 import { SimulationControls } from './components/SimulationControls';
+import { DeveloperFooter } from './components/DeveloperFooter';
 import { Scene } from './components/Scene';
 
 export default function App() {
@@ -63,6 +64,7 @@ export default function App() {
     >
       <MainControls />
       <SimulationControls />
+      <DeveloperFooter />
 
       <Canvas shadows camera={{ position: [0, cameraHeight, cameraDistance], fov: 40 }}>
         <Scene

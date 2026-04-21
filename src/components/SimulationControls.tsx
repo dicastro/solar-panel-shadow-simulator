@@ -4,8 +4,14 @@ import { useAppStore, SimulationInterval } from '../store/useAppStore';
 /**
  * Bottom-left panel: simulation settings and instant production readout.
  *
- * The "interval" selector was previously broken (setter was a no-op).
- * It now reads from and writes to the store via `simulationInterval`.
+ * Derivation of panel/zone/point counters:
+ *  - All counters are derived from `activeSetup` (the currently selected setup)
+ *    rather than from `config.setups[0]`. This matters when multiple setups
+ *    are defined and the user switches between them — each setup can have a
+ *    different panel count, zone count, or per-panel overrides.
+ *  - `zonesPerPanel` uses the maximum zones across all panels in the active
+ *    setup, since individual arrays can override the default zone count.
+ *    Showing the max gives a conservative (upper-bound) estimate of ray count.
  */
 export function SimulationControls() {
   const { t } = useTranslation();
@@ -20,25 +26,30 @@ export function SimulationControls() {
   const setIsRunning = useAppStore(s => s.setIsRunning);
   const simulationInterval = useAppStore(s => s.simulationInterval);
   const setSimulationInterval = useAppStore(s => s.setSimulationInterval);
-  const config = useAppStore(s => s.config);
   const activeSetup = useAppStore(s => s.activeSetup);
   const simulationResult = useAppStore(s => s.simulationResult);
 
   const instantPower = simulationResult?.instantPower ?? 0;
   const maxPointsPerZone = density * density;
 
-  // Derived counters for the info block
-  const totalPanels = activeSetup?.panelArrays.flatMap(pa => pa.panels).length ?? 0;
-  const zonesPerPanel = config?.setups[0].panelDefaults.zones ?? 0;
+  // Derive all counters from the active setup, not from config.setups[0].
+  // Different setups (and even different arrays within a setup) can have
+  // different panel/zone configurations.
+  const allPanels = activeSetup?.panelArrays.flatMap(pa => pa.panels) ?? [];
+  const totalPanels = allPanels.length;
+
+  // Use the maximum zone count across all panels as a conservative estimate.
+  // If all panels have the same zone count this is exact; if some arrays
+  // override it, this gives the upper bound for the ray count display.
+  const maxZonesPerPanel = allPanels.length > 0
+    ? Math.max(...allPanels.map(p => p.zones))
+    : 0;
+
   const pointsPerZone = density * density;
   const timeSteps = Math.floor((365 * 24 * 60) / simulationInterval);
-  const totalRays = timeSteps * totalPanels * zonesPerPanel * pointsPerZone;
+  const totalRays = timeSteps * totalPanels * maxZonesPerPanel * pointsPerZone;
 
-  const theoreticalPeak = (
-    activeSetup?.panelArrays
-      .flatMap(pa => pa.panels)
-      .reduce((sum, p) => sum + p.peakPower / 1000, 0) ?? 0
-  );
+  const theoreticalPeak = allPanels.reduce((sum, p) => sum + p.peakPower / 1000, 0);
 
   return (
     <div className="controls-panel simulation-panel" style={{ top: 'auto', bottom: '20px' }}>
@@ -96,7 +107,7 @@ export function SimulationControls() {
       </div>
 
       <div className="status-info" style={{ fontSize: '0.8rem', opacity: 0.8 }}>
-        <p>{t('simulationControls.pointsPerPanel')}: {zonesPerPanel * pointsPerZone}</p>
+        <p>{t('simulationControls.pointsPerPanel')}: {maxZonesPerPanel * pointsPerZone}</p>
         <p>{t('simulationControls.timeSteps')}: {timeSteps.toLocaleString()}</p>
         <p><strong>{t('simulationControls.totalRays')}: {totalRays.toLocaleString()}</strong></p>
         {isRunning && <progress value={0} max={100} style={{ width: '100%' }} />}

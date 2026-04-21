@@ -1,17 +1,26 @@
+# TO REVIEW
+
+* **No inter-panel shading within an array**: sample points only test against walls and railings, not other panels (relevant for steeply tilted rows). Is this true??? When I display points in the rendered model I see the sample points of some panels affected by the shadow of other panel. This is critical to have a trustable estimation of production
+* In the last refactor it was included the possibility to setup railing supports, are those taken into consideration for the raycasting?
+* The walls are not connected correctly so that functionality has not been correctly implemented. There was a refactor to avoid the user having to configure `trimStart` and `trimEnd` in the wall settings in order to avoid overlapping the wall with the wall intersections. This refactor is not correctly implemented and walls are not correctly connected to the interections. The intersections are correctly placed, but the walls are not connected to them.
+* `trimStart` y `trimEnd` should be completely removed
+* In `Scene.tsx` the argument `args` of `<cylinderGeometry>` for `case 'half-cylinder'` is marked as an error in the IDE because an array of 5 `number` (`[number, number, number, number, number]`) is passed and that is not expected by Three.js, that is not the correct way to configure a half cilinder
+* The file `useAppStore.ts` could not be downloaded from your last proposal, so I inferred the content. For the method `makeDateInTimezone` I did not implement it correctly. Review the code using this method in order to implement it correctly. I also implemented the `setTimezone` and refactored `setDensity` to use `rebuildSamplePoints` and also implemented `rebuildSamplePoints`. Verify also that all of this is correct
+* Why `Omit<Props, 'showPoints'> & { showPoints: boolean })` in `ShadowedScene`? Why keeping that attribute in the `Props` interface if then it is omited? Why not just removing it from the `Props`
+* In `SiteFactory` this variable `const railing = resolveRailing(i);` is not used for the walls creation. Is that right? Something forgotten in the last refactor?
+* In `SimulationControls` the calculation for the `totalRays` can be done by counting the total number of zones, instead of getting all panels in one side and then getting the max number of zones. Each panel array could have a different number of zones, but all the zones will have the same density. So it would be better to iterate over the arrays and then over the panels summing the zones. It should be simpler if the displayed information is changed, the important thing here is the total number of calculations (totalRays = density * totalZones * timeSteps). So instead of displaying the pointsPerPanel it should be displayed the total number of points in the installation, the total time steps, and the total number of calculations
+* It is worthless to have an id+label for the setups. This is a technical thing, what the user should configure only is the label of the setup. The selection of the setup should be based in the positioning in the array of setups not in the id
+
 # Open tasks
 
-- [ ] In a previous refactor it was suggested to remove the `override` of `three-mesh-bvh` from `package.json` as it was not included as a dependency, it was suggested to be included just as a dependency (without override). I would say that the override has to remain, as it was initially added, because after adding `three-mesh-bvh` dependency to the project, there was a conflict between the version added and the transient dependency comming from `@react-three/drei` or `@react-three/fiber` (I am not sure what of those two depends on it). Confirm that the override should be kept
-- [ ] There is an issue displaying the date/time in the MainControls component because of the Daylight Saving Time. The issue happens in months where the time has changed. In Europe/Madrid timezone this happens in january, february, begining of march, end of october, november and december. The timezone is set in the config.json and the time selected in the form field should be interpreted always as the localtime in the configured timezone, so the displayed date/time should always be the same to the selected time in the form field. However this is not happening and the display date/time do not match the date/time selected in the form fields for the mentioned timezona and months. This timezone thing should not affect to any calculation as they should be done in UTC. Confirm that calculations are done always in UTC and that the timezone is only used to transform the selected date/time from form ui to the UTC. Ideally I would say that the timezone could be inferred from the GPS coordinates. I've found this library [geo-tz](https://www.npmjs.com/package/geo-tz) which infers timezone from coordinates, but if the coordinates are in the boundary it returns multiple timezones. Evaluate if this library is maintained and is safe to use. If it is the case, remove the timezone from the configuration and add a form field to the MainControls component to select from the avaiable timezones returned by the library, if it is only one, nothing to select from, if there are multiple sort alphabetically and preset the first one 
-- [ ] Include in the bottom of the page in a visible place, an Advertisement about me as the developer of the aplication including an option to donate or buy me a coffe option. I don't know which services use other developers for this (patreon? or what?). Although the page is under my personal domain, also a link to a project section in my personal site should be included
-- [ ] Add setup selector in the UI to switch between configured setups. This should go into the MainControls component.
 - [ ] Implement annual simulation loop (step through year at configured interval, accumulate kWh per panel/setup)
-- [ ] Display a graph with the total annual production and production per month (use a radar/spider graph)
-- [ ] Implement daily simulation loop (step through year at configured interval, accumulate kWh per panel/setup)
-- [ ] Display a grapth with the curve representing the accumulated hourly production
-- [ ] Create a UI in order to modify the `config.json` to make the user an easy way to input data instead having to create a json file and upload it, which would imply to develop a validation mechanism and for non-technical users would be an stopper to use the application. The UI would have to have a settings button, with a sidebar toggling displaying a html form to build the json. To do not loose data between refreshes this json could be stored in the browser and there should be an option to export the config and to re-load it again (e.g. to save it from one device and load it in a different one)
-- [ ] Investigate to get the estimated sun irradiation taking into account climate from a third party (PVGis??) and be able to choose to activate it for the simulation
-- [ ] Cache the estimated sun irradiation taking into account climate from a third party (PVGis??)
-- [ ] Export graphs (or calculated data) in some way (pending to decide if png, pdf, csv)
+- [ ] Display a graph with the total annual production and production per month (radar/spider graph)
+- [ ] Implement daily simulation loop
+- [ ] Display a graph with the accumulated hourly production curve
+- [ ] Create a UI to modify `config.json` (settings sidebar with form, localStorage persistence, export/import)
+- [ ] Investigate PVGis integration for climate-adjusted irradiance
+- [ ] Cache PVGis irradiance data
+- [ ] Export graphs / calculated data (png, pdf, csv — TBD)
 - [ ] Review Three.js deprecation warnings (`Clock`, `PCFSoftShadowMap`)
 - [ ] Add unit tests for `solarEngine.ts` and factory functions
 
@@ -33,18 +42,20 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 6. [Configuration reference](#configuration-reference)
 7. [Solar production model](#solar-production-model)
 8. [Shadow detection — Raycasting + BVH](#shadow-detection--raycasting--bvh)
-9. [Known limitations](#known-limitations)
-10. [Open tasks](#open-tasks)
+9. [BVH and three-mesh-bvh override](#bvh-and-three-mesh-bvh-override)
+10. [Timezone y DST](#timezone-y-dst)
+11. [Known limitations](#known-limitations)
+12. [Lessons learned](#lessons-learned)
 
 ---
 
 ## What it does
 
-- Renders a rooftop installation in 3D (walls, railings, solar panels) using Three.js.
+- Renders a rooftop installation in 3D (walls, railings with balusters, solar panels) using Three.js.
 - Animates the sun's trajectory across the sky for any date and time.
 - Detects which panel zones are shaded using raycasting against wall/railing geometry.
-- Estimates instantaneous power output in kW, applying bypass-diode, string-mismatch and optimizers logic.
-- Supports multiple installation layouts ("setups") defined in a JSON config file.
+- Estimates instantaneous power output in kW, applying bypass-diode, string-mismatch and optimizer logic.
+- Supports multiple installation layouts ("setups") selectable via the UI.
 - Planned: full annual simulation stepping through every N minutes of the year.
 
 ---
@@ -74,9 +85,9 @@ src/
 ├── i18n.ts                        # i18next initialisation
 │
 ├── types/
-│   ├── config.ts                  # JSON config shapes (InstallationConfiguration, …)
+│   ├── config.ts                  # JSON config shapes (InstallationConfiguration, ...)
 │   ├── geometry.ts                # PointXZ, Vector3, Euler3 (renderer-agnostic)
-│   ├── installation.ts            # Domain models: Site, Wall, SolarPanel, …
+│   ├── installation.ts            # Domain models: Site, Wall, SolarPanel, ...
 │   ├── simulation.ts              # SunState, SimulationResult
 │   └── index.ts                   # Re-exports
 │
@@ -106,10 +117,12 @@ src/
 │   ├── Compass.tsx                # N/S/E/W labels in 3D
 │   ├── MainControls.tsx           # Date/time/play UI panel
 │   └── SimulationControls.tsx     # Simulation settings UI panel
-│
+│   └── DeveloperFooter.tsx        # Ko-fi link + personal site
+|
 └── utils/
     ├── PointXZUtils.ts            # Normal vectors, prev/next point helpers
     └── ThreeConverter.ts          # Domain Vector3/Euler3 → THREE.Vector3/Euler
+    └── timezoneUtils.ts           # getAllTimezones(), getBrowserTimezone(), resolveInitialTimezone()
 ```
 
 ---
@@ -118,64 +131,72 @@ src/
 
 ### Factory pattern for domain models
 
-All domain objects (`Site`, `SolarPanel`, `Wall`, …) are plain immutable value objects created by dedicated factory functions.  React components never construct domain objects — they only consume them.
+All domain objects are plain immutable value objects created by dedicated factory functions. React components never construct domain objects — they only consume pre-computed `renderData`.
 
-This separation means:
-- Factories can be unit-tested without a browser or a canvas.
-- React components are purely presentational: they receive pre-computed `renderData` and render it.
-- Changing a calculation (e.g. panel world position) only touches one factory, not the component tree.
+### Pre-computed render data with discriminated unions
 
-### Pre-computed render data
+Railing shapes use a discriminated union (`kind: 'square' | 'cylinder' | 'half-cylinder'`). The factory computes the exact Three.js geometry args for each shape and stores them in the render data. `Scene.tsx` switches on `kind` to render the correct geometry without any cast. TypeScript will error if a new shape is added to the union but not handled in the switch — this is the primary benefit of discriminated unions over string enums.
 
-`SolarPanelFactory` embeds a `renderData` object into every `SolarPanel`.  This includes:
-- `actualWidth` / `actualHeight` — orientation-adjusted dimensions.
-- `frameColor` / `emissiveColor` — derived from `hasOptimizer`.
-- `zones: ZoneRenderData[]` — pre-computed position and size of every diode zone.
+### Density changes do not rebuild panel geometry
 
-`SolarPanelComponent` is therefore a pure render function: it loops over `renderData.zones` and draws, with zero geometry calculation.
+`PanelSetupFactory.rebuildSamplePoints(existing, density)` reuses all panel geometry and only regenerates the NxN sample point grids. `setDensity` in the store calls this instead of a full `create()`. See [Lessons learned](#lessons-learned).
 
-### Why `ArrayOrigin` lives in `SolarPanelArrayFactory`
+### Two distinct tick mechanisms
 
-A panel's world position depends on the array's tilt, elevation, and total size.  Previously, `SolarPanelFactory` recomputed the array-level geometry (`totalArrayWidth`, `yOffset`, `zVisualContraction`) for every single panel — O(rows × columns) redundant calculations.  Now `SolarPanelArrayFactory` computes an `ArrayOrigin` once and passes it to each `SolarPanelFactory.create` call.
+- **Interactive playback** (`tickHour`): advances 1 hour per 100 ms interval. Unit fixed at 1 hour.
+- **Annual simulation** (planned): will use `simulationInterval` (15/30/60 min) in its own loop, separate from interactive playback.
 
-### Zustand store
+### `showPoints` excluded from shadow dirty flag
 
-The store holds all application state.  Components subscribe to individual slices via selectors (`useAppStore(s => s.date)`) so a time change only re-renders time-sensitive components, not the whole tree.
+`showPoints` only controls rendering of sample point spheres. It does not affect shadow computation. Including it in the `useEffect` dependency array would trigger a full raycasting pass on every toggle — intentionally excluded with a comment.
 
-The store is the only place that calls factories.  `loadConfig` builds `Site` and `PanelSetup`; `setDensity` rebuilds only `PanelSetup`; `setActiveSetupId` switches layouts without touching the `Site`.
+### Shadow mesh cache in `useShadowSampler`
 
-### Dirty-flag raycasting in `ShadowedScene`
+The list of shadow-casting meshes is built via `scene.traverse` once and stored in a `useRef`, invalidated only when `rebuildKey` changes. This avoids O(scene nodes) traversal on every raycasting pass.
 
-Raycasting is expensive. `ShadowedScene` uses a `needsUpdate` ref as a dirty flag: shadow rays are only cast when one of the relevant inputs changes (sun position, active setup, density, threshold).  Between frames where nothing changes, `useFrame` returns immediately.
+### Timezone as store state, not Site geometry
+
+`timezone` is absent from the `Site` type. It lives in `useAppStore.timezone` as UI/display state because:
+1. The user can change it at runtime without reloading geometry.
+2. All solar calculations use `date.toDate()` (native `Date`, always UTC). Timezone never affects calculations.
+3. `SiteFactory` only deals with geometry — injecting a display concern would violate separation of concerns.
+
+### Wall auto-connect replaces manual trimStart/trimEnd
+
+`SiteFactory` now calculates the trim for each wall end automatically using:
+```
+trim = wallThickness / (2 * tan(θ/2))
+```
+where θ is the interior angle at the intersection. This is exact for any angle. The deprecated `trimStart`/`trimEnd` config fields are ignored. Users no longer need to know the geometry to configure walls correctly.
+
+### WallIntersection corner offset — bisector formula
+
+The previous sum-of-normals approach was only correct for 90° corners. The correct formula for any angle uses the normalised bisector of the two adjacent normals, with distance:
+```
+d = wallThickness / (2 * sin(θ/2))
+```
+sin(θ/2) is computed as the dot product of one normal with the normalised bisector. A clamp of 0.1 prevents division by zero for angles below ~11°.
 
 ---
 
 ## Coordinate system
 
-### Config space (what you write in `config.json`)
+### Config space
 
 ```
       North (+Z)
           ↑
-          |
 West ─────┼───── East (+X)
-          |
           ↓
       South (−Z)
 ```
 
-- `wallPoints` use `[x, z]` pairs where `+X = East` and `+Z = North`.
-- `position` in panel arrays follows the same convention.
-- Positive Z values go **towards North** (intuitive for the person editing the file).
-
-### Three.js scene space (internal)
+### Three.js scene space
 
 ```
       North (−Z)
           ↑
-          |
 West ─────┼───── East (+X)
-          |
           ↓
       South (+Z)
 ```
@@ -205,7 +226,7 @@ Use segment indices in `wallsSettings` to override height, railing, or apply tri
 
 ## Configuration reference
 
-```jsonc
+```json
 {
   "site": {
     "location": { "latitude": 40.62, "longitude": -4.01 },
@@ -213,10 +234,21 @@ Use segment indices in `wallsSettings` to override height, railing, or apply tri
     "timezone": "Europe/Madrid",
     "wallPoints": [[0,0], [3.7,0], ...],  // metres, +X=East, +Z=North
     "wallDefaults": { "height": 0.7, "thickness": 0.2 },
-    "railingDefaults": { "active": true, "heightOffset": 0.18, "thickness": 0.05, "shape": "round" },
+    "railingDefaults": {
+      "active": true,
+      "heightOffset": 0.18,
+      "autoConnect": true,
+      "shape": { "kind": "cylinder", "radius": 0.025 },
+      "support": {
+        "shape": { "kind": "cylinder", "radius": 0.012 },
+        "count": 3,
+        "includeAtStart": false,
+        "includeAtEnd": false
+      }
+    },
     "wallsSettings": [
       // Override per-segment. wall = segment index (see numbering above)
-      { "wall": 2, "trimStart": 0.5, "override": { "height": 1.8, "railing": { "active": false } } }
+      { "wall": 2, "override": { "height": 1.8, "railing": { "active": false } } }
     ]
   },
   "setups": [{
@@ -243,14 +275,27 @@ Use segment indices in `wallsSettings` to override height, railing, or apply tri
 }
 ```
 
-### `zonesDisposition` explained
+### Railing shapes
 
-| Value | Visual layout | Split axis |
+| kind | Parameters | Three.js geometry |
 |---|---|---|
-| `"horizontal"` | Zones are horizontal bands (top half / bottom half) | Z axis (height) |
-| `"vertical"` | Zones are vertical columns (left / right) | X axis (width) |
+| `square` | `width`, `height` | `BoxGeometry(width, height, wallLength)` |
+| `cylinder` | `radius` | `CylinderGeometry(r, r, wallLength, 8)` |
+| `half-cylinder` | `radius`, `orientation: 'up'\|'down'` | `CylinderGeometry` with `thetaStart`/`thetaLength = π` |
 
-Most residential panels use `"horizontal"` because bypass diodes are wired across rows of cells that run across the panel width.
+### Railing support shapes
+
+| kind | Parameters |
+|---|---|
+| `square` | `width`, `depth` (height derived from wall geometry) |
+| `cylinder` | `radius` |
+
+### `zonesDisposition`
+
+| Value | Layout | Split axis |
+|---|---|---|
+| `horizontal` | Zones are horizontal bands | Z (height) |
+| `vertical` | Zones are vertical columns | X (width) |
 
 ---
 
@@ -265,6 +310,8 @@ x =  cos(altitude) * sin(-azimuth)   // East (+) / West (−)
 y =  sin(altitude)                    // Up
 z =  cos(altitude) * cos(azimuth)    // South (+) / North (−) in Three.js
 ```
+
+Calculations always receive `date.toDate()` (UTC). Timezone is display-only.
 
 ### 2. Incidence factor
 
@@ -329,15 +376,79 @@ Without acceleration, `raycaster.intersectObjects` tests every ray against every
 
 `ShadowedScene` only runs the full raycasting pass when a `needsUpdate` ref is `true`.  The flag is set by a `useEffect` that watches `[sun, activeSetup, showPoints, density, threshold]`.  Between frames where nothing changes, `useFrame` is a no-op.
 
+### BVH and three-mesh-bvh override
+
+`package.json` contains:
+```json
+  "overrides": { "three-mesh-bvh": "^0.9.9" }
+```
+
+**Must be kept.** `@react-three/drei` pulls in `three-mesh-bvh` as a transitive dependency without pinning a version. Without the override, npm may install two different versions. The BVH integration patches `THREE.BufferGeometry.prototype` and `THREE.Mesh.prototype` — if two instances coexist, only one is patched. The other falls back to brute-force intersection silently. The override forces one version across the entire tree.
+
+---
+
+## Timezone y DST
+
+### El problema
+
+`dayjs(string)` y `dayjs()` crean objetos en la timezone **local del navegador**. Cuando la timezone del navegador difiere de la de la instalación (usuario remoto) o cuando hay un cambio horario (DST), la hora que el usuario escribe en los inputs no coincide con la que se muestra en el display de fecha.
+
+### La solución
+
+`makeDateInTimezone(year, month, day, hour, minute, timezone)` usa `dayjs.tz(isoString, timezone)`, que interpreta los componentes como hora local en la timezone indicada — no en la del navegador. Esta función es la **única** forma correcta de construir fechas desde inputs de usuario en esta aplicación.
+
+### geo-tz — descartado para browser
+
+`geo-tz` es la librería más precisa para inferir timezone desde coordenadas GPS, pero lee datos geográficos desde disco en runtime y **no es compatible con bundlers de browser**. Sus datos (~10 MB de GeoJSON) no pueden incluirse en un bundle estático de GitHub Pages.
+
+**Solución usada**: `Intl.supportedValuesOf('timeZone')` (API nativa del navegador, sin dependencias) para la lista completa de timezones IANA. El preset inicial es `Intl.DateTimeFormat().resolvedOptions().timeZone` (timezone detectada por el navegador). El usuario confirma o cambia mediante el selector en la UI.
+
+### UTC en los cálculos
+
+`date.toDate()` (nativo `Date` de JS) siempre representa un instante UTC. SunCalc recibe este valor. La timezone nunca afecta a los cálculos de posición solar ni de producción.
+
 ---
 
 ## Known limitations
 
-- **90° corners only**: wall intersection offset logic assumes right-angle corners. Acute or obtuse angles will produce visually incorrect post positions.
-- **No inter-panel shading within an array**: sample points only test against walls and railings, not against other panels in the same array (relevant for steeply tilted rows).
-- **Single year**: the time controls are constrained to the current year. Multi-year comparison is not supported.
-- **No diffuse irradiance**: the model uses only direct (beam) irradiance. Overcast production is not modelled.
-- **Annual simulation not yet implemented**: the UI has a "Run Calculation" button but the year-loop logic is not yet wired up.
+- **No inter-panel shading within an array**: sample points only test against walls and railings, not other panels (relevant for steeply tilted rows).
+- **Single year**: time controls are constrained to the current year.
+- **No diffuse irradiance**: only direct (beam) irradiance is modelled.
+- **Annual simulation not yet implemented**.
+- **Very acute wall angles (< ~11°)**: the bisector formula clamps sin(θ/2) to 0.1, which produces a slightly incorrect post position. Not a realistic scenario for terrace walls.
+- **Railing connect piece for mismatched shapes**: when the two walls meeting at a corner have different railing shapes, the connect piece uses the shape of the incoming wall. A small visual mismatch may be visible at the corner.
+
+---
+
+## Lessons learned
+
+### `useEffect` dependency arrays must reflect semantic intent
+
+A dependency should be included if its change logically invalidates the effect's output — not merely because it is read inside the effect. `showPoints` was in the shadow dirty-flag effect but does not affect shadow computation; removing it prevents expensive raycasts on every visibility toggle. Always document intentional omissions with a comment.
+
+### Separating factory methods by what changes
+
+`PanelSetupFactory.rebuildSamplePoints` vs `create`: sample point density is the only input that changes interactively. Panel geometry (positions, rotations, zone layouts) is stable between density changes. Separate entry points make the intent explicit at the call site and avoid redundant computation.
+
+### Caching scene traversal in hooks
+
+`scene.traverse` is O(scene nodes). Running it on every raycasting pass wastes CPU when the scene is stable. Cache the result in a `useRef` and invalidate with the same key used to rebuild the BVH — they share the same invalidation signal.
+
+### The three-mesh-bvh override
+
+npm `overrides` are appropriate when a package patches a shared global (a prototype) and two instances would mean only one gets patched — silently. This is not a hack; it is the semantically correct declaration that this package must have exactly one instance in the dependency tree.
+
+### Discriminated unions over string enums for geometry variants
+
+A `kind: 'square' | 'cylinder' | 'half-cylinder'` discriminated union carries its own shape-specific parameters with no casts needed. A switch on `kind` is exhaustively checked by TypeScript — adding a new shape without handling it in the renderer is a compile error, not a runtime surprise. Compare with the previous `shape: 'round' | 'square'` string + separate dimension fields, where any consumer had to know which fields existed for which shape.
+
+### Bisector formula vs sum-of-normals
+
+The sum of two unit normals gives the bisector direction but not the correct magnitude for a corner offset. The magnitude depends on the angle: `wallThickness / (2 * sin(θ/2))`. For 90° the two approaches coincidentally agree; for other angles the error grows. Always derive geometry from trigonometric first principles rather than geometric shortcuts whose domain of validity is not obvious.
+
+### Timezone as UI state, not domain state
+
+`timezone` was initially stored on the `Site` object (a domain model). Moving it to the store as independent UI state clarifies the separation: `Site` is geometric data computed once from the config; timezone is a display preference the user can change at runtime without recomputing any geometry. The `makeDateInTimezone` function exported from the store is the boundary between "what the user typed" and "what UTC instant the store holds".
 
 ---
 
@@ -347,7 +458,7 @@ Without acceleration, `raycaster.intersectObjects` tests every ray against every
 
 ### 1. El Concepto de Zonas (Diodos de Bypass)
 
-Un panel solar no es una única pieza eléctrica, sino un conjunto de celdas conectadas en serie. Habitualmente, los paneles se dividen en **3 zonas verticales** (o según tu config) protegidas por **diodos de bypass**.
+Un panel solar no es una única pieza eléctrica, sino un conjunto de celdas conectadas en serie. Habitualmente, los paneles se dividen en zonas protegidas por diodos de bypass.
 
 * **Sin Sombra**: La corriente fluye por todas las celdas
 * **Con Sombra en una zona**: El diodo de esa zona "se activa" y hace que la corriente salte esa zona para que el resto del panel siga funcionando
@@ -363,8 +474,7 @@ En un string, todos los paneles están conectados en serie. La corriente es como
 
 ### 3. Comportamiento con Optimizadores
 
-Un optimizador es un convertidor DC/DC que se instala en cada panel. Su función es "aislar" el rendimiento de ese panel del resto del string.
-
+* **¿Cómo funciona?**: El optimizador ajusta el voltaje y la corriente de su panel para que el "cuello de botella" no afecte a los demás. Un optimizador DC/DC aísla el rendimiento de cada panel del resto del string. Con sombra en un panel, el resto sigue produciendo al 100%.
 * **¿Cómo funciona?**: El optimizador ajusta el voltaje y la corriente de su panel para que el "cuello de botella" no afecte a los demás
 * **Caso A (Sombra en 1 zona de 1 panel optimizado)**:
   * El panel afectado pierde **1/3** de su producción (produce el 66%)
@@ -373,9 +483,7 @@ Un optimizador es un convertidor DC/DC que se instala en cada panel. Su función
   * Ese panel produce **0%**
   * El resto del string sigue produciendo al **100%**
 
-## 📋 Matriz de Combinaciones para el Algoritmo
-
-Para tu simulación, el cálculo debe seguir este orden jerárquico:
+### 4. Matriz de Combinaciones
 
 | Escenario | Afectación Individual (Panel) | Afectación Global (String) |
 |-----------|-------------------------------|----------------------------|
@@ -384,14 +492,7 @@ Para tu simulación, el cálculo debe seguir este orden jerárquico:
 | Sombra en 1 Zona (Con Optimizador) | Produce: (`Zonas Libres / Zonas Totales`) | El resto del string produce al **100%** |
 | Sombra en Varias Zonas (Mezcla) | Cada panel calcula su % máximo posible. | El string sin optimizadores se queda con el **% del panel más afectado**. |
 
-### Variables adicionales a programar:
-
-* **Incidencia Solar (Coseno)**: Antes de aplicar sombras, la producción base depende del ángulo. Si el sol no está perpendicular, el panel produce `PeakPower * cos(θ)`.
-* **Umbral de Zona**: Debes decidir en tu código: ¿Cuántos puntos rojos hacen que una zona caiga?
-  * *Lógica estricta*: 1 punto rojo = zona al 0%
-  * *Lógica permisiva*: Si > 20% de los puntos de la zona son rojos = zona al 0%. (Es más realista, ya que sombras muy pequeñas a veces no activan el diodo)
-
 ## Hooks
 
-* **useBVH hook**: construye el BVH una sola vez cuando cambia la escena (muros/paneles), y lo reconstruye solo si cambia `activeSetup` o `site`. El BVH es una estructura de aceleración sobre la geometría estática — los muros no se mueven, así que el BVH de los muros se construye una vez y nunca se recalcula
-* **useShadowSampler hook**: en cada frame (o cada N ms), lanza todos los rayos de todos los sample points en una sola pasada usando el BVH. Devuelve un `Map<pointId, isShaded>`
+* **useBVH**: construye el BVH una sola vez cuando cambia la escena (setup/site). Reconstruye solo si cambia `rebuildKey`.
+* **useShadowSampler**: lanza todos los rayos en una sola pasada usando el BVH. Cachea la lista de meshes con `castShadow`. Devuelve `Map<pointId, isShaded>`.

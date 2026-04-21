@@ -2,6 +2,8 @@
   "title": "Simulador Solar",
   "date_label": "Día del año",
   "time_label": "Hora",
+  "timezone_label": "Zona horaria",
+  "setup_label": "Configuración",
   "lang_label": "Idioma",
   "loading": "Cargando configuración...",
   "coordinates": {
@@ -24,5 +26,10 @@
     "theoreticalPeak": "Pico teórico",
     "run": "EJECUTAR CÁLCULO",
     "stop": "PARAR"
+  },
+  "footer": {
+    "madeBy": "Desarrollado por",
+    "donate": "Invítame a un café",
+    "donateTitle": "Apoya este proyecto en Ko-fi"
   }
 }

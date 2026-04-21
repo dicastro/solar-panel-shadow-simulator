@@ -1,8 +1,49 @@
 import { PointXZ } from './geometry';
 
 export type ZonesDisposition = 'vertical' | 'horizontal';
-export type RailingShape = 'square' | 'round';
 export type PanelOrientation = 'portrait' | 'landscape';
+
+export type RailingShapeSquare = {
+  readonly kind: 'square';
+  readonly width: number;
+  readonly height: number;
+};
+
+export type RailingShapeCylinder = {
+  readonly kind: 'cylinder';
+  readonly radius: number;
+};
+
+export type RailingShapeHalfCylinder = {
+  readonly kind: 'half-cylinder';
+  readonly radius: number;
+  readonly orientation: 'up' | 'down';
+};
+
+export type RailingShape =
+  | RailingShapeSquare
+  | RailingShapeCylinder
+  | RailingShapeHalfCylinder;
+
+export type RailingSupportShapeSquare = {
+  readonly kind: 'square';
+  readonly width: number;
+  readonly depth: number;
+};
+
+export type RailingSupportShapeCylinder = {
+  readonly kind: 'cylinder';
+  readonly radius: number;
+};
+
+export type RailingSupportShape =
+  | RailingSupportShapeSquare
+  | RailingSupportShapeCylinder;
+
+export interface RailingSupportConfiguration {
+  readonly shape: RailingSupportShape;
+  readonly count?: number;
+}
 
 export interface LocationConfiguration {
   readonly latitude: number;
@@ -17,15 +58,24 @@ export interface WallConfiguration {
 export interface RailingConfiguration {
   readonly active: boolean;
   readonly heightOffset: number;
-  readonly thickness: number;
-  readonly shape: RailingShape;
+  readonly shape?: RailingShape;
+  readonly support?: RailingSupportConfiguration;
+  readonly autoConnect?: boolean;
+}
+
+export interface RailingSupportOverrideConfiguration {
+  readonly shape: RailingSupportShape;
+  readonly count: number;
+  readonly includeAtStart?: boolean;
+  readonly includeAtEnd?: boolean;
 }
 
 export interface RailingOverrideConfiguration {
   readonly active?: boolean;
   readonly heightOffset?: number;
-  readonly thickness?: number;
   readonly shape?: RailingShape;
+  readonly support?: RailingSupportOverrideConfiguration;
+  readonly autoConnect?: boolean;
 }
 
 export interface WallOverrideConfiguration {
@@ -36,7 +86,9 @@ export interface WallOverrideConfiguration {
 export interface WallSettingsConfiguration {
   readonly wall: number;
   readonly override?: WallOverrideConfiguration;
+  /** @deprecated Ignored when wall auto-connect is enabled (default). */
   readonly trimStart?: number;
+  /** @deprecated Ignored when wall auto-connect is enabled (default). */
   readonly trimEnd?: number;
 }
 

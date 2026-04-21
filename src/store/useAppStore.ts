@@ -4,6 +4,7 @@ import { Config, PanelSetup, Site, SimulationResult, SunState } from '../types';
 import { SiteFactory } from '../factory/SiteFactory';
 import { PanelSetupFactory } from '../factory/PanelSetupFactory';
 import { calculateSunState } from '../solarEngine';
+import { resolveInitialTimezone } from '../utils/TimezoneUtils';
 
 const CURRENT_YEAR = dayjs().year();
 
@@ -18,6 +19,7 @@ interface AppState {
   activeSetupId: string | null;
 
   // Time
+  timezone: string;
   date: Dayjs;
   isPlaying: boolean;
 
@@ -35,6 +37,7 @@ interface AppState {
   // Actions
   loadConfig: (config: Config) => void;
   setActiveSetupId: (id: string) => void;
+  setTimezone: (timezone: string) => void;
   setDate: (date: Dayjs) => void;
   adjustDate: (amount: number, unit: dayjs.ManipulateType) => void;
   setIsPlaying: (playing: boolean) => void;
@@ -56,9 +59,15 @@ const buildActiveSetup = (
 ): PanelSetup | null => {
   const setupConfig = config.setups.find(s => s.id === setupId);
   if (!setupConfig) return null;
-  // Site is passed directly — no need to spread centerX / centerZ manually
   return PanelSetupFactory.create(setupConfig, site, density);
 };
+
+const rebuildSamplePoints = (
+  activeSetup: PanelSetup,
+  newDensity: number
+): PanelSetup => {
+  return PanelSetupFactory.rebuildSamplePoints(activeSetup, newDensity);
+}
 
 /** Recalculates SunState from current date and site location. */
 const buildSun = (date: Dayjs, config: Config): SunState =>
@@ -80,6 +89,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   site: null,
   activeSetup: null,
   activeSetupId: null,
+  timezone: resolveInitialTimezone(),
   date: dayjs(),
   isPlaying: false,
   sun: null,
@@ -109,6 +119,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ activeSetupId: id, activeSetup });
   },
 
+  setTimezone: (timezone) => set({ timezone }),
+
   setDate: (date) => {
     const { config } = get();
     const sun = config ? buildSun(date, config) : null;
@@ -134,10 +146,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setShowPoints: (showPoints) => set({ showPoints }),
 
   setDensity: (density) => {
-    const { config, site, activeSetupId } = get();
-    if (!config || !site || !activeSetupId) return;
-    const activeSetup = buildActiveSetup(config, site, activeSetupId, density);
-    set({ density, activeSetup });
+    const { activeSetup } = get();
+    if (!activeSetup) return;
+    const rebuiltActiveSetup = rebuildSamplePoints(activeSetup, density);
+    set({ density, activeSetup: rebuiltActiveSetup });
   },
 
   setThreshold: (threshold) => set({ threshold }),
@@ -148,3 +160,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setSimulationResult: (simulationResult) => set({ simulationResult }),
 }));
+
+export const makeDateInTimezone = (year, month, day, hour, minute, timezone): Dayjs => {
+  return dayjs();
+}

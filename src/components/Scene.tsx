@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { OrbitControls, Grid } from '@react-three/drei';
 import * as THREE from 'three';
 import { Site, PanelSetup, SunState, SimulationResult } from '../types';
+import { RailingRailRenderData, RailingSupportRenderData } from '../types/installation';
 import { ShadowMap } from '../hooks/useShadowSampler';
 import { ShadowedScene } from './ShadowedScene';
 import { Compass } from './Compass';
@@ -19,20 +20,69 @@ interface SceneProps {
   onProductionUpdate: (result: SimulationResult) => void;
 }
 
+// ── Railing rail renderer ────────────────────────────────────────────────────
+
 /**
- * Root Three.js scene.  Composes static geometry (walls, floor, compass) with
- * the dynamic shadow-aware panel layer via ShadowedScene.
- *
- * The site group is rotated by `site.azimuthRad` so that the physical building
- * orientation matches the real-world compass bearing.  Panels are placed
- * outside this group because their azimuth is absolute (not relative to site).
+ * Renders a single railing rail segment from its pre-computed render data.
+ * Switches on the discriminated union kind so TypeScript ensures all shapes
+ * are handled and no cast is needed.
  */
+function RailingRail({ data }: { data: RailingRailRenderData }) {
+  switch (data.kind) {
+    case 'square':
+      return (
+        <mesh position={data.localPosition} rotation={data.localRotation} castShadow>
+          <boxGeometry args={data.args} />
+          <meshStandardMaterial color={data.color} />
+        </mesh>
+      );
+
+    case 'cylinder':
+      return (
+        <mesh position={data.localPosition} rotation={data.localRotation} castShadow>
+          <cylinderGeometry args={data.args} />
+          <meshStandardMaterial color={data.color} />
+        </mesh>
+      );
+
+    case 'half-cylinder':
+      return (
+        <mesh position={data.localPosition} rotation={data.localRotation} castShadow>
+          <cylinderGeometry args={data.args} />
+          <meshStandardMaterial color={data.color} side={THREE.DoubleSide} />
+        </mesh>
+      );
+  }
+}
+
+// ── Railing support renderer ─────────────────────────────────────────────────
+
+function RailingSupport({ data }: { data: RailingSupportRenderData }) {
+  switch (data.kind) {
+    case 'square':
+      return (
+        <mesh position={data.localPosition} castShadow>
+          <boxGeometry args={data.args} />
+          <meshStandardMaterial color={data.color} />
+        </mesh>
+      );
+    case 'cylinder':
+      return (
+        <mesh position={data.localPosition} castShadow>
+          <cylinderGeometry args={data.args} />
+          <meshStandardMaterial color={data.color} />
+        </mesh>
+      );
+  }
+}
+
+// ── Scene ────────────────────────────────────────────────────────────────────
+
 export function Scene({
   site, activeSetup, sun, date, showPoints, density, threshold, onProductionUpdate,
 }: SceneProps) {
   const gridSize = site.boundingRadius * 3;
 
-  // Build the floor shape once from wall intersection positions.
   const floorShape = useMemo(() => {
     const shape = new THREE.Shape();
     site.wallIntersections.forEach((wi, i) => {
@@ -63,51 +113,56 @@ export function Scene({
 
       {/* Site group: walls + floor, rotated to match real-world azimuth */}
       <group rotation-y={site.azimuthRad}>
+        {/* Floor */}
         <mesh receiveShadow position={[0, 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <extrudeGeometry args={[floorShape, { depth: 0.02, bevelEnabled: false }]} />
           <meshStandardMaterial color="#b45d16" side={THREE.DoubleSide} />
         </mesh>
 
-        {site.wallIntersections.map((wi) => (
-          <mesh
-            key={`post-${wi.index}`}
-            position={[wi.worldPosition.x, wi.worldPosition.y, wi.worldPosition.z]}
-            castShadow
-          >
-            <boxGeometry args={wi.renderData.boxArgs} />
-            <meshStandardMaterial color={wi.renderData.color} />
-          </mesh>
+        {/* Wall intersection posts + optional railing connect piece */}
+        {site.wallIntersections.map(wi => (
+          <group key={`post-${wi.index}`}>
+            <mesh
+              position={[wi.worldPosition.x, wi.worldPosition.y, wi.worldPosition.z]}
+              castShadow
+            >
+              <boxGeometry args={wi.renderData.boxArgs} />
+              <meshStandardMaterial color={wi.renderData.color} />
+            </mesh>
+
+            {wi.railingConnect && (
+              <group position={[wi.worldPosition.x, 0, wi.worldPosition.z]}>
+                <RailingRail data={wi.railingConnect} />
+              </group>
+            )}
+          </group>
         ))}
 
-        {site.walls.map((wall) => (
+        {/* Wall segments: body + rail + supports */}
+        {site.walls.map(wall => (
           <group
             key={`wall-${wall.index}`}
             position={[wall.worldPosition.x, wall.worldPosition.y, wall.worldPosition.z]}
             rotation-y={wall.worldRotation.y}
           >
+            {/* Wall body */}
             <mesh position={wall.renderData.meshLocalPosition} castShadow>
               <boxGeometry args={wall.renderData.boxArgs} />
               <meshStandardMaterial color={wall.renderData.color} />
             </mesh>
 
-            {wall.railing && (
-              <mesh
-                position={wall.railing.renderData.localPosition}
-                rotation={wall.railing.renderData.localRotation}
-                castShadow
-              >
-                {wall.railing.shape === 'round'
-                  ? <cylinderGeometry args={wall.railing.renderData.boxArgs as [number, number, number, number]} />
-                  : <boxGeometry args={wall.railing.renderData.boxArgs as [number, number, number]} />
-                }
-                <meshStandardMaterial color={wall.railing.renderData.color} />
-              </mesh>
-            )}
+            {/* Railing rail */}
+            {wall.railing && <RailingRail data={wall.railing.rail} />}
+
+            {/* Railing supports (balusters) */}
+            {wall.railing?.supports.map((support, i) => (
+              <RailingSupport key={i} data={support} />
+            ))}
           </group>
         ))}
       </group>
 
-      {/* Panels — outside the site group because azimuth is absolute */}
+      {/* Panels — outside the site group: azimuth is absolute */}
       <ShadowedScene
         site={site}
         activeSetup={activeSetup}

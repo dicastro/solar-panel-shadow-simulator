@@ -22,18 +22,101 @@
       "thickness": 0.2
     },
     "railingDefaults": { 
-       "active": true, 
-       "heightOffset": 0.18, 
-       "thickness": 0.05, 
-       "shape": "round" 
+      "active": true, 
+      "heightOffset": 0.18, 
+      "shape":  {
+        "kind": "cylinder",
+        "radius": 0.02
+      },
+      "support": {
+        "shape": {
+          "kind": "cylinder",
+          "radius": 0.01
+        }
+      },
+      "autoConnect": false
     },
-    "wallsSettings": [
-      { "wall": 1, "trimEnd": 0.5 },
-      { "wall": 2, "trimStart": 0.5, "override": { "height": 1.8, "railing": { "active": false } } },
-      { "wall": 5, "trimEnd": 1 },
-      { "wall": 6, "trimStart": 1, "trimEnd": 1 },
-      { "wall": 7, "trimStart": 1 }
-    ]
+    "wallsSettings": [{
+      "wall": 0,
+      "override": {
+        "railing": {
+          "support": {
+            "count": 2
+          }
+        }
+      }
+    }, {
+      "wall": 1,
+      "override": {
+        "railing": {
+          "support": {
+            "count": 2
+          }
+        }
+      }
+    }, {
+      "wall": 2,
+      "override": {
+        "height": 1.8,
+        "railing": {
+          "active": false
+        }
+      }
+    }, {
+      "wall": 3,
+      "override": {
+        "railing": {
+          "support": {
+            "count": 2
+          }
+        }
+      }
+    }, {
+      "wall": 4,
+      "override": {
+        "railing": {
+          "support": {
+            "count": 2
+          }
+        }
+      }
+    }, {
+      "wall": 5,
+      "override": {
+        "railing": {
+          "support": {
+            "count": 2
+          }
+        }
+      }
+    }, {
+      "wall": 6,
+      "override": {
+        "railing": {
+          "support": {
+            "count": 2
+          }
+        }
+      }
+    }, {
+      "wall": 7,
+      "override": {
+        "railing": {
+          "support": {
+            "count": 2
+          }
+        }
+      }
+    }, {
+      "wall": 8,
+      "override": {
+        "railing": {
+          "support": {
+            "count": 4
+          }
+        }
+      }
+    }]
   },
   "setups": [{
     "id": "option-a",
