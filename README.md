@@ -1,6 +1,6 @@
 # Instructions
 
-* Quiero que revises el apartado "To Review" de este mismo fichero donde están los puntos que quiero que revises antes de continuar con las tareas de Open Tasks
+* Quiero que revises el apartado "To Review" de este mismo fichero donde están los puntos que quiero que revises antes de continuar con las tareas de Open Tasks. Tras procesar todo el apartado "To Review" inspecciona el código para comprender mejor lo que se dice antes de ponerte a cambiar código. Si tras hacer esto tienes alguna duda o no entiendes algo de lo que se dice o no coincide lo que se dice con el código, pregúntame antes de proponer ningún cambio de código.
 * Quiero una solución de alta calidad técnica y que lo que haya programado tenga su sentido y que sea defendible ante cualquier programador/desarrollador/arquitecto experto en el stack tecnológico del proyecto.
 * Tras los cambios de código que se hagan debería de actualizarse el README en consecuencia para reflejar las decisiones tomadas, cambios de configuración, cambios de arquitectura, etc. cualquier cosa que sea relevante y que encaje con lo que se escribe en el README
 * El criterio para actualizar el README es siempre con la idea de complementar lo existente (o adaptarlo si es necesario). La idea no es que el README refleje únicamente los cambios que se están realizando. Se tiene que hacer un ejercicio de "merge" entre el contenido existente en el README y los cambios que se han realizado. Todo el contenido del README tiene que estar en inglés.
