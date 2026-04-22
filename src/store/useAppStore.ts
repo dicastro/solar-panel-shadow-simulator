@@ -34,6 +34,13 @@ interface AppState {
   simulationInterval: SimulationInterval;
   simulationResult: SimulationResult | null;
 
+  /**
+   * Indices of wall points (in config space) where the angle between adjacent
+   * wall segments is not 90°. Populated by loadConfig. Empty when all angles
+   * are valid. Used to display a warning in the UI.
+   */
+  angleWarnings: number[];
+
   // Actions
   loadConfig: (config: Config) => void;
   setActiveSetupIndex: (index: number) => void;
@@ -124,13 +131,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   isRunning: false,
   simulationInterval: 60,
   simulationResult: null,
+  angleWarnings: [],
 
   loadConfig: (config) => {
-    const site = SiteFactory.create(config);
+    const { site, angleWarnings } = SiteFactory.create(config);
     const date = dayjs().tz(config.site.timezone).second(0);
     const activeSetup = buildActiveSetup(config, site, 0, get().density);
     const sun = buildSun(date, config);
-    set({ config, site, activeSetupIndex: 0, activeSetup, date, sun });
+    set({ config, site, activeSetupIndex: 0, activeSetup, date, sun, angleWarnings });
   },
 
   setActiveSetupIndex: (index) => {

@@ -11,13 +11,9 @@ const ALL_TIMEZONES = getAllTimezones();
  * Top-left panel: setup selector, date/time pickers, play/pause and step
  * buttons, timezone selector, language selector, and a formatted date display.
  *
- * ## Setup selector
- *
- * Only rendered when more than one setup is defined in the config. Switching
- * setup triggers a full PanelSetup rebuild (geometry + sample points) via
- * the store action setActiveSetupIndex.
- *
- * ## DST-safe date construction
+ * Setup selector is only rendered when more than one setup is defined in the
+ * config. Switching setup triggers a full PanelSetup rebuild (geometry +
+ * sample points) via the store action setActiveSetupIndex.
  *
  * All date construction goes through makeDateInTimezone(), which calls
  * dayjs.tz(isoString, timezone). This interprets the components as local
@@ -73,7 +69,7 @@ export function MainControls() {
       {hasMultipleSetups && (
         <div className="control-row">
           <label style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
-            {t('setup_label')}:
+            {t('mainControls.setupLabel')}:
           </label>
           <select
             value={activeSetupIndex ?? 0}
@@ -89,7 +85,7 @@ export function MainControls() {
 
       <div className="control-row">
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <label style={{ fontSize: '0.7rem' }}>{t('date_label')}</label>
+          <label style={{ fontSize: '0.7rem' }}>{t('mainControls.dateLabel')}</label>
           <input
             type="date"
             value={displayDate.format('YYYY-MM-DD')}
@@ -99,7 +95,7 @@ export function MainControls() {
           />
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <label style={{ fontSize: '0.7rem' }}>{t('time_label')}</label>
+          <label style={{ fontSize: '0.7rem' }}>{t('mainControls.timeLabel')}</label>
           <input
             type="time"
             value={displayDate.format('HH:mm')}
@@ -110,7 +106,7 @@ export function MainControls() {
 
       <div className="control-row">
         <label style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
-          {t('timezone_label')}:
+          {t('mainControls.timezoneLabel')}:
         </label>
         <select
           value={timezone}

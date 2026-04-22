@@ -7,85 +7,39 @@ import { WallFactory } from './WallFactory';
 import { WallIntersectionFactory } from './WallIntersectionFactory';
 
 /**
- * Computes the trim distance for one end of a wall segment at a shared vertex.
- *
- * "Trim" is the amount by which a wall is shortened (positive) or extended
- * (negative) at a given end so that it meets the adjacent wall cleanly without
- * overlap or gap.
- *
- * ## Derivation
- *
- * At the shared vertex, the two wall segments have an interior angle θ between
- * their centre-lines. The wall bodies have finite thickness t. Each wall must
- * be adjusted by:
- *
- *   trim = (t / 2) / tan(θ / 2)
- *
- * where θ is the angle between the two wall directions at the vertex
- * (dot product of their unit direction vectors).
- *
- * - Convex vertex (θ < 180°, exterior corner): tan(θ/2) > 0 → positive trim
- *   (shorten the wall so it does not overlap the intersection post).
- * - Concave vertex (θ > 180°, interior corner): tan(θ/2) < 0 → negative trim
- *   (extend the wall beyond the vertex to fill the interior corner gap).
- * - Collinear (θ = 180°): tan(90°) → ∞, trim → 0 (no adjustment needed).
- *
- * ## Parameters
- *
- * @param p       The shared vertex being trimmed toward.
- * @param pAway   The far end of the wall being trimmed (defines wall direction).
- * @param pOther  The far end of the adjacent wall at p (defines adjacent direction).
+ * Result of SiteFactory.create, bundling the Site geometry with any angle
+ * validation warnings detected during construction.
  */
-const computeAutoTrim = (
-  p: PointXZ,
-  pAway: PointXZ,
-  pOther: PointXZ,
-  wallThickness: number,
-  wallLength: number,
-): number => {
-  // Unit direction of this wall, pointing away from p
-  const dx = pAway.x - p.x;
-  const dz = pAway.z - p.z;
-  const d = Math.sqrt(dx * dx + dz * dz) || 1;
-  const ux = dx / d;
-  const uz = dz / d;
+export interface SiteFactoryResult {
+  readonly site: Site;
+  /**
+   * Indices of wall points (in config space, 0-based) where the angle between
+   * adjacent wall segments is not 90°. Empty when all angles are valid.
+   * Collinear points are not included — they are valid by design.
+   */
+  readonly angleWarnings: number[];
+}
 
-  // Unit direction of the adjacent wall, pointing away from p
-  const ax = pOther.x - p.x;
-  const az = pOther.z - p.z;
-  const al = Math.sqrt(ax * ax + az * az) || 1;
-  const vx = ax / al;
-  const vz = az / al;
-
-  // cos(θ) where θ is the angle between the two wall directions at p
-  const cosTheta = ux * vx + uz * vz;
-
-  // sin(θ/2) and cos(θ/2) from the half-angle identities
-  const sinHalf = Math.sqrt(Math.max(0, (1 - cosTheta) / 2));
-  const cosHalf = Math.sqrt(Math.max(0, (1 + cosTheta) / 2));
-
-  // tan(θ/2) = sinHalf / cosHalf. When cosHalf ≈ 0 (θ ≈ 180°, collinear),
-  // trim → 0, which is correct: parallel walls need no adjustment.
-  // Clamp denominator to avoid division by zero.
-  if (cosHalf < 0.01) return 0;
-
-  // 2D cross product to determine the sign of the turn at p.
-  // For a counter-clockwise polygon:
-  //   cross > 0 → left turn  → convex  → positive trim (shorten)
-  //   cross < 0 → right turn → concave → negative trim (extend)
-  const cross = ux * vz - uz * vx;
-  const sign = cross >= 0 ? 1 : -1;
-
-  const trim = sign * (wallThickness / 2) * (sinHalf / cosHalf);
-
-  // For convex corners, cap the trim at a quarter of the wall length to
-  // prevent degenerate walls for very acute angles. For concave corners,
-  // no cap: the extension is always geometrically necessary.
-  return trim > 0 ? Math.min(trim, wallLength / 4) : trim;
+/**
+ * Computes the longitudinal shortening for one end of a wall at a shared vertex.
+ *
+ * This application is restricted to 90° wall angles. At a concave vertex
+ * (interior recess, right turn in a CCW walk), the wall body displaced
+ * thickness/2 outward would overlap the intersection post volume. The wall
+ * must be shortened by exactly thickness/2 at that end to avoid the overlap.
+ *
+ * At convex vertices (exterior corners, left turn in CCW), the displaced wall
+ * centre-line naturally meets the post without longitudinal adjustment.
+ *
+ * At collinear vertices no post exists and no adjustment is needed.
+ */
+const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
+  if (isStraight || !isConvex) return 0;
+  return wallThickness;
 };
 
 export const SiteFactory = {
-  create: (config: Config): Site => {
+  create: (config: Config): SiteFactoryResult => {
     const { wallPoints, wallDefaults, railingDefaults, wallsSettings, azimuth } = config.site;
     const n = wallPoints.length;
 
@@ -112,61 +66,73 @@ export const SiteFactory = {
       };
     };
 
-    // Auto-trim per wall end: [trimStart, trimEnd] in metres.
-    // trimStart is applied at the p1 end; trimEnd at the p2 end.
-    // Positive = shorten; negative = extend (for concave corners).
-    const autoTrims: [number, number][] = centeredPoints.map((p1, i) => {
-      const p0 = PointXZUtils.getPreviousPoint(i, centeredPoints);
-      const p2 = PointXZUtils.getNextPoint(i, centeredPoints);
-      const dx = p2.x - p1.x;
-      const dz = p2.z - p1.z;
-      const len = Math.sqrt(dx * dx + dz * dz) || 1;
-
-      // trimStart: trim the p1 end toward the intersection with the previous wall.
-      // pOther = p0 (the far end of the previous wall, which defines its direction).
-      const trimStart = computeAutoTrim(p1, p2, p0, wallDefaults.thickness, len);
-
-      // trimEnd: trim the p2 end toward the intersection with the next wall.
-      // pOther = getNextPoint for the wall that starts at p2, i.e. p3.
-      const p3 = PointXZUtils.getNextPoint((i + 1) % n, centeredPoints);
-      const trimEnd = computeAutoTrim(p2, p1, p3, wallDefaults.thickness, len);
-
-      //return [trimStart, trimEnd];
-      return [0, 0];
-    });
-
-    // Wall intersections (corner posts)
-    const wallIntersections = centeredPoints.map((p, i) => {
+    // Validate angles and collect config-space indices of non-90° vertices.
+    // Collinear vertices are excluded — they are structurally valid (two wall
+    // segments with the same direction, differing only in height or railing).
+    const angleWarnings: number[] = [];
+    centeredPoints.forEach((p, i) => {
       const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
       const pNext = PointXZUtils.getNextPoint(i, centeredPoints);
-      const override = wallsSettings?.find(o => o.wall === i);
-      const h = override?.override?.height ?? wallDefaults.height;
-
-      const prevWallIndex = (i - 1 + n) % n;
-      const prevRailing = resolveRailing(prevWallIndex);
-      const nextRailing = resolveRailing(i);
-
-      return WallIntersectionFactory.create(
-        i, p, pPrev, pNext, wallDefaults.thickness, h,
-        prevRailing, nextRailing,
-      );
+      const { isStraight } = PointXZUtils.pointAlignedWithPreviousAndNext(p, pPrev, pNext);
+      if (!isStraight && !PointXZUtils.isRightAngle(p, pPrev, pNext)) {
+        angleWarnings.push(i);
+      }
     });
 
-    // Wall segments
+    // Classify every vertex once; results are reused for both intersections and walls.
+    const vertexInfo = centeredPoints.map((p, i) => {
+      const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
+      const pNext = PointXZUtils.getNextPoint(i, centeredPoints);
+      return PointXZUtils.pointAlignedWithPreviousAndNext(p, pPrev, pNext);
+    });
+
+    // Wall intersections — created only for non-collinear vertices.
+    // The floor is a flat plane; collinear intermediate vertices carry no
+    // geometric information for the floor outline and are omitted.
+    const wallIntersections = centeredPoints
+      .map((p, i) => {
+        const { isStraight, isConvex } = vertexInfo[i];
+        if (isStraight) return null;
+
+        const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
+        const pNext = PointXZUtils.getNextPoint(i, centeredPoints);
+        const override = wallsSettings?.find(o => o.wall === i);
+        const h = override?.override?.height ?? wallDefaults.height;
+
+        const prevWallIndex = (i - 1 + n) % n;
+        const prevRailing = resolveRailing(prevWallIndex);
+        const nextRailing = resolveRailing(i);
+
+        return WallIntersectionFactory.create(
+          i, p, pPrev, pNext, wallDefaults.thickness, h,
+          prevRailing, nextRailing, isConvex,
+        );
+      })
+      .filter((wi): wi is NonNullable<typeof wi> => wi !== null);
+
+    // Wall segments — each wall may be shortened at one or both ends when its
+    // endpoint is a concave vertex. Convex and collinear endpoints need no
+    // longitudinal adjustment.
     const walls = centeredPoints.map((p1, i) => {
       const p2 = PointXZUtils.getNextPoint(i, centeredPoints);
       const wallSettings = wallsSettings?.find(s => s.wall === i);
-      const [autoTrimStart, autoTrimEnd] = autoTrims[i];
+
+      const { isStraight: p1Straight, isConvex: p1Convex } = vertexInfo[i];
+      const nextIndex = (i + 1) % n;
+      const { isStraight: p2Straight, isConvex: p2Convex } = vertexInfo[nextIndex];
+
+      const adjustStart = computeAdjust(p1Convex, p1Straight, wallDefaults.thickness);
+      const adjustEnd   = computeAdjust(p2Convex, p2Straight, wallDefaults.thickness);
 
       return WallFactory.create(
         i, p1, p2,
         wallDefaults, railingDefaults,
         wallSettings,
-        autoTrimStart, autoTrimEnd,
+        adjustStart, adjustEnd,
       );
     });
 
-    return {
+    const site: Site = {
       location: config.site.location,
       azimuthRad: (azimuth * Math.PI) / 180,
       centerX,
@@ -175,5 +141,7 @@ export const SiteFactory = {
       walls,
       wallIntersections,
     };
+
+    return { site, angleWarnings };
   },
 };

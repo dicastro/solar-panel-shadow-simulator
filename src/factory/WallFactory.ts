@@ -67,7 +67,6 @@ const buildRailRenderData = (
         kind: 'half-cylinder',
         localPosition,
         localRotation: cylinderRotation,
-        // heightSegments=1, openEnded=true, then thetaStart and thetaLength
         args: [shape.radius, shape.radius, length, HALF_CYLINDER_SEGMENTS, 1, true, thetaStart, Math.PI],
         color: RAILING_COLOR,
       };
@@ -126,12 +125,19 @@ export const WallFactory = {
     wallDefaults: WallConfiguration,
     railingDefaults: RailingConfiguration,
     wallSettings?: WallSettingsConfiguration,
-    autoTrimStart = 0,
-    autoTrimEnd = 0,
+    /**
+     * Longitudinal shortening at the p1 end (metres). Positive = shorten.
+     * Non-zero only when p1 is a concave vertex, to prevent the wall body
+     * from overlapping the intersection post at that corner.
+     */
+    adjustStart = 0,
+    /**
+     * Longitudinal shortening at the p2 end (metres). Positive = shorten.
+     * Non-zero only when p2 is a concave vertex, to prevent the wall body
+     * from overlapping the intersection post at that corner.
+     */
+    adjustEnd = 0,
   ): Wall => {
-    const trimStart = autoTrimStart;
-    const trimEnd = autoTrimEnd;
-
     const wallHeight = wallSettings?.override?.height ?? wallDefaults.height;
     const wallThickness = wallDefaults.thickness;
 
@@ -140,11 +146,17 @@ export const WallFactory = {
     const fullDist = Math.sqrt(dx * dx + dz * dz);
     const yAngle = Math.atan2(dx, dz);
 
-    const currentDist = fullDist - trimStart - trimEnd;
-    const offsetFromCenter = (trimStart / 2) - (trimEnd / 2);
+    // The effective length after shortening both ends
+    const currentDist = fullDist - adjustStart - adjustEnd;
+
+    // The group centre shifts toward the longer end when adjustments are unequal
+    const offsetFromCenter = (adjustStart / 2) - (adjustEnd / 2);
 
     const ux = dx / fullDist;
     const uz = dz / fullDist;
+
+    // Perpendicular outward normal — walls are displaced thickness/2 outward
+    // so they border the floor without occupying it.
     const nx = -uz;
     const nz = ux;
 
@@ -185,8 +197,8 @@ export const WallFactory = {
       p2,
       height: wallHeight,
       thickness: wallThickness,
-      trimStart,
-      trimEnd,
+      adjustStart,
+      adjustEnd,
       worldPosition: { x: groupX, y: 0, z: groupZ },
       worldRotation: { x: 0, y: yAngle, z: 0 },
       railing,

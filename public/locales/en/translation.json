@@ -1,11 +1,13 @@
 {
   "title": "Solar Simulator",
-  "date_label": "Date",
-  "time_label": "Time",
-  "timezone_label": "Timezone",
-  "setup_label": "Setup",
-  "lang_label": "Language",
   "loading": "Loading configuration...",
+  "mainControls": {
+    "dateLabel": "Date",
+    "timeLabel": "Time",
+    "timezoneLabel": "Timezone",
+    "setupLabel": "Setup",
+    "langLabel": "Language"
+  },
   "coordinates": {
     "north": "N",
     "south": "S",
@@ -26,6 +28,11 @@
     "theoreticalPeak": "Theoretical peak",
     "run": "RUN CALCULATION",
     "stop": "STOP"
+  },
+  "angleWarning": {
+    "title": "Configuration Warning",
+    "message": "This application only supports 90° wall angles. The following wall points contain angles that do not meet this requirement and rendering may be inaccurate:",
+    "pointLabel": "Point"
   },
   "footer": {
     "madeBy": "Made by",

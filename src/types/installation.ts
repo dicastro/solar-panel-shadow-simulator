@@ -21,7 +21,7 @@ export type RailingRailRenderDataSquare = {
   readonly kind: 'square';
   readonly localPosition: [number, number, number];
   readonly localRotation: [number, number, number];
-  readonly args: [number, number, number]; // [width, height, length]
+  readonly args: [number, number, number];
   readonly color: string;
 };
 
@@ -29,7 +29,7 @@ export type RailingRailRenderDataCylinder = {
   readonly kind: 'cylinder';
   readonly localPosition: [number, number, number];
   readonly localRotation: [number, number, number];
-  readonly args: [number, number, number, number]; // [radiusTop, radiusBottom, length, segments]
+  readonly args: [number, number, number, number];
   readonly color: string;
 };
 
@@ -50,14 +50,14 @@ export type RailingRailRenderData =
 export type RailingSupportRenderDataSquare = {
   readonly kind: 'square';
   readonly localPosition: [number, number, number];
-  readonly args: [number, number, number]; // [width, height, depth]
+  readonly args: [number, number, number];
   readonly color: string;
 };
 
 export type RailingSupportRenderDataCylinder = {
   readonly kind: 'cylinder';
   readonly localPosition: [number, number, number];
-  readonly args: [number, number, number, number]; // [radiusTop, radiusBottom, height, segments]
+  readonly args: [number, number, number, number];
   readonly color: string;
 };
 
@@ -96,16 +96,9 @@ export interface WallIntersection {
   readonly worldPosition: Vector3;
   readonly renderData: WallIntersectionRenderData;
   /**
-   * Whether this intersection should be rendered as a post.
-   * False for collinear vertices (angle ≈ 180°) and concave vertices
-   * (interior angle > 180°), where a post would overlap the walls or
-   * appear outside the terrace perimeter.
-   */
-  readonly isRendered: boolean;
-  /**
    * Small railing segment that fills the corner gap between adjacent wall
-   * railings. Non-null only when isRendered is true and both adjacent walls
-   * have active railings with autoConnect enabled.
+   * railings. Non-null only when both adjacent walls have active railings
+   * with autoConnect enabled.
    */
   readonly railingConnect: RailingRailRenderData | null;
 }
@@ -116,10 +109,18 @@ export interface Wall {
   readonly p2: PointXZ;
   readonly height: number;
   readonly thickness: number;
-  /** Trim applied at the p1 end (metres). Positive = shorten, negative = extend. */
-  readonly trimStart: number;
-  /** Trim applied at the p2 end (metres). Positive = shorten, negative = extend. */
-  readonly trimEnd: number;
+  /**
+   * Longitudinal adjustment applied at the p1 end (metres).
+   * Positive = shorten. Applied only at concave vertices to prevent the
+   * wall body from overlapping the intersection post volume.
+   */
+  readonly adjustStart: number;
+  /**
+   * Longitudinal adjustment applied at the p2 end (metres).
+   * Positive = shorten. Applied only at concave vertices to prevent the
+   * wall body from overlapping the intersection post volume.
+   */
+  readonly adjustEnd: number;
   readonly worldPosition: Vector3;
   readonly worldRotation: Euler3;
   readonly railing: WallRailing | null;

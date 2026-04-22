@@ -3,7 +3,7 @@
 * Quiero que revises el apartado "To Review" de este mismo fichero donde están los puntos que quiero que revises antes de continuar con las tareas de Open Tasks. Tras procesar todo el apartado "To Review" inspecciona el código para comprender mejor lo que se dice antes de ponerte a cambiar código. Si tras hacer esto tienes alguna duda o no entiendes algo de lo que se dice o no coincide lo que se dice con el código, pregúntame antes de proponer ningún cambio de código.
 * Quiero una solución de alta calidad técnica y que lo que haya programado tenga su sentido y que sea defendible ante cualquier programador/desarrollador/arquitecto experto en el stack tecnológico del proyecto.
 * Tras los cambios de código que se hagan debería de actualizarse el README en consecuencia para reflejar las decisiones tomadas, cambios de configuración, cambios de arquitectura, etc. cualquier cosa que sea relevante y que encaje con lo que se escribe en el README
-* El criterio para actualizar el README es siempre con la idea de complementar lo existente (o adaptarlo si es necesario). La idea no es que el README refleje únicamente los cambios que se están realizando. Se tiene que hacer un ejercicio de "merge" entre el contenido existente en el README y los cambios que se han realizado. Todo el contenido del README tiene que estar en inglés.
+* El criterio para actualizar el README es siempre con la idea de complementar lo existente (o adaptarlo si es necesario). La idea no es que el README refleje únicamente los los cambios que se están realizando. Se tiene que hacer un ejercicio de "merge" entre el contenido existente en el README y los cambios que se han realizado. Todo el contenido del README tiene que estar en inglés.
 * El criterio para actualizar los comentarios del código. Los comentarios del código tienen que ser explicativos, no tienen que hacer referencia al refactor que se está haciendo, incluyendo frases como: introducido para..., antes del refactor se hacía..., ahora se hace... Y si ya hay comentarios previos en el código que siguen teniendo sentido tras los cambios que se hagan hay que dejarlos. No quiero comentarios que sirvan para marcar inicios de secciones, por ejemplo en las definiciones de clases, un comentario que simplemente diga que debajo de esta línea hay clases de cierto ámbito, esto con el tiempo no se respeta y deja de tener sentido el comentario
 * Estas instrucciones están en en español, y puede que la sección "To Review" o la de "Open Tasks" tenga mezcla de inglés o de español. A la hora de programar código y comentarlo y actualizar el README será siempre en inglés todo.
 * Al actualizar el README deja las secciones iniciales "Instructions", "To Review" y "Open Tasks" intactas, ya me encargo yo de poner esto al día. Actualiza a partir de la sección "Solar Panel Shadow Simulator"
@@ -11,91 +11,53 @@
 
 # To Review
 
-1) En `TimeZoneUtils.ts` en la línea `return [...Intl.supportedValuesOf('timeZone')].sort()` tengo este error en el IDE `Property 'supportedValuesOf' does not exist on type 'typeof Intl'.ts(2339)`. Al ejecutarse sí que funciona y obtengo todos los supported values del navegador. La cosa es que el build con github actions da un fallo por esto y no se construye ni se publica en GitHub Pages. Quiero que se marque de alguna forma que esto no es un error y que se ignore y no afecte al build (y a poder ser que en el IDE tampoco me salga como error, aunque podría vivir con ello, lo importante es el build).
-2) En los ficheros de traducciones, todas las propiedades de `SimulationControls` están agrupadas bajo `simulationControls`. Quiero lo mismo para las que se refieran a `MainControls`.
-3) Hay diversos problemas o funcionamientos no correctos de los muros (`Wall`) y las intersecciones (`WallIntersection`), que enumero a continuación (con letras minúsculas). Tienes que verlo todo en conjunto. Los he puesto en el orden en que me he acordado, quizá no es el orden más adecuado. Procésalos todos y después analízalo en conjunto. En algunos de los puntos he dibujado en ASCII ejemplos de setups para apoyarme en ellos y que la explicación sea más concisa. En estos diagramas escribiré los puntos cardinales (N-Norte, S-Sur, E-Este, O-Oeste) como referencia. La definición de los muros se hace CCW (en el sentido contrario a las agujas del reloj visto desde arriba) empezando en SO > S > SE > E > NE > N > NO > O > SO. Usaré `-` para muros horizontales, `|` para verticales, `T` para marcar suelo, `V` para marcar el vacío, `x`, `X`, `y`, `Y`, `z`, `Z` para marcar wall intersections a los que me quiera referir, `a`, `A`, `b`, `B`, `c` `C` para muros a los que me quiera referir
+* Para solucionar el problema `Property 'supportedValuesOf' does not exist on type 'typeof Intl'.` en `return [...Intl.supportedValuesOf('timeZone')].sort();` de `TimezoneUtils.ts` se ha propuesto en otra conversación incluir el siguiente código:
 
-a) En `WallIntersectionFactory` he tenido que invertir la lógica de `isRendered` en `const isRendered = !isStraight && isConvex;`, y lo he dejado como `const isRendered = !isStraight && !isConvex;`. Se estaban renderizando únicamente los WallIntersection que no debían. Para este caso da igual lo que diga el README, si dice una cosa diferente, lo que manda es lo que te estoy contando, que es lo que he tenido que cambiar para tener una versión de la aplicación que funcione más o menos como debe.
-b) En `SiteFactory`, donde se hace el cálculo de `autoTrims` he tenido que comentar la línea `//return [trimStart, trimEnd];` y cambiarla por `return [0, 0];`. Como estaba originalmente (con la línea `return [trimStart, trimEnd];`) el renderizado no era correcto, se hacían trim o extend de forma incorrecta. Con la línea que he dejado `return [0, 0]` el renderizado final es casi correcto, aunque hay casos en los que hay muros que se solapan entre si, visualmente parecería que está bien, pero es incorrecto, ya que las barandillas de estos muros se chocan. Con este cambio de código he visto que el comportamiento es "visualmente" casi correcto, pero con un ejemplo donde solo hay ángulos de 90º, en cuando se introduce otro ángulo, la cosa no funciona. Aún así insisto, es "visualmente" casi correcto la parte de los muros (digo casi, porque se están solapando, pero no se nota) y donde sí que se evidencia que no es correcto es en las barandillas, que ahí sí se ve claramente que los muros se están solapando.
-c) En `Wall` hay atributos `trimStart` y `trimEnd` que son de uso interno y que creo que tiene sentido que existant, pero según veo en los comentario pueden tener valores positivos o negativos según se quiera acortar o extender el `Wall`. El prefijo `trim` no es adecuado ya que se refiere únicamente a acortar, sería más correcto usar `adjust`
-d) Voy a intentar aclarar las situaciones que se pueden dar sobre los muros y sus acortados/extensiones. Diría que sólo haciendo acortados sería suficiente.
-
-Caso 1
-
-```
-       N
-  
-    VVVVVVV
-    Vx---xV
-O   V|TTT|V  E
-    Vx---xV
-    VVVVVVV
-  
-       S
+```typescript
+declare namespace Intl {
+  function supportedValuesOf(key: 'timeZone' | 'calendar' | 'collation' | 'currency' | 'numberingSystem' | 'unit'): string[];
+}
 ```
 
-En este caso no habría que hacer nada (ni extender ni acortar) con ningún muro (`-` y `|`) y todas las intersecciones (`x`) tendrían que existir y renderizarse
+Esto rompe la línea `Intl.DateTimeFormat().resolvedOptions().timeZone;` porque no reconoce `DateTimeFormat`
 
-Caso 2
+No estoy anclado a una versión de Node/ES/Typescript, así que si lo mejor es cambiar algo de esto, pues lo cambio y no hay que hacer redefiniciones raras. En otra conversación se ha mencionado "ampliar a ES2022", que no sé qué es lo que significa ni las implicaciones que podría tener
 
-```
-       N
-  
-    VVVVVVV
-    Vy---yV
-    V|TTTaV
-O   V|TTTaV  E
-    V|TTTaV
-    V|TTTxV
-    V|TTTbV
-    Vy---yV
-    VVVVVVV
-  
-       S
+Por el momento lo he arreglado así `return [...(Intl as any).supportedValuesOf('timeZone')].sort();` pero no me gusta ese `(Intl as any)`
+
+* En `WallIntersectionFactory.ts` está la función `getOutwardNormal`. Es una copia de la que hay en `PointXZUtils.ts`, que no está expuesta. Habría que exponerla en `PointXZUtils.ts` y usar esta desde `WallIntersectionFactory.ts`. No sé por qué en un caso se nombra con `Outward`, aunque la implementación es la misma que la que se llama `getNormal`. Hay que utilizar el nombre más preciso posible y que tenga un comentario explicativo. Si el comentario de `getOutwardNormal` sigue aplicando al trasladarla a `PointXZUtils.ts`, se deja ese comentario. Si hay que adaptar el comentario para que sea genérico, ya que `PointXZUtils.ts` es una utilidad que puede ser usada en cualquier punto de la aplicación, no debería tener comentarios específicos a una parte concreta como `WallIntersection` o `Wall`, ya que en el contexto de esa clase de utilidad no se sabe nada de esas entidades, ni se reciben como argumento.
+
+* En `SiteFactory.ts` he tenido que corregir la función `computeAdjust` para que se renderice todo bien. La he dejado de esta forma
+
+```typescript
+const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
+  if (isStraight || !isConvex) return 0;
+  return wallThickness;
+};
 ```
 
-En este caso tenemos 2 muros `a` y `b` que están en la misma línea. Esto es así porque tendrán diferentes atributos, por ejemplo el `a` podría ser más alto y sin barandilla y el `b` más bajo y con barandilla. La intersección entre ambos `x` no tendría sentido que existiese ni que se renderizase. Con los muros no habría que hacer nada (ni acortar ni extender). El resto de intersecciones (`y`) sí que tienen que existir. Con el resto de muros (`-` y `|`) tampoco hay que hacer nada (ni acortar ni extender). La no renderización de `x` y no instanciación del `WallIntersection` para `x` no tendría ninguna implicación para la creación del `floor` ya que `a` y `b` son colineales y forman una línea recta.
+Inicialmente estaba definida así
 
-Caso 3
-
-```
-         N
-  
-    VVVVVVVVVVV
-    Vx-------xV
-    V|TTTTTTT|V
-    VxaaayTTT|V
-    VVVVVbTTT|V
-    VVVVVbTTT|V
-    VxcccyTTT|V
-    V|TTTTTTT|V
-O   V|TTTTTTT|V  E
-    V|TTTTTTT|V
-    V|TTTTTTT|V
-    V|TTTTTTT|V
-    Vx-------xV
-    VVVVVVVVVVV
-  
-         S
+```typescript
+const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
+  if (isStraight || isConvex) return 0;
+  return wallThickness / 2;
+};
 ```
 
-Este es el caso más interesante por su complejidad. Los muros `a`, `b` y `c` al ser desplazados hacia afuera (la mitad de su thickness), hacia el vacío, para que no ocupen parte del suelo, se van a solapar entre sí y también con las intersecciones `y`. Aquí diría que hay varias aproximaciones para resolverlo
+No he revisado el comentario de documentación de la función, habrá que actualizarlo con la implementación final. También habrá que actualizar el README.md si hay alguna mención a este respecto.
 
-Caso 3 - Aproximación 1
+Insisto en que la implementación final funciona correctamente ya que lo he probado y se renderiza todo perfecto.
 
-Podría acortarse cada uno de los muros `a`, `b` y `c` por el final y las intersecciones `y` dejarían de renderizarse. Esta aproximación no me gusta, porque complica la parte de las barandillas para que queden bien y habría una lógica de que en ciertas esquinas de cierto tipo las intersecciones no se renderizan (además de en las rectas) y en otras esquinas sí. Cuando menciono "principio" y "final" es asumiendo que el orden de definición es contrario a las agujas del reloj visto desde arriba.
+* En `SiteFactory.ts` cuando se calcula `angleWarnings` se está iterando `centeredPoints` y llamando a `PointXZUtils.pointAlignedWithPreviousAndNext` recogiendo únicamente el `isStraight`. Justo después para calcular `vertexInfo` se está iterando de nuevo `centeredPoints` y se vuelve a hacer la misma llamada `PointXZUtils.pointAlignedWithPreviousAndNext`. Estas 2 iteraciones sobre `centeredPoints` se podrían hacer de una sola vez y calcular al mismo tiempo tanto `angleWarnings` como `vertexInfo`.
 
-Caso 3 - Aproximación 2
+* Antes de continuar implementando "Open Tasks". Tengo la sensación de que he perdido el control sobre el código ya que hay varias partes que no entiendo. Me gustaría hacer una reorganización de la lógica, creando funciones auxiliares con nombres descriptivos y con comentarios explicativos. Sé que no debería de ser necesario pero quiero que se incluyan todas las explicaciones necesarias. Por ejemplo: qué es una normal, qué es la función `dot` entre dos puntos, y todo lo relacionado con cálculos espaciales para Three.js
 
-Podría acortarse el muro `a` por el final, el muro `b` por el principio y el final y el muro `c` por el principio. De esta forma las intersecciones `y` sí que tendría sentido que se renderizen. De esta forma todos los muros quedan centrados entre las intersecciones y las barandillas no se ven afectadas, ocupan toda la longitud del muro una vez acortado. Solo existe la acción de acortar, no hay extensión de muro. ESTA APROXIMACIÓN ES LA QUE ME GUSTA. Cuando menciono "principio" y "final" es asumiendo que el orden de definición es contrario a las agujas del reloj visto desde arriba.
+* Analiza lógica duplicada en varias clases en general y sobre todo en relación a la gestión de puntos, coordenadas, cálculos de puntos en línea, tipos de ángulos, etc. Quiero que no haya lógica duplicada o distintas implementaciones para hacer los mismos cálculos en diferentes lugares. Creo que esto es la parte más compleja de la aplicación y quiero que esté bien claro y limpio.
 
-e) `WallIntersection` ahora tiene un atributo `isRendered`. Según los puntos anteriores sobre intersecciones, para el caso de muros en la misma línea (colineales), no hace falta renderizar el muro y por tanto no tiene sentido crear esta instancia de `WallIntersection`. Es cierto que estos `WallIntersection` se utilizan para generar el `floor`, pero no aporta nada utilizar estos puntos correspondientes a `WallIntersection` no renderizables, ya que son líneas rectas y no aportan nada para la forma del floor. Así que se puede quitar ese atributo y se puede prescindir de ellos para generar el floor.
+* Quiero que el código sea lo más fácil de mantener. En un futuro se me olvidará gran parte de esto y sin nombres claros de funciones y con muchos cálculos dentro de las funciones que hay ahora, sin saber para qué se hacen no me voy a enterar de mucho.
 
-f) Con respecto a los approach para las intersecciones entre muros. Creo que lo más sencillo es tener solo el caso de los muros colineales donde no hace falta intersección. Y para el resto de casos tener siempre un `WallIntersection`. Será cuestión de, en función del ángulo entre los muros, de ver qué forma tiene que tener el `WallIntersection` (ya no es siempre un poste con base cuadrada) y la forma y longitud que tienen que tener los muros, ya que puede que sea necesario acortarlos y según el angulo, los extremos no estarán a 90º
-
-g) Se supone que la aplicación soporta ahora ángulos que no son rectos. Pero tras probarlo las intersecciones y muros no se están renderizando correctamente. Tras pensar en todos los posibles casos que se pueden dar cuando no son ángulos de 90º, la aplicación se complica mucho, muchísimo. QUIERO QUE LA APLICACIÓN ESTÉ LIMITADA ÚNICAMENTE A ANGULOS DE 90º. Quiero que esto esté en el readme. Quiero que esto se valide al seleccionar un setup y si se encuentra algún ángulo que no es de 90º quiero mostrar un warning en la aplicación (un display que resalte y que el usuario lo vea claramente) avisando de que la aplicación solo soporta angulos de 90 grados y que en los puntos X, Y, Z (se enumeran los puntos de la configuración) existen ángulos que no cumplen las condiciones y que el renderizado puede no ser preciso, ni el cálculo de sombras ni la estimación de produccion solar
-
-h) Teniendo en guenta `g` (y el resto de puntos `3`) si se puede simplificar el código existente para la generación de `Wall` y `WallIntersection` asumiendo que solo se soportan ángulos de 90º, simplifícalo.
+* Haz una revisión de estilos que estén embebidos directamente en html. Todos los estilos deberían de estar en css y hacer referencia a los mismos con class en el html.
 
 # Open tasks
  
@@ -143,6 +105,7 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Detects which panel zones are shaded using raycasting against all shadow-casting geometry (walls, railings, supports, and other panels).
 - Estimates instantaneous power output in kW, applying bypass-diode, string-mismatch and optimizer logic.
 - Supports multiple installation layouts ("setups") selectable via the UI.
+- Validates the wall configuration and displays a prominent warning when non-90° angles are detected.
 - Planned: full annual simulation stepping through every N minutes of the year.
 
 ---
@@ -179,9 +142,9 @@ src/
 │   └── index.ts                   # Re-exports
 │
 ├── factory/
-│   ├── SiteFactory.ts             # Config → Site (walls, intersections, bounding radius)
+│   ├── SiteFactory.ts             # Config → Site (walls, intersections, bounding radius, angle validation)
 │   ├── WallFactory.ts             # Wall segment geometry + railing
-│   ├── WallIntersectionFactory.ts # Corner posts (convex vertices only)
+│   ├── WallIntersectionFactory.ts # Corner posts (all non-collinear vertices)
 │   ├── PanelSetupFactory.ts       # PanelSetupConfiguration + Site → PanelSetup
 │   ├── SolarPanelArrayFactory.ts  # Computes array origin, creates panels
 │   ├── SolarPanelFactory.ts       # Single panel world position + render data
@@ -203,10 +166,11 @@ src/
 │   ├── Compass.tsx                # N/S/E/W labels in 3D
 │   ├── MainControls.tsx           # Date/time/play UI panel
 │   ├── SimulationControls.tsx     # Simulation settings UI panel
+│   ├── AngleWarningBanner.tsx     # Warning banner for non-90° wall angles
 │   └── DeveloperFooter.tsx        # Ko-fi link + personal site
 │
 └── utils/
-    ├── PointXZUtils.ts            # Normal vectors, convexity, prev/next point helpers
+    ├── PointXZUtils.ts            # Normal vectors, convexity, right-angle check, prev/next helpers
     ├── ThreeConverter.ts          # Domain Vector3/Euler3 → THREE.Vector3/Euler
     └── TimezoneUtils.ts           # getAllTimezones(), getBrowserTimezone(), resolveInitialTimezone()
 ```
@@ -214,11 +178,11 @@ src/
 ---
  
 ## Architecture decisions
- 
+
 ### Factory pattern for domain models
  
 All domain objects are plain immutable value objects created by dedicated factory functions. React components never construct domain objects — they only consume pre-computed `renderData`.
- 
+
 ### Pre-computed render data with discriminated unions
  
 Railing shapes use a discriminated union (`kind: 'square' | 'cylinder' | 'half-cylinder'`). The factory computes the exact Three.js geometry args for each shape and stores them in the render data. `Scene.tsx` switches on `kind` to render the correct geometry without any cast. TypeScript will error if a new shape is added to the union but not handled in the switch — this is the primary benefit of discriminated unions over string enums.
@@ -243,6 +207,7 @@ A half-cylinder uses `openEnded=true` and `thetaLength=Math.PI`. `thetaStart` se
  
 - **Interactive playback** (`tickHour`): advances 1 hour per 100 ms interval. Unit fixed at 1 hour.
 - **Annual simulation** (planned): will use `simulationInterval` (15/30/60 min) in its own loop, separate from interactive playback.
+
 ### `showPoints` excluded from ShadowedScene
  
 `showPoints` only controls rendering of sample point spheres in `SolarPanelComponent`. `ShadowedScene` does not accept it as a prop — doing so would tempt callers to include it in dependencies, triggering full raycasting passes on every visibility toggle with no change in shadow output.
@@ -260,41 +225,49 @@ The list of shadow-casting meshes is built via `scene.traverse` once and stored 
 
 When the user changes timezone, `setTimezone` reconverts the `date` Dayjs object to the new timezone via `date.tz(newTimezone)`. This preserves the UTC instant (solar calculations are unchanged) while updating the displayed local time.
  
-### Wall geometry — three vertex categories
- 
-The wall perimeter is analysed vertex by vertex. Each vertex falls into one of three categories, detected in `PointXZUtils.pointAlignedWithPreviousAndNext` using the 2D cross product of the incoming and outgoing edge directions:
- 
-| Category | Cross product | Interior angle | Post rendered | Trim |
+### Wall geometry — only 90° angles are supported
+
+The application is restricted to wall configurations where every angle between adjacent wall segments is exactly 90° (or 180° for collinear segments). This constraint enables a clean, simple geometric model:
+
+- **Collinear vertices** (angle = 180°): no intersection post is created. These vertices are structurally valid and exist to allow adjacent wall segments to have different heights or railing configurations. They add no information to the floor outline (which is a flat plane) and are therefore omitted from `wallIntersections`.
+- **All other vertices** (angle = 90° or 270°): an intersection post is always created. There is no distinction between "rendered" and "not rendered" at the data level — every entry in `site.wallIntersections` is rendered.
+
+If the configuration contains non-90° angles, `SiteFactory` populates `angleWarnings` with the indices of the offending points and the store exposes this list. `AngleWarningBanner` displays a prominent UI warning. Geometry is still constructed but may be visually incorrect.
+
+### Wall vertex classification — convex vs concave
+
+Each vertex is classified by the 2D cross product of the incoming and outgoing edge direction vectors. For a counter-clockwise perimeter walk:
+
+| Cross product | Interior angle | Vertex type | Post | Wall trim |
 |---|---|---|---|---|
-| Convex (exterior corner) | > 0 | < 180° | Yes | Positive (shorten) |
-| Collinear | ≈ 0 | ≈ 180° | No | 0 |
-| Concave (interior corner) | < 0 | > 180° | No | Negative (extend) |
- 
-Posts are only rendered at convex vertices. At collinear vertices a post would overlap both adjacent walls. At concave vertices the bisector offset points outside the terrace perimeter, which is geometrically incorrect.
- 
-### Wall auto-trim — unified formula covering all angle types
- 
-The trim at each wall end is computed by `computeAutoTrim` in `SiteFactory`:
- 
-```
-trim = (wallThickness / 2) / tan(θ / 2)
-```
- 
-where θ is the angle between the two wall direction vectors at the shared vertex, and the sign is determined by the 2D cross product:
- 
-- Convex (cross > 0): positive trim → wall is shortened so it does not enter the intersection post volume.
-- Concave (cross < 0): negative trim → wall is extended beyond the vertex to fill the interior corner gap.
-- Collinear (cosHalf ≈ 0): trim → 0.
-The previous implementation computed `|sin(θ)|` instead of `tan(θ/2)`, which happened to be correct only for 90° angles.
- 
-### WallIntersection corner offset — bisector formula
- 
-The intersection post offset uses:
-```
-d = wallThickness / (2 * sin(θ/2))
-```
-where sin(θ/2) is the dot product of one wall normal with the normalised bisector of the two normals. A clamp of 0.1 prevents division by zero for very acute angles.
- 
+| > 0 | 90° | Convex (exterior corner) | Yes | None |
+| ≈ 0 | 180° | Collinear | No | None |
+| < 0 | 270° | Concave (interior recess) | Yes | `thickness/2` at both adjacent wall ends |
+
+The post position is computed as `(normalPrev + normalNext) × thickness/2`, where `normalPrev` and `normalNext` are the unit outward normals of the two adjacent wall segments. For 90° angles this equals `thickness/2` in each of the two perpendicular directions, placing the post centre exactly at the intersection of the two displaced wall centre-lines.
+
+### Wall longitudinal adjustment at concave vertices
+
+Walls are displaced `thickness/2` outward (away from the floor) along their perpendicular normal. At convex corners this lateral displacement is sufficient — the displaced wall centre-lines naturally meet the post without overlap. At concave vertices the displaced wall bodies would overlap the post volume; each wall is shortened by `thickness/2` at the end touching the concave vertex.
+
+The adjustment is stored as `adjustStart` and `adjustEnd` on the `Wall` object. Both are always non-negative (shortening only). The naming `adjust` is preferred over `trim` because `trim` implies shortening exclusively, while the field name should reflect that it is a geometric correction that happens to be a shortening in all valid 90° configurations.
+
+### i18n key structure
+
+Translation keys are grouped by the component that owns them:
+- `mainControls.*` — keys used exclusively by `MainControls`
+- `simulationControls.*` — keys used exclusively by `SimulationControls`
+- `angleWarning.*` — keys used by `AngleWarningBanner`
+- Top-level keys (`title`, `loading`, `coordinates.*`, `footer.*`) are shared or belong to no specific component
+
+### `Intl.supportedValuesOf` — TypeScript lib extension
+
+`Intl.supportedValuesOf('timeZone')` is part of the Intl spec but was introduced after ES2020 and is absent from TypeScript's ES2020 lib types. Rather than widening the project's `lib` target (which would introduce other ES2021+ globals), `TimezoneUtils.ts` contains a local `declare namespace Intl` extension that teaches the compiler about this specific method. This keeps the tsconfig unchanged while eliminating the build error.
+
+### `SiteFactory` return type
+
+`SiteFactory.create` returns a `SiteFactoryResult` object containing both the `Site` geometry and the `angleWarnings` array. This avoids side effects (the factory does not write to the store) and keeps all output of the construction process in one place. The store's `loadConfig` action destructures the result and stores each part independently.
+
 ---
  
 ## Coordinate system
@@ -339,6 +312,10 @@ SW (0) → S (1) → SE (2) → E (3) → NE (4) → N (5) → NW (6) → W (7) 
 ```
  
 Use segment indices in `wallsSettings` to override height, railing, or apply trim to specific walls.
+
+### Floor outline
+
+The floor is a flat plane. Its outline is derived from `site.wallIntersections`, which contains only non-collinear vertices. Collinear vertices (where two segments meet in a straight line) carry no geometric information for a flat floor and are excluded. This means the floor outline correctly represents the perimeter of the terrace even when some wall segments are split into two for configuration purposes.
  
 ---
  
@@ -443,7 +420,7 @@ If the sun is behind the panel the dot product is negative, clamped to 0.
  
 ### 3. Zone shading
  
-Each panel is divided into `zones` diode zones.  A NxN grid of sample points is cast toward the sun via raycasting.  A zone is considered **shaded** if the number of shaded sample points reaches the configured `threshold`. Raycasting tests against all shadow-casting geometry in the scene, including other solar panels.
+Each panel is divided into `zones` diode zones. A NxN grid of sample points is cast toward the sun via raycasting. A zone is considered **shaded** if the number of shaded sample points reaches the configured `threshold`. Raycasting tests against all shadow-casting geometry in the scene, including other solar panels.
  
 ### 4. Panel output with bypass diodes
  
@@ -455,7 +432,7 @@ Each panel is divided into `zones` diode zones.  A NxN grid of sample points is 
  
 ### 5. String mismatch
  
-Panels in the same string without optimizers are connected in series.  The string output is limited by the least-efficient panel (bottleneck effect):
+Panels in the same string without optimizers are connected in series. The string output is limited by the least-efficient panel (bottleneck effect):
  
 ```
 stringEfficiency = min(individualEfficiency for each panel in string)
@@ -470,9 +447,9 @@ Strings where every panel has an optimizer are treated as independent — each p
  
 ### Why BVH?
  
-Without acceleration, `raycaster.intersectObjects` tests every ray against every triangle in the scene — O(rays × triangles).  For a scene with hundreds of wall and panel faces, and thousands of sample points, this is too slow for interactive use.
+Without acceleration, `raycaster.intersectObjects` tests every ray against every triangle in the scene — O(rays × triangles). For a scene with hundreds of wall and panel faces, and thousands of sample points, this is too slow for interactive use.
  
-`three-mesh-bvh` pre-organises each geometry into a **Bounding Volume Hierarchy**: a tree of axis-aligned bounding boxes where each leaf contains a small subset of triangles.  A ray only needs to test O(log n) nodes instead of O(n) triangles, giving a dramatic speedup.
+`three-mesh-bvh` pre-organises each geometry into a **Bounding Volume Hierarchy**: a tree of axis-aligned bounding boxes where each leaf contains a small subset of triangles. A ray only needs to test O(log n) nodes instead of O(n) triangles, giving a dramatic speedup.
  
 ### How it is set up
  
@@ -482,13 +459,13 @@ Without acceleration, `raycaster.intersectObjects` tests every ray against every
    THREE.Mesh.prototype.raycast = acceleratedRaycast;
    ```
    After this, every `Mesh.raycast` call automatically uses BVH if a bounds tree exists.
-2. **Build the BVH** (`useBVH` hook): walks the scene, calls `geometry.computeBoundsTree()` on every shadow-casting mesh.  Rebuilt only when `rebuildKey` changes (site or setup change), not on every frame.
-3. **Cast rays** (`useShadowSampler` hook): for each sample point, transforms its local position to world space using the panel's pre-computed world matrix, sets the ray origin, and calls `intersectObjects`.  `firstHitOnly = true` stops BVH traversal after the first hit, saving further work.
+2. **Build the BVH** (`useBVH` hook): walks the scene, calls `geometry.computeBoundsTree()` on every shadow-casting mesh. Rebuilt only when `rebuildKey` changes (site or setup change), not on every frame.
+3. **Cast rays** (`useShadowSampler` hook): for each sample point, transforms its local position to world space using the panel's pre-computed world matrix, sets the ray origin, and calls `intersectObjects`. `firstHitOnly = true` stops BVH traversal after the first hit, saving further work.
 4. **Avoid GC pressure**: all `THREE.Vector3`, `THREE.Matrix4`, `THREE.Quaternion` scratch objects are allocated **once at module scope** and reused for every ray, avoiding garbage collector pauses.
 
 ### Dirty flag
  
-`ShadowedScene` only runs the full raycasting pass when a `needsUpdate` ref is `true`.  The flag is set by a `useEffect` that watches `[sun, activeSetup, density, threshold]`.  Between frames where nothing changes, `useFrame` is a no-op.
+`ShadowedScene` only runs the full raycasting pass when a `needsUpdate` ref is `true`. The flag is set by a `useEffect` that watches `[sun, activeSetup, density, threshold]`. Between frames where nothing changes, `useFrame` is a no-op.
  
 ### What is included in shadow casting
  
@@ -497,6 +474,7 @@ Every mesh with `castShadow={true}` is included in the raycasting. This covers:
 - Railing rails (all shapes)
 - Railing supports (balusters)
 - Solar panel bodies
+
 Inter-panel shading (one panel casting a shadow on another) is therefore naturally modelled without any special handling.
  
 ### BVH and three-mesh-bvh override
@@ -536,10 +514,10 @@ Cuando el usuario cambia de timezone, `setTimezone` llama a `date.tz(newTimezone
  
 ## Known limitations
  
+- **90° wall angles only**: the wall and intersection geometry model is restricted to right-angle corners. Non-right angles produce incorrect post placement and wall overlaps. A validation warning is shown in the UI when violations are detected in the configuration.
 - **Single year**: time controls are constrained to the current year.
 - **No diffuse irradiance**: only direct (beam) irradiance is modelled.
 - **Annual simulation not yet implemented**.
-- **Very acute wall angles (< ~11°)**: the bisector formula clamps sin(θ/2) to 0.1, which produces a slightly incorrect post position. Not a realistic scenario for terrace walls.
 - **Railing connect piece for mismatched shapes**: when the two walls meeting at a corner have different railing shapes, the connect piece uses the shape of the incoming wall. A small visual mismatch may be visible at the corner.
 
 ---
@@ -569,23 +547,31 @@ A `kind: 'square' | 'cylinder' | 'half-cylinder'` discriminated union carries it
 ### Wall vertex classification via cross product
  
 The 2D cross product of the incoming and outgoing edge directions at a vertex cleanly separates the three geometrically distinct cases (convex, collinear, concave) in a single operation. The sign encodes the turn direction for a counter-clockwise polygon: positive = left turn = convex, negative = right turn = concave. This is more robust than comparing angles and handles degenerate cases gracefully.
- 
-### Auto-trim formula — tan(θ/2) not sin(θ)
- 
-The correct formula for the trim at a wall end is `(wallThickness/2) / tan(θ/2)`. The half-angle is computed from the dot product of the two wall direction vectors using the identities `sin(θ/2) = sqrt((1−cosθ)/2)` and `cos(θ/2) = sqrt((1+cosθ)/2)`. The previous implementation computed `|sin(θ)|` instead, which coincidentally gave the right answer at 90° but diverged for all other angles. The correct formula also naturally handles concave corners: `tan(θ/2)` is negative for θ > 180°, yielding a negative trim (extension) without any special-casing.
- 
-### Bisector formula vs sum-of-normals
- 
-The sum of two unit normals gives the bisector direction but not the correct magnitude for a corner offset. The magnitude depends on the angle: `wallThickness / (2 * sin(θ/2))`. For 90° the two approaches coincidentally agree; for other angles the error grows. Always derive geometry from trigonometric first principles rather than geometric shortcuts whose domain of validity is not obvious.
- 
-### Timezone as UI state, not domain state
- 
-`timezone` was initially stored on the `Site` object (a domain model). Moving it to the store as independent UI state clarifies the separation: `Site` is geometric data computed once from the config; timezone is a display preference the user can change at runtime without recomputing any geometry. The `makeDateInTimezone` function exported from the store is the boundary between "what the user typed" and "what UTC instant the store holds".
- 
-### Setup id derived, not configured
- 
-Requiring users to provide a unique `id` alongside a human-readable `label` is redundant and error-prone. The internal id is derived deterministically from the label (normalised) plus the array index, which guarantees uniqueness. Users only see and configure `label`.
- 
+
+### Restricting to 90° simplifies geometry significantly
+
+Supporting arbitrary wall angles requires computing bisector offsets with trigonometric formulas that diverge at near-parallel angles, handling wall end-cuts that are not perpendicular to the wall direction, and reasoning about corner post shapes that change with the angle. Restricting to 90° collapses all of this to a single formula: the post offset is `(normalPrev + normalNext) × thickness/2` and the wall shortening at concave corners is exactly `thickness/2`. The geometric model becomes trivially correct and the code shrinks substantially. Angle validation at load time with a visible UI warning is the correct trade-off: the constraint is documented, enforced at startup, and easy to diagnose.
+
+### Wall adjustment naming: `adjust` not `trim`
+
+The longitudinal correction applied to wall ends at concave vertices was initially named `trimStart`/`trimEnd`. `trim` implies an operation that only shortens. The rename to `adjustStart`/`adjustEnd` better reflects that the field represents a geometric correction (which happens to always be a positive shortening for 90° configurations, but the name should not encode that assumption).
+
+### Collinear vertices excluded from `wallIntersections`
+
+Collinear wall points (where two segments meet at 180°) are valid configuration — they allow adjacent segments to differ in height or railing. However, they contribute no geometric information to a flat floor outline and no intersection post is needed. Excluding them from `wallIntersections` keeps the array semantically clean: every entry is a rendered post. The floor shape is built directly from this array, so omitting redundant collinear points also slightly reduces the number of vertices in the floor geometry.
+
+### `SiteFactory` returns a result object, not just `Site`
+
+Returning `{ site, angleWarnings }` from `SiteFactory.create` keeps the factory free of side effects. The factory does not write to any store or emit events — it produces data and returns it. The caller (`loadConfig` in the store) decides what to do with each part. This pattern generalises: if the factory ever needs to return additional metadata (e.g. validation errors for panel positions), the result object can be extended without changing the factory's signature.
+
+### i18n keys grouped by owning component
+
+Flat top-level keys become hard to navigate as the translation file grows. Grouping keys under the component that owns them (`mainControls.*`, `simulationControls.*`, `angleWarning.*`) makes it immediately clear where each string is used and avoids naming collisions. Keys that are genuinely shared or application-level (`title`, `loading`, `coordinates.*`, `footer.*`) remain at the top level.
+
+### Local `declare namespace Intl` for missing lib types
+
+When a browser API is missing from TypeScript's lib types (because it postdates the configured `lib` target), the cleanest fix is a local `declare namespace` extension in the file that uses it. This is preferable to widening `lib` in `tsconfig` (which introduces many other new globals) or using `(Intl as any)` (which loses all type information). The local declaration is scoped to the file, self-documenting, and does not affect the rest of the codebase.
+
 ---
  
 # My Documentation
@@ -631,11 +617,13 @@ En un string, todos los paneles están conectados en serie. La corriente es como
  
 * **useBVH**: construye el BVH una sola vez cuando cambia la escena (setup/site). Reconstruye solo si cambia `rebuildKey`.
 * **useShadowSampler**: lanza todos los rayos en una sola pasada usando el BVH. Cachea la lista de meshes con `castShadow`. Devuelve `Map<pointId, isShaded>`.
-## Geometría de Muros — Tres Tipos de Vértice
- 
-Al analizar el perímetro de la terraza vértice a vértice, cada punto cae en una de tres categorías detectadas mediante el producto vectorial 2D de las direcciones de entrada y salida:
- 
-* **Vértice convexo** (esquina exterior, ángulo interior < 180°): se renderiza un post de intersección. Los muros se recortan para no penetrar en el post.
-* **Vértice colineal** (ángulo ≈ 180°): no se renderiza post. Sin recorte.
-* **Vértice cóncavo** (esquina interior, ángulo interior > 180°): no se renderiza post (el offset del bisector apuntaría fuera de la terraza). Los muros se **extienden** más allá del vértice para cubrir la esquina interior.
-La fórmula unificada `trim = (thickness/2) / tan(θ/2)` cubre los tres casos automáticamente: positiva para convexos (recorte), cero para colineales, negativa para cóncavos (extensión).
+
+## Geometría de Muros — Restricción a 90°
+
+La aplicación solo soporta ángulos de 90° entre muros adyacentes. Esta restricción se valida al cargar la configuración. Si se detectan ángulos que no son de 90°, se muestra un banner de aviso en la UI indicando los índices de los puntos problemáticos.
+
+Existen tres categorías de vértice:
+
+* **Vértice convexo** (esquina exterior, ángulo interior 90°): se crea un post de intersección. El post se desplaza `thickness/2` en cada una de las dos direcciones perpendiculares de los muros adyacentes, quedando en el exterior de la terraza. Los muros no se acortan.
+* **Vértice colineal** (ángulo = 180°): no se crea `WallIntersection`. El suelo se construye a partir de los `WallIntersection` existentes, y los vértices colineales son redundantes en un plano plano.
+* **Vértice cóncavo** (esquina interior, ángulo interior 270°): se crea un post de intersección. El post se desplaza `thickness/2` hacia el interior del recodo. Los muros adyacentes se acortan `thickness/2` en el extremo que toca esta intersección, para evitar que el cuerpo del muro invada el volumen del post.

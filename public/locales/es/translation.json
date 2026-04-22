@@ -1,11 +1,13 @@
 {
   "title": "Simulador Solar",
-  "date_label": "Día del año",
-  "time_label": "Hora",
-  "timezone_label": "Zona horaria",
-  "setup_label": "Configuración",
-  "lang_label": "Idioma",
   "loading": "Cargando configuración...",
+  "mainControls": {
+    "dateLabel": "Día del año",
+    "timeLabel": "Hora",
+    "timezoneLabel": "Zona horaria",
+    "setupLabel": "Configuración",
+    "langLabel": "Idioma"
+  },
   "coordinates": {
     "north": "N",
     "south": "S",
@@ -26,6 +28,11 @@
     "theoreticalPeak": "Pico teórico",
     "run": "EJECUTAR CÁLCULO",
     "stop": "PARAR"
+  },
+  "angleWarning": {
+    "title": "Aviso de configuración",
+    "message": "Esta aplicación solo soporta ángulos de 90° entre muros. Los siguientes puntos de configuración contienen ángulos que no cumplen este requisito y el renderizado puede no ser preciso:",
+    "pointLabel": "Punto"
   },
   "footer": {
     "madeBy": "Desarrollado por",

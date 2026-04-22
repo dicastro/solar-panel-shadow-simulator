@@ -113,27 +113,25 @@ export function Scene({
           <meshStandardMaterial color="#b45d16" side={THREE.DoubleSide} />
         </mesh>
 
-        {/* Wall intersection posts — only rendered at convex vertices */}
-        {site.wallIntersections.map(wi => {
-          if (!wi.isRendered) return null;
-          return (
-            <group key={`post-${wi.index}`}>
-              <mesh
-                position={[wi.worldPosition.x, wi.worldPosition.y, wi.worldPosition.z]}
-                castShadow
-              >
-                <boxGeometry args={wi.renderData.boxArgs} />
-                <meshStandardMaterial color={wi.renderData.color} />
-              </mesh>
+        {/* Wall intersection posts — all entries in the array are rendered.
+            Collinear vertices are excluded from the array during site construction. */}
+        {site.wallIntersections.map(wi => (
+          <group key={`post-${wi.index}`}>
+            <mesh
+              position={[wi.worldPosition.x, wi.worldPosition.y, wi.worldPosition.z]}
+              castShadow
+            >
+              <boxGeometry args={wi.renderData.boxArgs} />
+              <meshStandardMaterial color={wi.renderData.color} />
+            </mesh>
 
-              {wi.railingConnect && (
-                <group position={[wi.worldPosition.x, 0, wi.worldPosition.z]}>
-                  <RailingRail data={wi.railingConnect} />
-                </group>
-              )}
-            </group>
-          );
-        })}
+            {wi.railingConnect && (
+              <group position={[wi.worldPosition.x, 0, wi.worldPosition.z]}>
+                <RailingRail data={wi.railingConnect} />
+              </group>
+            )}
+          </group>
+        ))}
 
         {/* Wall segments: body + rail + supports */}
         {site.walls.map(wall => (

@@ -43,7 +43,7 @@
 /** All IANA timezone identifiers supported by this browser, sorted. */
 export const getAllTimezones = (): string[] => {
   try {
-    return [...Intl.supportedValuesOf('timeZone')].sort();
+    return [...(Intl as any).supportedValuesOf('timeZone')].sort();
   } catch {
     // Intl.supportedValuesOf is available in all modern browsers, but fall
     // back gracefully for very old environments.
