@@ -7,30 +7,29 @@
 * El criterio para actualizar los comentarios del código. Los comentarios del código tienen que ser explicativos, no tienen que hacer referencia al refactor que se está haciendo, incluyendo frases como: introducido para..., antes del refactor se hacía..., ahora se hace... Y si ya hay comentarios previos en el código que siguen teniendo sentido tras los cambios que se hagan hay que dejarlos. No quiero comentarios que sirvan para marcar inicios de secciones, por ejemplo en las definiciones de clases, un comentario que simplemente diga que debajo de esta línea hay clases de cierto ámbito, esto con el tiempo no se respeta y deja de tener sentido el comentario
 * Estas instrucciones están en en español, y puede que la sección "To Review" o la de "Open Tasks" tenga mezcla de inglés o de español. A la hora de programar código y comentarlo y actualizar el README será siempre en inglés todo.
 * Al actualizar el README deja las secciones iniciales "Instructions", "To Review" y "Open Tasks" intactas, ya me encargo yo de poner esto al día. Actualiza a partir de la sección "Solar Panel Shadow Simulator"
-* Si tienes discrepancias entre el código y lo que dice el README, lo que manda es el código. Las pruebas se hacen sobre el código y el README debería ser un reflejo de lo que hace el código. No se ha escrito primero el README y se ha tratado de implementar lo que dice el README. El proceso es el inverso, el README es una documentación sobre lo que hay.
+* Si tienes discrepancias entre el código y lo que dice el README, lo que manda es el código. Y con código me refiero a únicamente el código, excluyendo los posibles comentarios que haya en el código (que también podrían ser incorrectos y no corresponderse con el código). Las pruebas se hacen sobre el código y el README debería ser un reflejo de lo que hace el código. No se ha escrito primero el README y se ha tratado de implementar lo que dice el README. El proceso es el inverso, el README es una documentación sobre lo que hay.
 
 # To Review
 
 1) En `TimeZoneUtils.ts` en la línea `return [...Intl.supportedValuesOf('timeZone')].sort()` tengo este error en el IDE `Property 'supportedValuesOf' does not exist on type 'typeof Intl'.ts(2339)`. Al ejecutarse sí que funciona y obtengo todos los supported values del navegador. La cosa es que el build con github actions da un fallo por esto y no se construye ni se publica en GitHub Pages. Quiero que se marque de alguna forma que esto no es un error y que se ignore y no afecte al build (y a poder ser que en el IDE tampoco me salga como error, aunque podría vivir con ello, lo importante es el build).
 2) En los ficheros de traducciones, todas las propiedades de `SimulationControls` están agrupadas bajo `simulationControls`. Quiero lo mismo para las que se refieran a `MainControls`.
-3) Hay diversos problemas o funcionamientos no correctos de los muros y las intersecciones, que enumero a continuación (con letras minúsculas). Tienes que verlo todo en conjunto. Los he puesto en el orden en que me he acordado, quizá no es el orden más adecuado. Procésalos todos y después analízalo en conjunto.
+3) Hay diversos problemas o funcionamientos no correctos de los muros (`Wall`) y las intersecciones (`WallIntersection`), que enumero a continuación (con letras minúsculas). Tienes que verlo todo en conjunto. Los he puesto en el orden en que me he acordado, quizá no es el orden más adecuado. Procésalos todos y después analízalo en conjunto. En algunos de los puntos he dibujado en ASCII ejemplos de setups para apoyarme en ellos y que la explicación sea más concisa. En estos diagramas escribiré los puntos cardinales (N-Norte, S-Sur, E-Este, O-Oeste) como referencia. La definición de los muros se hace CCW (en el sentido contrario a las agujas del reloj visto desde arriba) empezando en SO > S > SE > E > NE > N > NO > O > SO. Usaré `-` para muros horizontales, `|` para verticales, `T` para marcar suelo, `V` para marcar el vacío, `x`, `X`, `y`, `Y`, `z`, `Z` para marcar wall intersections a los que me quiera referir, `a`, `A`, `b`, `B`, `c` `C` para muros a los que me quiera referir
 
 a) En `WallIntersectionFactory` he tenido que invertir la lógica de `isRendered` en `const isRendered = !isStraight && isConvex;`, y lo he dejado como `const isRendered = !isStraight && !isConvex;`. Se estaban renderizando únicamente los WallIntersection que no debían. Para este caso da igual lo que diga el README, si dice una cosa diferente, lo que manda es lo que te estoy contando, que es lo que he tenido que cambiar para tener una versión de la aplicación que funcione más o menos como debe.
-b) `WallIntersection` ahora tiene un atributo `isRendered`. Es cierto que hay veces que el `WallIntersection` se tiene que "omitir" y no renderizarlo, pero para qué tener la instancia del objeto en la memoria con un atributo `isRendered` e ignorarlo cuando es `true`? Por qué no directamente no tener esa instancia de `WallIntersection` y tener en memoria únicamente las instancias de `WallIntersection` que se tienen que renderizar y que por tanto se tienen que tener en cuenta para el raycasting? Si no tiene sentido mantener esas instancias, refactoriza el código para que no estén en memoria y tampoco tendría sentido tener ese atributo, así que refactoriza para quitarlo. Si por algún motivo tiene sentido mantenerlas en memoria con ese atributo para poder filtrarlas, entonces no hagas nada y déjalo como está.
-c) En `SiteFactory`, donde se hace el cálculo de `autoTrims` he tenido que comentar la línea `//return [trimStart, trimEnd];` y cambiarla por `return [0, 0];`. Como estaba originalmente (con la línea `return [trimStart, trimEnd];`) el renderizado no era correcto, se hacían trim o extend de forma incorrecta. Con la línea que he dejado `return [0, 0]` el renderizado final es casi correcto, aunque hay casos en los que hay muros que se solapan entre si, visualmente parecería que está bien, pero es incorrecto, ya que las barandillas de estos muros se chocan.
-d) En `Wall` hay atributos `trimStart` y `trimEnd` que son de uso interno y que creo que tiene sentido que existant, pero según veo en los comentario pueden tener valores positivos o negativos según se quiera acortar o extender el `Wall`. Si se puede acortar o extender, igual el prefijo `trim` no es el más adecuado no? `trim` en inglés no hace referencia únicamente a acortar? Se te ocurre un prefijo mejor para esto? Si no hay uno mejor, mantenemos trim.
-e) Voy a intentar aclarar las situaciones que se pueden dar sobre los muros y sus acortados/extensiones. Diría que sólo haciendo acortados sería suficiente. Voy a dibujar en ASCII unos diagramas para apoyarme en ellos. En los diagramas escribiré los puntos cardinales (N-Norte, S-Sur, E-Este, O-Oeste) como referencia. Usaré `-` para muros horizontales, `|` para verticales, `S` para marcar suelo, `V` para marcar el vacío, `x`, `X`, `y`, `Y`, `z`, `Z` para marcar wall intersections a los que me quiera referir, `a`, `A`, `b`, `B`, `c` `C` para muros a los que me quiera referir
+b) En `SiteFactory`, donde se hace el cálculo de `autoTrims` he tenido que comentar la línea `//return [trimStart, trimEnd];` y cambiarla por `return [0, 0];`. Como estaba originalmente (con la línea `return [trimStart, trimEnd];`) el renderizado no era correcto, se hacían trim o extend de forma incorrecta. Con la línea que he dejado `return [0, 0]` el renderizado final es casi correcto, aunque hay casos en los que hay muros que se solapan entre si, visualmente parecería que está bien, pero es incorrecto, ya que las barandillas de estos muros se chocan. Con este cambio de código he visto que el comportamiento es "visualmente" casi correcto, pero con un ejemplo donde solo hay ángulos de 90º, en cuando se introduce otro ángulo, la cosa no funciona. Aún así insisto, es "visualmente" casi correcto la parte de los muros (digo casi, porque se están solapando, pero no se nota) y donde sí que se evidencia que no es correcto es en las barandillas, que ahí sí se ve claramente que los muros se están solapando.
+c) En `Wall` hay atributos `trimStart` y `trimEnd` que son de uso interno y que creo que tiene sentido que existant, pero según veo en los comentario pueden tener valores positivos o negativos según se quiera acortar o extender el `Wall`. El prefijo `trim` no es adecuado ya que se refiere únicamente a acortar, sería más correcto usar `adjust`
+d) Voy a intentar aclarar las situaciones que se pueden dar sobre los muros y sus acortados/extensiones. Diría que sólo haciendo acortados sería suficiente.
 
 Caso 1
 
 ```
        N
   
-       V
-     x---x
-O  V | S | V  E
-     x---x
-       V
+    VVVVVVV
+    Vx---xV
+O   V|TTT|V  E
+    Vx---xV
+    VVVVVVV
   
        S
 ```
@@ -42,76 +41,80 @@ Caso 2
 ```
        N
   
-       V
-     y---y
-     |   a
-O  V | S a V  E
-     |   a
-     |   x
-     |   b
-     y---y
-       V
+    VVVVVVV
+    Vy---yV
+    V|TTTaV
+O   V|TTTaV  E
+    V|TTTaV
+    V|TTTxV
+    V|TTTbV
+    Vy---yV
+    VVVVVVV
   
        S
 ```
 
-En este caso tenemos 2 muros `a` y `b` que están en la misma línea. Esto es así porque tendrán diferentes atributos, por ejemplo el `a` podría ser más alto y sin barandilla y el `b` más bajo y con barandilla. La intersección entre ambos `x` no tendría sentido que existiese ni que se renderizase. Con los muros no habría que hacer nada (ni acortar ni extender). El resto de intersecciones (`y`) sí que tienen que existir. Con el resto de muros (`-` y `|`) tampoco hay que hacer nada (ni acortar ni extender).
+En este caso tenemos 2 muros `a` y `b` que están en la misma línea. Esto es así porque tendrán diferentes atributos, por ejemplo el `a` podría ser más alto y sin barandilla y el `b` más bajo y con barandilla. La intersección entre ambos `x` no tendría sentido que existiese ni que se renderizase. Con los muros no habría que hacer nada (ni acortar ni extender). El resto de intersecciones (`y`) sí que tienen que existir. Con el resto de muros (`-` y `|`) tampoco hay que hacer nada (ni acortar ni extender). La no renderización de `x` y no instanciación del `WallIntersection` para `x` no tendría ninguna implicación para la creación del `floor` ya que `a` y `b` son colineales y forman una línea recta.
 
 Caso 3
 
 ```
          N
   
-         V
-     x-------x
-     |       |
-     xaaay   |
-         b   |
-         b   |
-     xcccy   |
-     |       |
-O  V |   S   | V  E
-     |       |
-     |       |
-     |       |
-     x-------x
-         V
+    VVVVVVVVVVV
+    Vx-------xV
+    V|TTTTTTT|V
+    VxaaayTTT|V
+    VVVVVbTTT|V
+    VVVVVbTTT|V
+    VxcccyTTT|V
+    V|TTTTTTT|V
+O   V|TTTTTTT|V  E
+    V|TTTTTTT|V
+    V|TTTTTTT|V
+    V|TTTTTTT|V
+    Vx-------xV
+    VVVVVVVVVVV
   
          S
 ```
 
-Este es el caso más interesante por su complejidad. Los muros `a`, `b` y `c` al ser desplazados hacia afuera (la mitad de su thickness), para que no ocupen el suelo, se van a solapar entre sí y también con las intersecciones `y`. Aquí diría que hay varias aproximaciones para resolverlo
+Este es el caso más interesante por su complejidad. Los muros `a`, `b` y `c` al ser desplazados hacia afuera (la mitad de su thickness), hacia el vacío, para que no ocupen parte del suelo, se van a solapar entre sí y también con las intersecciones `y`. Aquí diría que hay varias aproximaciones para resolverlo
 
 Caso 3 - Aproximación 1
 
-Podría acortarse cada uno de los muros `a`, `b` y `c` por el final y las intersecciones `y` dejarían de renderizarse. Esta aproximación no me gusta, porque complica la parte de las barandillas para que queden bien y habría una lógica de que en ciertas esquinas de cierto tipo las intersecciones no se renderizan (además de en las rectas) y en otras esquinas sí. Lo del principio y final es asumiendo que el orden de definición es contrario a las agujas del reloj.
+Podría acortarse cada uno de los muros `a`, `b` y `c` por el final y las intersecciones `y` dejarían de renderizarse. Esta aproximación no me gusta, porque complica la parte de las barandillas para que queden bien y habría una lógica de que en ciertas esquinas de cierto tipo las intersecciones no se renderizan (además de en las rectas) y en otras esquinas sí. Cuando menciono "principio" y "final" es asumiendo que el orden de definición es contrario a las agujas del reloj visto desde arriba.
 
 Caso 3 - Aproximación 2
 
-Podría acortarse el muro `a` por el final, el muro `b` por el principio y el final y el muro `c` por el principio. De esta forma las intersecciones `y` sí que tendría sentido que se renderizen. De esta forma todos los muros quedan centrados entre las intersecciones y las barandillas no se ven afectadas, ocupan toda la longitud del muro una vez acortado. Solo hay la acción de acortar, no hay extensión de muro. Esta aproximación la veo mejor. Lo del principio y final es asumiendo que el orden de definición es contrario a las agujas del reloj.
+Podría acortarse el muro `a` por el final, el muro `b` por el principio y el final y el muro `c` por el principio. De esta forma las intersecciones `y` sí que tendría sentido que se renderizen. De esta forma todos los muros quedan centrados entre las intersecciones y las barandillas no se ven afectadas, ocupan toda la longitud del muro una vez acortado. Solo existe la acción de acortar, no hay extensión de muro. ESTA APROXIMACIÓN ES LA QUE ME GUSTA. Cuando menciono "principio" y "final" es asumiendo que el orden de definición es contrario a las agujas del reloj visto desde arriba.
 
-f) Se supone que la aplicación soporta ahora ángulos que no son rectos. Pero tras probarlo las intersecciones y muros no se están renderizando correctamente. Pongo un mapa en ASCII de la misma forma que los anteriores para ilustrarlo
+e) Se supone que la aplicación soporta ahora ángulos que no son rectos. Pero tras probarlo las intersecciones y muros no se están renderizando correctamente. Pongo un mapa en ASCII de la misma forma que los anteriores para ilustrarlo
 
 ```
        N
   
-       V
-     ----z
-     |   a
-O  V | S  a V  E
-     |     a
-     |     x
-     |     b
-     |    b
-     ----y
-       V
-  
+    VVVVVVV
+    V----zV
+    V|TTTaV
+O   V|TTTTaV  E
+    V|TTTTTaV
+    V|TTTTTxV
+    V|TTTTTbV
+    V|TTTTbV
+    V----yV
+    VVVVVVV
+
        S
 ```
 
 En este caso en las intersecciones `x`, `y` y `z` no son a 90º (ángulo recto). Por tanto tanto el final de los muros como las intesecciones de los muros se tienen que adaptar para tener el ángulo y forma adecuada. El final de los muros `a` y `b` no debería acabar en ángulo recto. Las intersecciones `x`, `y` y `z` no son de base rectangular. En este caso la intersección `x` sí tiene sentido que exista, porque no están los muros `a` y `b` en la misma línea. En este caso el muro `b` tendría que acortarse por el final y el muro `a` por el principio. Lo del principio y final es asumiendo que el orden de definición es contrario a las agujas del reloj.
 
-g) En base a los 2 puntos anteriores (`e` y `f`), extrapola una implementación genérica. Quizá no se hayan expuesto todos los casos que se puedan dar a la hora de definir los muros. Analiza si hay algún otro caso evidente que no se haya mencionado. Si el caso que encuentras es muy "edge", y complica mucho la solución, lo documentamos como limitación. Pero los casos expuestos y variantes de los mismos son lo mínimo que me gustaría que la aplicación soportase e implementase de forma correcta. En obras de edificios es raro que haya esquinas realmente a 90º. A la hora de introducirlo en la aplicación se puede simplificar y poner a 90º cosas que no lo sean realmente, pero quiero dar la opción a tener un mínimo de precisión, porque puede que por centímetros entre una placa más o lo contrario y sobre alguna.
+f) En base a los 2 puntos anteriores (`d` y `e`), extrapola una implementación genérica. Quizá no se hayan expuesto todos los casos que se puedan dar a la hora de definir los muros. Analiza si hay algún otro caso evidente que no se haya mencionado. Si el caso que encuentras es muy "edge", y complica mucho la solución, lo documentamos como limitación. Pero los casos expuestos y variantes de los mismos son lo mínimo que me gustaría que la aplicación soportase e implementase de forma correcta. En obras de edificios es raro que haya esquinas realmente a 90º. A la hora de introducirlo en la aplicación se puede simplificar y poner a 90º cosas que no lo sean realmente, pero quiero dar la opción a tener un mínimo de precisión, porque puede que por centímetros entre una placa más o lo contrario y sobre alguna.
+
+g) `WallIntersection` ahora tiene un atributo `isRendered`. Según los puntos anteriores sobre intersecciones, para el caso de muros en la misma línea (colineales), no hace falta renderizar el muro y por tanto no tiene sentido crear esta instancia de `WallIntersection`. Es cierto que estos `WallIntersection` se utilizan para generar el `floor`, pero no aporta nada utilizar estos puntos correspondientes a `WallIntersection` no renderizables, ya que son líneas rectas y no aportan nada para la forma del floor. Así que se puede quitar ese atributo y se puede prescindir de ellos para generar el floor.
+
+h) Con respecto a los approach para las intersecciones entre muros. Creo que lo más sencillo es tener solo el caso de los muros colineales donde no hace falta intersección. Y para el resto de casos tener siempre un `WallIntersection`. Será cuestión de, en función del ángulo entre los muros, de ver qué forma tiene que tener el `WallIntersection` (ya no es siempre un poste con base cuadrada) y la forma y longitud que tienen que tener los muros, ya que puede que sea necesario acortarlos y según el angulo, los extremos no estarán a 90º
 
 # Open tasks
  
