@@ -20,8 +20,6 @@ interface SceneProps {
   onProductionUpdate: (result: SimulationResult) => void;
 }
 
-// ── Railing rail renderer ────────────────────────────────────────────────────
-
 /**
  * Renders a single railing rail segment from its pre-computed render data.
  * Switches on the discriminated union kind so TypeScript ensures all shapes
@@ -55,8 +53,6 @@ function RailingRail({ data }: { data: RailingRailRenderData }) {
   }
 }
 
-// ── Railing support renderer ─────────────────────────────────────────────────
-
 function RailingSupport({ data }: { data: RailingSupportRenderData }) {
   switch (data.kind) {
     case 'square':
@@ -75,8 +71,6 @@ function RailingSupport({ data }: { data: RailingSupportRenderData }) {
       );
   }
 }
-
-// ── Scene ────────────────────────────────────────────────────────────────────
 
 export function Scene({
   site, activeSetup, sun, date, showPoints, density, threshold, onProductionUpdate,
@@ -119,24 +113,27 @@ export function Scene({
           <meshStandardMaterial color="#b45d16" side={THREE.DoubleSide} />
         </mesh>
 
-        {/* Wall intersection posts + optional railing connect piece */}
-        {site.wallIntersections.map(wi => (
-          <group key={`post-${wi.index}`}>
-            <mesh
-              position={[wi.worldPosition.x, wi.worldPosition.y, wi.worldPosition.z]}
-              castShadow
-            >
-              <boxGeometry args={wi.renderData.boxArgs} />
-              <meshStandardMaterial color={wi.renderData.color} />
-            </mesh>
+        {/* Wall intersection posts — only rendered at convex vertices */}
+        {site.wallIntersections.map(wi => {
+          if (!wi.isRendered) return null;
+          return (
+            <group key={`post-${wi.index}`}>
+              <mesh
+                position={[wi.worldPosition.x, wi.worldPosition.y, wi.worldPosition.z]}
+                castShadow
+              >
+                <boxGeometry args={wi.renderData.boxArgs} />
+                <meshStandardMaterial color={wi.renderData.color} />
+              </mesh>
 
-            {wi.railingConnect && (
-              <group position={[wi.worldPosition.x, 0, wi.worldPosition.z]}>
-                <RailingRail data={wi.railingConnect} />
-              </group>
-            )}
-          </group>
-        ))}
+              {wi.railingConnect && (
+                <group position={[wi.worldPosition.x, 0, wi.worldPosition.z]}>
+                  <RailingRail data={wi.railingConnect} />
+                </group>
+              )}
+            </group>
+          );
+        })}
 
         {/* Wall segments: body + rail + supports */}
         {site.walls.map(wall => (
@@ -145,16 +142,13 @@ export function Scene({
             position={[wall.worldPosition.x, wall.worldPosition.y, wall.worldPosition.z]}
             rotation-y={wall.worldRotation.y}
           >
-            {/* Wall body */}
             <mesh position={wall.renderData.meshLocalPosition} castShadow>
               <boxGeometry args={wall.renderData.boxArgs} />
               <meshStandardMaterial color={wall.renderData.color} />
             </mesh>
 
-            {/* Railing rail */}
             {wall.railing && <RailingRail data={wall.railing.rail} />}
 
-            {/* Railing supports (balusters) */}
             {wall.railing?.supports.map((support, i) => (
               <RailingSupport key={i} data={support} />
             ))}
@@ -167,7 +161,6 @@ export function Scene({
         site={site}
         activeSetup={activeSetup}
         sun={sun}
-        showPoints={showPoints}
         density={density}
         threshold={threshold}
         onProductionUpdate={onProductionUpdate}

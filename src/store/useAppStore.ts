@@ -16,7 +16,7 @@ interface AppState {
   config: Config | null;
   site: Site | null;
   activeSetup: PanelSetup | null;
-  activeSetupId: string | null;
+  activeSetupIndex: number | null;
 
   // Time
   timezone: string;
@@ -36,7 +36,7 @@ interface AppState {
 
   // Actions
   loadConfig: (config: Config) => void;
-  setActiveSetupId: (id: string) => void;
+  setActiveSetupIndex: (index: number) => void;
   setTimezone: (timezone: string) => void;
   setDate: (date: Dayjs) => void;
   adjustDate: (amount: number, unit: dayjs.ManipulateType) => void;
@@ -50,26 +50,52 @@ interface AppState {
   setSimulationResult: (result: SimulationResult) => void;
 }
 
-/** Recalculates PanelSetup when setup selection or density changes. */
+/**
+ * Constructs a dayjs object that represents the given date/time components
+ * interpreted as local time in the specified IANA timezone.
+ *
+ * This is the only correct way to build dates from user-facing inputs in this
+ * application. Using dayjs() or dayjs(string) without a timezone would
+ * interpret the components in the browser's local timezone, which may differ
+ * from the installation's timezone and would cause the displayed time to
+ * diverge from what the user typed.
+ *
+ * month is 0-based (January = 0), matching dayjs convention.
+ */
+export const makeDateInTimezone = (
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  timezone: string,
+): Dayjs => {
+  const iso = [
+    `${year}-`,
+    `${String(month + 1).padStart(2, '0')}-`,
+    `${String(day).padStart(2, '0')}T`,
+    `${String(hour).padStart(2, '0')}:`,
+    `${String(minute).padStart(2, '0')}:00`,
+  ].join('');
+  return dayjs.tz(iso, timezone);
+};
+
 const buildActiveSetup = (
   config: Config,
   site: Site,
-  setupId: string,
+  index: number,
   density: number,
 ): PanelSetup | null => {
-  const setupConfig = config.setups.find(s => s.id === setupId);
+  const setupConfig = config.setups[index];
   if (!setupConfig) return null;
-  return PanelSetupFactory.create(setupConfig, site, density);
+  return PanelSetupFactory.create(setupConfig, index, site, density);
 };
 
 const rebuildSamplePoints = (
   activeSetup: PanelSetup,
-  newDensity: number
-): PanelSetup => {
-  return PanelSetupFactory.rebuildSamplePoints(activeSetup, newDensity);
-}
+  newDensity: number,
+): PanelSetup => PanelSetupFactory.rebuildSamplePoints(activeSetup, newDensity);
 
-/** Recalculates SunState from current date and site location. */
 const buildSun = (date: Dayjs, config: Config): SunState =>
   calculateSunState(
     date.toDate(),
@@ -84,11 +110,10 @@ const clampToCurrentYear = (date: Dayjs): Dayjs => {
 };
 
 export const useAppStore = create<AppState>((set, get) => ({
-  // Initial state
   config: null,
   site: null,
   activeSetup: null,
-  activeSetupId: null,
+  activeSetupIndex: null,
   timezone: resolveInitialTimezone(),
   date: dayjs(),
   isPlaying: false,
@@ -100,26 +125,35 @@ export const useAppStore = create<AppState>((set, get) => ({
   simulationInterval: 60,
   simulationResult: null,
 
-  // Actions
-
   loadConfig: (config) => {
     const site = SiteFactory.create(config);
-    const firstSetupId = config.setups[0].id;
     const date = dayjs().tz(config.site.timezone).second(0);
-    const activeSetup = buildActiveSetup(config, site, firstSetupId, get().density);
+    const activeSetup = buildActiveSetup(config, site, 0, get().density);
     const sun = buildSun(date, config);
-
-    set({ config, site, activeSetupId: firstSetupId, activeSetup, date, sun });
+    set({ config, site, activeSetupIndex: 0, activeSetup, date, sun });
   },
 
-  setActiveSetupId: (id) => {
+  setActiveSetupIndex: (index) => {
     const { config, site, density } = get();
     if (!config || !site) return;
-    const activeSetup = buildActiveSetup(config, site, id, density);
-    set({ activeSetupId: id, activeSetup });
+    const activeSetup = buildActiveSetup(config, site, index, density);
+    set({ activeSetupIndex: index, activeSetup });
   },
 
-  setTimezone: (timezone) => set({ timezone }),
+  /**
+   * Changes the display timezone while preserving the current UTC instant.
+   *
+   * The solar calculations always use date.toDate() (a UTC instant), so
+   * changing timezone never affects them. The date and time fields in the UI
+   * update to show the same instant in the new timezone, which is the
+   * expected behaviour: the user is choosing how to read the clock, not
+   * shifting the simulation to a different moment in time.
+   */
+  setTimezone: (timezone) => {
+    const { date } = get();
+    const newDate = date.tz(timezone);
+    set({ timezone, date: newDate });
+  },
 
   setDate: (date) => {
     const { config } = get();
@@ -160,7 +194,3 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setSimulationResult: (simulationResult) => set({ simulationResult }),
 }));
-
-export const makeDateInTimezone = (year, month, day, hour, minute, timezone): Dayjs => {
-  return dayjs();
-}

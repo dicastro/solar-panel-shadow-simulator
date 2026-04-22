@@ -19,7 +19,7 @@
     "showPoints": "Show sample points",
     "threshold": "Zone shadow threshold",
     "thresholdTooltip": "Minimum number of shaded points to consider a zone as shaded",
-    "pointsPerPanel": "Points per panel",
+    "totalSamplePoints": "Total sample points",
     "timeSteps": "Time steps",
     "totalRays": "Total rays",
     "instantPower": "Estimated instant output",

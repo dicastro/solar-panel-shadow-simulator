@@ -10,7 +10,6 @@ interface Props {
   site: Site;
   activeSetup: PanelSetup;
   sun: SunState;
-  showPoints: boolean;
   density: number;
   threshold: number;
   onProductionUpdate: (result: SimulationResult) => void;
@@ -26,16 +25,16 @@ interface Props {
  * Children receive the latest ShadowMap as a render prop so they can colour
  * sample points without needing their own raycasting.
  *
- * NOTE: `showPoints` is intentionally excluded from the dirty-flag effect.
- * It only controls whether sample points are rendered visually in
- * SolarPanelComponent — it has no effect on shadow calculations. Including it
- * would trigger a full (expensive) raycasting pass every time the user toggles
- * point visibility, with no change in output.
+ * `showPoints` is intentionally absent from Props. It controls whether sample
+ * point spheres are rendered visually in SolarPanelComponent, but has no
+ * effect on shadow computation. Accepting it here would tempt callers to
+ * include it in dependencies, triggering expensive raycasting passes on every
+ * visibility toggle with no change in output.
  */
 export function ShadowedScene({
   site, activeSetup, sun, density, threshold,
   onProductionUpdate, children,
-}: Omit<Props, 'showPoints'> & { showPoints: boolean }) {
+}: Props) {
   const { scene } = useThree();
 
   const rebuildKey = `${site.centerX}-${site.centerZ}-${activeSetup.id}`;
@@ -58,7 +57,7 @@ export function ShadowedScene({
   thresholdRef.current = threshold;
   onUpdateRef.current = onProductionUpdate;
 
-  // `showPoints` is deliberately absent: toggling point visibility must not
+  // showPoints is deliberately absent: toggling point visibility must not
   // trigger shadow recomputation.
   useEffect(() => {
     needsUpdate.current = true;

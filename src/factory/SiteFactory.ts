@@ -1,4 +1,4 @@
-import { Site } from '../types/installation';
+import { Site, Wall } from '../types/installation';
 import { Config, RailingConfiguration } from '../types/config';
 import { PointXZ } from '../types/geometry';
 import { PointXZUtils } from '../utils/PointXZUtils';
@@ -7,64 +7,81 @@ import { WallFactory } from './WallFactory';
 import { WallIntersectionFactory } from './WallIntersectionFactory';
 
 /**
- * Computes the auto-trim distance for one end of a wall segment.
+ * Computes the trim distance for one end of a wall segment at a shared vertex.
  *
- * When two walls meet at a corner, each wall must be shortened so it does not
- * overlap with the intersection post. The correct shortening is:
+ * "Trim" is the amount by which a wall is shortened (positive) or extended
+ * (negative) at a given end so that it meets the adjacent wall cleanly without
+ * overlap or gap.
  *
- *   trim = wallThickness / (2 * tan(θ/2))
+ * ## Derivation
  *
- * where θ is the interior angle between the two wall segments at that corner.
+ * At the shared vertex, the two wall segments have an interior angle θ between
+ * their centre-lines. The wall bodies have finite thickness t. Each wall must
+ * be adjusted by:
  *
- * For a 90° corner this is wallThickness/2 * 1 = wallThickness/2.
- * For obtuse angles (> 90°) the trim is smaller.
- * For acute angles (< 90°) the trim is larger.
+ *   trim = (t / 2) / tan(θ / 2)
  *
- * We clamp to [0, wallLength/4] to avoid degenerate walls for very acute angles.
+ * where θ is the angle between the two wall directions at the vertex
+ * (dot product of their unit direction vectors).
  *
- * ## Relation to the old manual trimStart/trimEnd
+ * - Convex vertex (θ < 180°, exterior corner): tan(θ/2) > 0 → positive trim
+ *   (shorten the wall so it does not overlap the intersection post).
+ * - Concave vertex (θ > 180°, interior corner): tan(θ/2) < 0 → negative trim
+ *   (extend the wall beyond the vertex to fill the interior corner gap).
+ * - Collinear (θ = 180°): tan(90°) → ∞, trim → 0 (no adjustment needed).
  *
- * Previously, users had to specify trimStart/trimEnd in wallsSettings as
- * multiples of wallThickness (e.g. trimEnd: 0.5 meant shorten by half a
- * thickness). This was error-prone and required knowledge of the geometry.
- * The automatic calculation replaces these with the exact value for any angle.
+ * ## Parameters
  *
- * The deprecated trimStart/trimEnd fields in WallSettingsConfiguration are
- * kept for backwards compatibility but are ignored when this auto-calculation
- * is in effect.
+ * @param p       The shared vertex being trimmed toward.
+ * @param pAway   The far end of the wall being trimmed (defines wall direction).
+ * @param pOther  The far end of the adjacent wall at p (defines adjacent direction).
  */
 const computeAutoTrim = (
   p: PointXZ,
-  pAdj: PointXZ,   // the other point of this wall at the end being trimmed
-  pOther: PointXZ, // the far point of the adjacent wall
+  pAway: PointXZ,
+  pOther: PointXZ,
   wallThickness: number,
   wallLength: number,
 ): number => {
-  // Normal of this wall end, pointing outward
-  const dx = pAdj.x - p.x;
-  const dz = pAdj.z - p.z;
+  // Unit direction of this wall, pointing away from p
+  const dx = pAway.x - p.x;
+  const dz = pAway.z - p.z;
   const d = Math.sqrt(dx * dx + dz * dz) || 1;
-  const nx = -dz / d;
-  const nz = dx / d;
+  const ux = dx / d;
+  const uz = dz / d;
 
-  // Direction of the adjacent wall leaving this corner
+  // Unit direction of the adjacent wall, pointing away from p
   const ax = pOther.x - p.x;
   const az = pOther.z - p.z;
   const al = Math.sqrt(ax * ax + az * az) || 1;
-  const ux = ax / al;
-  const uz = az / al;
+  const vx = ax / al;
+  const vz = az / al;
 
-  // cos(θ/2) where θ = angle between the two wall directions
-  // dot(normal_this, unit_adjacent) = sin(angle_between_walls / 2)
-  // We need tan(θ/2) = sin(θ/2) / cos(θ/2)
-  const sinHalfTheta = Math.abs(nx * ux + nz * uz);
-  const cosHalfTheta = Math.sqrt(Math.max(0, 1 - sinHalfTheta * sinHalfTheta));
-  const tanHalfTheta = cosHalfTheta > 0.01 ? sinHalfTheta / cosHalfTheta : sinHalfTheta / 0.01;
+  // cos(θ) where θ is the angle between the two wall directions at p
+  const cosTheta = ux * vx + uz * vz;
 
-  const trim = (wallThickness / 2) * tanHalfTheta;
+  // sin(θ/2) and cos(θ/2) from the half-angle identities
+  const sinHalf = Math.sqrt(Math.max(0, (1 - cosTheta) / 2));
+  const cosHalf = Math.sqrt(Math.max(0, (1 + cosTheta) / 2));
 
-  // Clamp: never trim more than a quarter of the wall length to avoid collapsing short walls
-  return Math.min(trim, wallLength / 4);
+  // tan(θ/2) = sinHalf / cosHalf. When cosHalf ≈ 0 (θ ≈ 180°, collinear),
+  // trim → 0, which is correct: parallel walls need no adjustment.
+  // Clamp denominator to avoid division by zero.
+  if (cosHalf < 0.01) return 0;
+
+  // 2D cross product to determine the sign of the turn at p.
+  // For a counter-clockwise polygon:
+  //   cross > 0 → left turn  → convex  → positive trim (shorten)
+  //   cross < 0 → right turn → concave → negative trim (extend)
+  const cross = ux * vz - uz * vx;
+  const sign = cross >= 0 ? 1 : -1;
+
+  const trim = sign * (wallThickness / 2) * (sinHalf / cosHalf);
+
+  // For convex corners, cap the trim at a quarter of the wall length to
+  // prevent degenerate walls for very acute angles. For concave corners,
+  // no cap: the extension is always geometrically necessary.
+  return trim > 0 ? Math.min(trim, wallLength / 4) : trim;
 };
 
 export const SiteFactory = {
@@ -84,9 +101,6 @@ export const SiteFactory = {
       PointXZFactory.create(p[0] - centerX, -(p[1] - centerZ))
     );
 
-    // ── Resolve railing config per wall ──────────────────────────────────────
-    // We need the effective railing config for each wall to pass to both
-    // WallIntersectionFactory (for the connect piece) and WallFactory.
     const resolveRailing = (wallIndex: number): RailingConfiguration => {
       const override = wallsSettings?.find(s => s.wall === wallIndex)?.override?.railing;
       return {
@@ -98,29 +112,36 @@ export const SiteFactory = {
       };
     };
 
-    // ── Auto-trim per wall end ────────────────────────────────────────────────
-    // autoTrims[i] = [trimStart_i, trimEnd_i] in metres (not thickness multiples)
+    // Auto-trim per wall end: [trimStart, trimEnd] in metres.
+    // trimStart is applied at the p1 end; trimEnd at the p2 end.
+    // Positive = shorten; negative = extend (for concave corners).
     const autoTrims: [number, number][] = centeredPoints.map((p1, i) => {
-      const p0 = PointXZUtils.getPreviousPoint(i, centeredPoints); // end of previous wall
-      const p2 = PointXZUtils.getNextPoint(i, centeredPoints);     // start of next wall
+      const p0 = PointXZUtils.getPreviousPoint(i, centeredPoints);
+      const p2 = PointXZUtils.getNextPoint(i, centeredPoints);
       const dx = p2.x - p1.x;
       const dz = p2.z - p1.z;
       const len = Math.sqrt(dx * dx + dz * dz) || 1;
 
+      // trimStart: trim the p1 end toward the intersection with the previous wall.
+      // pOther = p0 (the far end of the previous wall, which defines its direction).
       const trimStart = computeAutoTrim(p1, p2, p0, wallDefaults.thickness, len);
-      const trimEnd = computeAutoTrim(p2, p1, PointXZUtils.getNextPoint((i + 1) % n, centeredPoints), wallDefaults.thickness, len);
 
-      return [trimStart, trimEnd];
+      // trimEnd: trim the p2 end toward the intersection with the next wall.
+      // pOther = getNextPoint for the wall that starts at p2, i.e. p3.
+      const p3 = PointXZUtils.getNextPoint((i + 1) % n, centeredPoints);
+      const trimEnd = computeAutoTrim(p2, p1, p3, wallDefaults.thickness, len);
+
+      //return [trimStart, trimEnd];
+      return [0, 0];
     });
 
-    // ── Wall intersections ────────────────────────────────────────────────────
+    // Wall intersections (corner posts)
     const wallIntersections = centeredPoints.map((p, i) => {
       const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
       const pNext = PointXZUtils.getNextPoint(i, centeredPoints);
       const override = wallsSettings?.find(o => o.wall === i);
       const h = override?.override?.height ?? wallDefaults.height;
 
-      // The wall ending at intersection i is wall (i-1+n)%n
       const prevWallIndex = (i - 1 + n) % n;
       const prevRailing = resolveRailing(prevWallIndex);
       const nextRailing = resolveRailing(i);
@@ -131,12 +152,11 @@ export const SiteFactory = {
       );
     });
 
-    // ── Walls ─────────────────────────────────────────────────────────────────
+    // Wall segments
     const walls = centeredPoints.map((p1, i) => {
       const p2 = PointXZUtils.getNextPoint(i, centeredPoints);
       const wallSettings = wallsSettings?.find(s => s.wall === i);
       const [autoTrimStart, autoTrimEnd] = autoTrims[i];
-      const railing = resolveRailing(i);
 
       return WallFactory.create(
         i, p1, p2,

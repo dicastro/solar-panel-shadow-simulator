@@ -86,10 +86,6 @@ export interface WallOverrideConfiguration {
 export interface WallSettingsConfiguration {
   readonly wall: number;
   readonly override?: WallOverrideConfiguration;
-  /** @deprecated Ignored when wall auto-connect is enabled (default). */
-  readonly trimStart?: number;
-  /** @deprecated Ignored when wall auto-connect is enabled (default). */
-  readonly trimEnd?: number;
 }
 
 export interface InstallationConfiguration {
@@ -162,7 +158,6 @@ export interface PanelArraySettings {
 }
 
 export interface PanelSetupConfiguration {
-  readonly id: string;
   readonly label: string;
   readonly panelDefaults: PanelDefinition;
   readonly arrays: PanelArrayConfiguration[];

@@ -4,6 +4,23 @@ import { PanelSetupConfiguration } from '../types/config';
 import { SolarPanelArrayFactory } from './SolarPanelArrayFactory';
 import { SamplePointFactory } from './SamplePointFactory';
 
+/**
+ * Derives a stable internal id from a setup's label and its position in the
+ * config array. The label is normalised (lower-cased, accents stripped, spaces
+ * replaced with hyphens) so that the id is URL-safe and human-readable.
+ * The index suffix guarantees uniqueness even if two setups share the same
+ * normalised label.
+ */
+const deriveSetupId = (label: string, index: number): string => {
+  const normalised = label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')   // strip diacritics
+    .toLowerCase()
+    .replace(/\s+/g, '-')              // spaces → hyphens
+    .replace(/[^a-z0-9-]/g, '');       // remove non-alphanumeric
+  return `${normalised}-${index}`;
+};
+
 export const PanelSetupFactory = {
   /**
    * Creates a full PanelSetup from scratch: panel geometry, world positions,
@@ -16,6 +33,7 @@ export const PanelSetupFactory = {
    */
   create: (
     setupConfig: PanelSetupConfiguration,
+    setupIndex: number,
     site: Site,
     density: number,
   ): PanelSetup => {
@@ -31,7 +49,7 @@ export const PanelSetupFactory = {
     );
 
     return {
-      id: setupConfig.id,
+      id: deriveSetupId(setupConfig.label, setupIndex),
       label: setupConfig.label,
       panelArrays,
     };
@@ -42,16 +60,10 @@ export const PanelSetupFactory = {
    * reusing all panel geometry (world positions, rotations, render data) from
    * the existing setup unchanged.
    *
-   * Why this matters:
-   *   Panel geometry (world position, rotation, zone layout, render data) is
-   *   independent of sampling density. Rebuilding it unnecessarily on every
-   *   density slider change wastes CPU and triggers React re-renders of the
-   *   entire panel tree even though nothing visual has changed.
-   *
-   * When to use:
-   *   Call this from the store's `setDensity` action instead of `create`.
-   *   Call `create` only when the setup itself changes (different id) or on
-   *   initial load.
+   * Panel geometry (world position, rotation, zone layout, render data) is
+   * independent of sampling density. Rebuilding it unnecessarily on every
+   * density slider change wastes CPU and triggers React re-renders of the
+   * entire panel tree even though nothing visual has changed.
    */
   rebuildSamplePoints: (
     existing: PanelSetup,

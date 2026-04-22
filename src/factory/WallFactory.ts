@@ -16,8 +16,6 @@ interface RailingSupportConfiguration {
   readonly includeAtEnd: boolean;
 }
 
-// ── Rail render data builders ────────────────────────────────────────────────
-
 /**
  * Builds the render data for a railing rail of any shape.
  *
@@ -25,11 +23,14 @@ interface RailingSupportConfiguration {
  * of the wall group). The localPosition Y is the wall height plus the
  * heightOffset so the rail sits on top of the wall.
  *
- * Half-cylinder thetaStart/thetaLength:
- *   orientation 'up'   → flat face down  → thetaStart = 0,   thetaLength = π
- *   orientation 'down' → flat face up    → thetaStart = π,   thetaLength = π
- * The cylinder is oriented along Z (rotated 90° around X), so the CylinderGeometry
- * height axis aligns with the wall direction.
+ * For CylinderGeometry the constructor signature is:
+ *   (radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength)
+ *
+ * Half-cylinder uses openEnded=true and thetaLength=π so only half the
+ * cylinder surface is drawn. thetaStart controls which half:
+ *   orientation 'up'   → thetaStart = 0   (flat face pointing down)
+ *   orientation 'down' → thetaStart = π   (flat face pointing up)
+ * The cylinder is rotated 90° around X so its height axis aligns with Z (wall direction).
  */
 const buildRailRenderData = (
   shape: RailingShape,
@@ -38,7 +39,6 @@ const buildRailRenderData = (
   length: number,
 ): RailingRailRenderData => {
   const localPosition: [number, number, number] = [0, wallHeight + heightOffset, 0];
-  // Cylinder/half-cylinder need X rotation to align the height axis with Z (wall direction)
   const cylinderRotation: [number, number, number] = [Math.PI / 2, 0, 0];
   const noRotation: [number, number, number] = [0, 0, 0];
 
@@ -63,41 +63,25 @@ const buildRailRenderData = (
 
     case 'half-cylinder': {
       const thetaStart = shape.orientation === 'up' ? 0 : Math.PI;
-      const thetaLength = Math.PI;
       return {
         kind: 'half-cylinder',
         localPosition,
         localRotation: cylinderRotation,
-        args: [shape.radius, shape.radius, length, HALF_CYLINDER_SEGMENTS, thetaStart, thetaLength],
+        // heightSegments=1, openEnded=true, then thetaStart and thetaLength
+        args: [shape.radius, shape.radius, length, HALF_CYLINDER_SEGMENTS, 1, true, thetaStart, Math.PI],
         color: RAILING_COLOR,
       };
     }
   }
 };
 
-// ── Support (baluster) render data builder ───────────────────────────────────
-
-/**
- * Computes the local positions of all balusters along a wall and builds their
- * render data.
- *
- * Coordinate convention: localPosition is relative to the wall group origin.
- *   X = 0 (centred on wall width)
- *   Y = wallHeight + heightOffset / 2  (mid-height of the baluster)
- *   Z = position along wall length (−length/2 … +length/2)
- *
- * Distribution:
- *   - If includeAtStart && includeAtEnd: positions at −length/2, intermediate
- *     points, and +length/2.
- *   - Otherwise, the `count` intermediates are distributed evenly in (−L/2, L/2).
- */
 const buildSupportRenderData = (
   support: RailingSupportConfiguration,
   wallHeight: number,
   heightOffset: number,
   wallLength: number,
 ): RailingSupportRenderData[] => {
-  const supportHeight = heightOffset; // from wall top to rail centre
+  const supportHeight = heightOffset;
   const midY = wallHeight + supportHeight / 2;
 
   const positions: number[] = [];
@@ -105,8 +89,6 @@ const buildSupportRenderData = (
   if (support.includeAtStart) positions.push(-wallLength / 2);
   if (support.includeAtEnd) positions.push(wallLength / 2);
 
-  // Distribute `count` intermediate supports uniformly between endpoints.
-  // If count = 3, they go at 1/4, 1/2, 3/4 of the wall length.
   const steps = support.count + 1;
   for (let i = 1; i < steps; i++) {
     positions.push(-wallLength / 2 + (wallLength * i) / steps);
@@ -133,19 +115,8 @@ const buildSupportRenderData = (
   });
 };
 
-// ── Default shape ────────────────────────────────────────────────────────────
-
-/**
- * Returns the effective railing shape, applying a sensible default when none
- * is specified in the config.
- *
- * Backwards-compatible default: a cylinder with radius 0.025 (equivalent to
- * the old `shape: 'round'` with `thickness: 0.05`).
- */
 const resolveShape = (shape?: RailingShape): RailingShape =>
   shape ?? { kind: 'cylinder', radius: 0.025 };
-
-// ── WallFactory ───────────────────────────────────────────────────────────────
 
 export const WallFactory = {
   create: (
@@ -155,11 +126,6 @@ export const WallFactory = {
     wallDefaults: WallConfiguration,
     railingDefaults: RailingConfiguration,
     wallSettings?: WallSettingsConfiguration,
-    /**
-     * Pre-calculated trim values from SiteFactory (based on intersection
-     * geometry). These replace the deprecated manual trimStart/trimEnd from
-     * the public config.
-     */
     autoTrimStart = 0,
     autoTrimEnd = 0,
   ): Wall => {
@@ -185,8 +151,6 @@ export const WallFactory = {
     const groupX = (p1.x + p2.x) / 2 + (nx * wallThickness / 2) + (ux * offsetFromCenter);
     const groupZ = (p1.z + p2.z) / 2 + (nz * wallThickness / 2) + (uz * offsetFromCenter);
 
-    // ── Railing ──────────────────────────────────────────────────────────────
-
     const railingOverride = wallSettings?.override?.railing;
     const isRailingActive = railingOverride?.active ?? railingDefaults.active;
 
@@ -200,16 +164,16 @@ export const WallFactory = {
       const supportStart = railingOverride?.support?.includeAtStart ?? false;
       const supportEnd = railingOverride?.support?.includeAtEnd ?? false;
       const supportShape = railingOverride?.support?.shape ?? railingDefaults.support?.shape;
-      
+
       const rail = buildRailRenderData(shape, wallHeight, heightOffset, currentDist);
 
       const supports: RailingSupportRenderData[] = supportShape
         ? buildSupportRenderData({
-            shape: supportShape,
-            count: supportCount,
-            includeAtStart: supportStart,
-            includeAtEnd: supportEnd
-          }, wallHeight, heightOffset, currentDist)
+          shape: supportShape,
+          count: supportCount,
+          includeAtStart: supportStart,
+          includeAtEnd: supportEnd
+        }, wallHeight, heightOffset, currentDist)
         : [];
 
       railing = { shape, autoConnect, rail, supports };

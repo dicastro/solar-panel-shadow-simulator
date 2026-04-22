@@ -29,7 +29,7 @@ export type RailingRailRenderDataCylinder = {
   readonly kind: 'cylinder';
   readonly localPosition: [number, number, number];
   readonly localRotation: [number, number, number];
-  readonly args: [number, number, number, number]; // [rTop, rBottom, length, segments]
+  readonly args: [number, number, number, number]; // [radiusTop, radiusBottom, length, segments]
   readonly color: string;
 };
 
@@ -37,7 +37,8 @@ export type RailingRailRenderDataHalfCylinder = {
   readonly kind: 'half-cylinder';
   readonly localPosition: [number, number, number];
   readonly localRotation: [number, number, number];
-  readonly args: [number, number, number, number, number, number]; // [r,r,len,seg,thetaStart,thetaLen]
+  // CylinderGeometry: [radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength]
+  readonly args: [number, number, number, number, number, boolean, number, number];
   readonly color: string;
 };
 
@@ -56,7 +57,7 @@ export type RailingSupportRenderDataSquare = {
 export type RailingSupportRenderDataCylinder = {
   readonly kind: 'cylinder';
   readonly localPosition: [number, number, number];
-  readonly args: [number, number, number, number]; // [rTop, rBottom, height, segments]
+  readonly args: [number, number, number, number]; // [radiusTop, radiusBottom, height, segments]
   readonly color: string;
 };
 
@@ -95,9 +96,16 @@ export interface WallIntersection {
   readonly worldPosition: Vector3;
   readonly renderData: WallIntersectionRenderData;
   /**
+   * Whether this intersection should be rendered as a post.
+   * False for collinear vertices (angle ≈ 180°) and concave vertices
+   * (interior angle > 180°), where a post would overlap the walls or
+   * appear outside the terrace perimeter.
+   */
+  readonly isRendered: boolean;
+  /**
    * Small railing segment that fills the corner gap between adjacent wall
-   * railings. Null when autoConnect is false on both adjacent railings, or
-   * when neither adjacent wall has an active railing.
+   * railings. Non-null only when isRendered is true and both adjacent walls
+   * have active railings with autoConnect enabled.
    */
   readonly railingConnect: RailingRailRenderData | null;
 }
@@ -108,8 +116,9 @@ export interface Wall {
   readonly p2: PointXZ;
   readonly height: number;
   readonly thickness: number;
-  /** Internal use only — calculated by SiteFactory, not user-configured. */
+  /** Trim applied at the p1 end (metres). Positive = shorten, negative = extend. */
   readonly trimStart: number;
+  /** Trim applied at the p2 end (metres). Positive = shorten, negative = extend. */
   readonly trimEnd: number;
   readonly worldPosition: Vector3;
   readonly worldRotation: Euler3;

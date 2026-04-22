@@ -19,7 +19,7 @@
     "showPoints": "Visualizar puntos",
     "threshold": "Umbral sombra zona",
     "thresholdTooltip": "Número mínimo de puntos en sombra para anular una zona",
-    "pointsPerPanel": "Puntos por panel",
+    "totalSamplePoints": "Total puntos de muestreo",
     "timeSteps": "Pasos de tiempo",
     "totalRays": "Total rayos",
     "instantPower": "Producción estimada instante",

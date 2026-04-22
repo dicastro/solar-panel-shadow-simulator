@@ -7,24 +7,51 @@
     "azimuth": 0,
     "timezone": "Europe/Madrid",
     "wallPoints": [
-      [0, 0],
-      [3.7, 0],
-      [3.7, 6.6],
-      [3.7, 17],
-      [0, 17],
-      [0, 12.8],
-      [1.5, 12.8],
-      [1.5, 8.6],
-      [0, 8.6]
+      [
+        0,
+        0
+      ],
+      [
+        3.7,
+        0
+      ],
+      [
+        4.2,
+        6.6
+      ],
+      [
+        3.7,
+        17
+      ],
+      [
+        0,
+        17
+      ],
+      [
+        0,
+        12.8
+      ],
+      [
+        1.5,
+        12.8
+      ],
+      [
+        1.5,
+        8.6
+      ],
+      [
+        0,
+        8.6
+      ]
     ],
     "wallDefaults": {
       "height": 0.7,
       "thickness": 0.2
     },
-    "railingDefaults": { 
-      "active": true, 
-      "heightOffset": 0.18, 
-      "shape":  {
+    "railingDefaults": {
+      "active": true,
+      "heightOffset": 0.18,
+      "shape": {
         "kind": "cylinder",
         "radius": 0.02
       },
@@ -36,149 +63,190 @@
       },
       "autoConnect": false
     },
-    "wallsSettings": [{
-      "wall": 0,
-      "override": {
-        "railing": {
-          "support": {
-            "count": 2
+    "wallsSettings": [
+      {
+        "wall": 0,
+        "override": {
+          "railing": {
+            "support": {
+              "count": 2
+            }
+          }
+        }
+      },
+      {
+        "wall": 1,
+        "override": {
+          "railing": {
+            "support": {
+              "count": 2
+            }
+          }
+        }
+      },
+      {
+        "wall": 2,
+        "override": {
+          "height": 1.8,
+          "railing": {
+            "active": false
+          }
+        }
+      },
+      {
+        "wall": 3,
+        "override": {
+          "railing": {
+            "support": {
+              "count": 2
+            }
+          }
+        }
+      },
+      {
+        "wall": 4,
+        "override": {
+          "railing": {
+            "support": {
+              "count": 2
+            }
+          }
+        }
+      },
+      {
+        "wall": 5,
+        "override": {
+          "railing": {
+            "support": {
+              "count": 2
+            }
+          }
+        }
+      },
+      {
+        "wall": 6,
+        "override": {
+          "railing": {
+            "support": {
+              "count": 2
+            }
+          }
+        }
+      },
+      {
+        "wall": 7,
+        "override": {
+          "railing": {
+            "support": {
+              "count": 2
+            }
+          }
+        }
+      },
+      {
+        "wall": 8,
+        "override": {
+          "railing": {
+            "support": {
+              "count": 4
+            }
           }
         }
       }
-    }, {
-      "wall": 1,
-      "override": {
-        "railing": {
-          "support": {
-            "count": 2
-          }
-        }
-      }
-    }, {
-      "wall": 2,
-      "override": {
-        "height": 1.8,
-        "railing": {
-          "active": false
-        }
-      }
-    }, {
-      "wall": 3,
-      "override": {
-        "railing": {
-          "support": {
-            "count": 2
-          }
-        }
-      }
-    }, {
-      "wall": 4,
-      "override": {
-        "railing": {
-          "support": {
-            "count": 2
-          }
-        }
-      }
-    }, {
-      "wall": 5,
-      "override": {
-        "railing": {
-          "support": {
-            "count": 2
-          }
-        }
-      }
-    }, {
-      "wall": 6,
-      "override": {
-        "railing": {
-          "support": {
-            "count": 2
-          }
-        }
-      }
-    }, {
-      "wall": 7,
-      "override": {
-        "railing": {
-          "support": {
-            "count": 2
-          }
-        }
-      }
-    }, {
-      "wall": 8,
-      "override": {
-        "railing": {
-          "support": {
-            "count": 4
-          }
-        }
-      }
-    }]
+    ]
   },
-  "setups": [{
-    "id": "option-a",
-    "label": "3 filas a 70cm alto",
-    "panelDefaults": {
-      "width": 1,
-      "height": 2,
-      "peakPower": 415,
-      "zones": 2,
-      "zonesDisposition": "horizontal",
-      "hasOptimizer": false,
-      "string": "S1"
+  "setups": [
+    {
+      "label": "3 filas a 70cm alto",
+      "panelDefaults": {
+        "width": 1,
+        "height": 2,
+        "peakPower": 415,
+        "zones": 2,
+        "zonesDisposition": "horizontal",
+        "hasOptimizer": false,
+        "string": "S1"
+      },
+      "arrays": [
+        {
+          "position": [
+            0.3,
+            0.8
+          ],
+          "azimuth": 0,
+          "elevation": 0.5,
+          "inclination": 10,
+          "rows": 1,
+          "columns": 3,
+          "spacing": [
+            0.01,
+            0.01
+          ],
+          "orientation": "portrait"
+        },
+        {
+          "position": [
+            0.3,
+            3.5
+          ],
+          "azimuth": 0,
+          "elevation": 0.5,
+          "inclination": 10,
+          "rows": 1,
+          "columns": 3,
+          "spacing": [
+            0.01,
+            0.01
+          ],
+          "orientation": "portrait"
+        },
+        {
+          "position": [
+            0.3,
+            6.3
+          ],
+          "azimuth": 0,
+          "elevation": 0.5,
+          "inclination": 10,
+          "rows": 1,
+          "columns": 3,
+          "spacing": [
+            0.01,
+            0.01
+          ],
+          "orientation": "portrait"
+        }
+      ]
     },
-    "arrays": [{
-      "position": [0.3, 0.8],
-      "azimuth": 0,
-      "elevation": 0.5,
-      "inclination": 10,
-      "rows": 1,
-      "columns": 3,
-      "spacing": [0.01, 0.01],
-      "orientation": "portrait"
-    }, {
-      "position": [0.3, 3.5],
-      "azimuth": 0,
-      "elevation": 0.5,
-      "inclination": 10,
-      "rows": 1,
-      "columns": 3,
-      "spacing": [0.01, 0.01],
-      "orientation": "portrait"
-    }, {
-      "position": [0.3, 6.3],
-      "azimuth": 0,
-      "elevation": 0.5,
-      "inclination": 10,
-      "rows": 1,
-      "columns": 3,
-      "spacing": [0.01, 0.01],
-      "orientation": "portrait"
-    }]
-  }, {
-    "id": "current-setup",
-    "label": "Configuración Actual",
-    "panelDefaults": {
-      "width": 1,
-      "height": 2,
-      "peakPower": 415,
-      "zones": 2,
-      "zonesDisposition": "horizontal",
-      "hasOptimizer": false,
-      "string": "S1"
-    },
-    "arrays": [{
-      "position": [0.2, 0.2],
-      "azimuth": 0,
-      "elevation": 0.5,
-      "inclination": 20,
-      "rows": 3,
-      "columns": 3,
-      "spacing": [0.01, 0.01],
-      "orientation": "portrait"
-    }]
-  }]
+    {
+      "label": "Configuración Actual",
+      "panelDefaults": {
+        "width": 1,
+        "height": 2,
+        "peakPower": 415,
+        "zones": 2,
+        "zonesDisposition": "horizontal",
+        "hasOptimizer": false,
+        "string": "S1"
+      },
+      "arrays": [
+        {
+          "position": [
+            0.2,
+            0.2
+          ],
+          "azimuth": 0,
+          "elevation": 0.5,
+          "inclination": 20,
+          "rows": 3,
+          "columns": 3,
+          "spacing": [
+            0.01,
+            0.01
+          ],
+          "orientation": "portrait"
+        }
+      ]
+    }
+  ]
 }
