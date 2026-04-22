@@ -89,32 +89,13 @@ Caso 3 - Aproximación 2
 
 Podría acortarse el muro `a` por el final, el muro `b` por el principio y el final y el muro `c` por el principio. De esta forma las intersecciones `y` sí que tendría sentido que se renderizen. De esta forma todos los muros quedan centrados entre las intersecciones y las barandillas no se ven afectadas, ocupan toda la longitud del muro una vez acortado. Solo existe la acción de acortar, no hay extensión de muro. ESTA APROXIMACIÓN ES LA QUE ME GUSTA. Cuando menciono "principio" y "final" es asumiendo que el orden de definición es contrario a las agujas del reloj visto desde arriba.
 
-e) Se supone que la aplicación soporta ahora ángulos que no son rectos. Pero tras probarlo las intersecciones y muros no se están renderizando correctamente. Pongo un mapa en ASCII de la misma forma que los anteriores para ilustrarlo
+e) `WallIntersection` ahora tiene un atributo `isRendered`. Según los puntos anteriores sobre intersecciones, para el caso de muros en la misma línea (colineales), no hace falta renderizar el muro y por tanto no tiene sentido crear esta instancia de `WallIntersection`. Es cierto que estos `WallIntersection` se utilizan para generar el `floor`, pero no aporta nada utilizar estos puntos correspondientes a `WallIntersection` no renderizables, ya que son líneas rectas y no aportan nada para la forma del floor. Así que se puede quitar ese atributo y se puede prescindir de ellos para generar el floor.
 
-```
-       N
-  
-    VVVVVVV
-    V----zV
-    V|TTTaV
-O   V|TTTTaV  E
-    V|TTTTTaV
-    V|TTTTTxV
-    V|TTTTTbV
-    V|TTTTbV
-    V----yV
-    VVVVVVV
+f) Con respecto a los approach para las intersecciones entre muros. Creo que lo más sencillo es tener solo el caso de los muros colineales donde no hace falta intersección. Y para el resto de casos tener siempre un `WallIntersection`. Será cuestión de, en función del ángulo entre los muros, de ver qué forma tiene que tener el `WallIntersection` (ya no es siempre un poste con base cuadrada) y la forma y longitud que tienen que tener los muros, ya que puede que sea necesario acortarlos y según el angulo, los extremos no estarán a 90º
 
-       S
-```
+g) Se supone que la aplicación soporta ahora ángulos que no son rectos. Pero tras probarlo las intersecciones y muros no se están renderizando correctamente. Tras pensar en todos los posibles casos que se pueden dar cuando no son ángulos de 90º, la aplicación se complica mucho, muchísimo. QUIERO QUE LA APLICACIÓN ESTÉ LIMITADA ÚNICAMENTE A ANGULOS DE 90º. Quiero que esto esté en el readme. Quiero que esto se valide al seleccionar un setup y si se encuentra algún ángulo que no es de 90º quiero mostrar un warning en la aplicación (un display que resalte y que el usuario lo vea claramente) avisando de que la aplicación solo soporta angulos de 90 grados y que en los puntos X, Y, Z (se enumeran los puntos de la configuración) existen ángulos que no cumplen las condiciones y que el renderizado puede no ser preciso, ni el cálculo de sombras ni la estimación de produccion solar
 
-En este caso en las intersecciones `x`, `y` y `z` no son a 90º (ángulo recto). Por tanto tanto el final de los muros como las intesecciones de los muros se tienen que adaptar para tener el ángulo y forma adecuada. El final de los muros `a` y `b` no debería acabar en ángulo recto. Las intersecciones `x`, `y` y `z` no son de base rectangular. En este caso la intersección `x` sí tiene sentido que exista, porque no están los muros `a` y `b` en la misma línea. En este caso el muro `b` tendría que acortarse por el final y el muro `a` por el principio. Lo del principio y final es asumiendo que el orden de definición es contrario a las agujas del reloj.
-
-f) En base a los 2 puntos anteriores (`d` y `e`), extrapola una implementación genérica. Quizá no se hayan expuesto todos los casos que se puedan dar a la hora de definir los muros. Analiza si hay algún otro caso evidente que no se haya mencionado. Si el caso que encuentras es muy "edge", y complica mucho la solución, lo documentamos como limitación. Pero los casos expuestos y variantes de los mismos son lo mínimo que me gustaría que la aplicación soportase e implementase de forma correcta. En obras de edificios es raro que haya esquinas realmente a 90º. A la hora de introducirlo en la aplicación se puede simplificar y poner a 90º cosas que no lo sean realmente, pero quiero dar la opción a tener un mínimo de precisión, porque puede que por centímetros entre una placa más o lo contrario y sobre alguna.
-
-g) `WallIntersection` ahora tiene un atributo `isRendered`. Según los puntos anteriores sobre intersecciones, para el caso de muros en la misma línea (colineales), no hace falta renderizar el muro y por tanto no tiene sentido crear esta instancia de `WallIntersection`. Es cierto que estos `WallIntersection` se utilizan para generar el `floor`, pero no aporta nada utilizar estos puntos correspondientes a `WallIntersection` no renderizables, ya que son líneas rectas y no aportan nada para la forma del floor. Así que se puede quitar ese atributo y se puede prescindir de ellos para generar el floor.
-
-h) Con respecto a los approach para las intersecciones entre muros. Creo que lo más sencillo es tener solo el caso de los muros colineales donde no hace falta intersección. Y para el resto de casos tener siempre un `WallIntersection`. Será cuestión de, en función del ángulo entre los muros, de ver qué forma tiene que tener el `WallIntersection` (ya no es siempre un poste con base cuadrada) y la forma y longitud que tienen que tener los muros, ya que puede que sea necesario acortarlos y según el angulo, los extremos no estarán a 90º
+h) Teniendo en guenta `g` (y el resto de puntos `3`) si se puede simplificar el código existente para la generación de `Wall` y `WallIntersection` asumiendo que solo se soportan ángulos de 90º, simplifícalo.
 
 # Open tasks
  
