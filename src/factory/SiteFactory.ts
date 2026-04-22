@@ -1,4 +1,4 @@
-import { Site, Wall } from '../types/installation';
+import { Site } from '../types/installation';
 import { Config, RailingConfiguration } from '../types/config';
 import { PointXZ } from '../types/geometry';
 import { PointXZUtils } from '../utils/PointXZUtils';
