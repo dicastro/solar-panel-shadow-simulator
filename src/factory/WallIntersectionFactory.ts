@@ -1,6 +1,7 @@
 import { WallIntersection, RailingRailRenderData } from '../types/installation';
 import { PointXZ } from '../types/geometry';
 import { RailingConfiguration, RailingShape } from '../types/config';
+import { PointXZUtils } from '../utils/PointXZUtils';
 
 const WALL_INTERSECTION_COLOR = '#777';
 const RAILING_COLOR = '#333';
@@ -17,23 +18,23 @@ const HALF_CYLINDER_SEGMENTS = 8;
  * is exactly thickness/2 away from the floor vertex along each of the two
  * wall directions, i.e. the post centre is at:
  *
- *   offset = (outwardNormalPrev + outwardNormalNext) * thickness/2
+ *   offset = (normalPrev + normalNext) * thickness/2
  *
- * where outwardNormalPrev and outwardNormalNext are the unit outward normals
- * of the incoming and outgoing wall segments respectively.
+ * where normalPrev and normalNext are the unit outward normals of the incoming
+ * and outgoing wall segments respectively (see computeLeftHandNormal).
  *
- * For convex vertices (exterior corners) the normals point away from the floor
- * and the post sits outside. For concave vertices (interior recesses) the
- * normals point inward and the post sits inside the recess — still correctly
- * bordering the floor without occupying it.
+ * For exterior corners the normals point away from the floor and the post
+ * sits outside. For interior recesses the normals point inward toward the
+ * recess and the post sits inside it — still correctly bordering the floor
+ * without occupying it.
  */
 const computeCornerOffset = (
-  normalizedPrev: PointXZ,
-  normalizedNext: PointXZ,
+  normalPrev: PointXZ,
+  normalNext: PointXZ,
   wallThickness: number,
 ): PointXZ => ({
-  x: (normalizedPrev.x + normalizedNext.x) * (wallThickness / 2),
-  z: (normalizedPrev.z + normalizedNext.z) * (wallThickness / 2),
+  x: (normalPrev.x + normalNext.x) * (wallThickness / 2),
+  z: (normalPrev.z + normalNext.z) * (wallThickness / 2),
 });
 
 /**
@@ -43,6 +44,12 @@ const computeCornerOffset = (
  * is a square of side ≈ wallThickness. The connect piece spans this gap along
  * the bisector direction. Its length equals wallThickness for a right-angle
  * corner.
+ *
+ * For CylinderGeometry the constructor signature is:
+ *   (radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength)
+ * Half-cylinder uses openEnded=true and thetaLength=π. thetaStart selects which half:
+ *   orientation 'up'   → thetaStart = 0   (flat face pointing down)
+ *   orientation 'down' → thetaStart = π   (flat face pointing up)
  */
 const buildRailingConnect = (
   shape: RailingShape,
@@ -85,18 +92,6 @@ const buildRailingConnect = (
   }
 };
 
-/**
- * Unit outward normal of the wall segment from pA to pB.
- * "Outward" here means away from the floor interior, i.e. to the left of the
- * direction vector when the perimeter is walked counter-clockwise.
- */
-const getOutwardNormal = (pA: PointXZ, pB: PointXZ): PointXZ => {
-  const dx = pB.x - pA.x;
-  const dz = pB.z - pA.z;
-  const d = Math.sqrt(dx * dx + dz * dz) || 1;
-  return { x: -dz / d, z: dx / d };
-};
-
 export const WallIntersectionFactory = {
   /**
    * Creates a wall intersection post for a non-collinear vertex.
@@ -107,8 +102,6 @@ export const WallIntersectionFactory = {
    *
    * @param prevRailing  Effective railing config of the wall ending at this vertex.
    * @param nextRailing  Effective railing config of the wall starting at this vertex.
-   * @param isConvex     True for exterior corners (left turn in CCW walk),
-   *                     false for interior recesses (right turn).
    */
   create: (
     index: number,
@@ -119,10 +112,9 @@ export const WallIntersectionFactory = {
     height: number,
     prevRailing: RailingConfiguration | null,
     nextRailing: RailingConfiguration | null,
-    isConvex: boolean,
   ): WallIntersection => {
-    const normalPrev = getOutwardNormal(pPrev, p);
-    const normalNext = getOutwardNormal(p, pNext);
+    const normalPrev = PointXZUtils.computeLeftHandNormal(pPrev, p);
+    const normalNext = PointXZUtils.computeLeftHandNormal(p, pNext);
 
     const offset = computeCornerOffset(normalPrev, normalNext, wallThickness);
 
@@ -138,12 +130,6 @@ export const WallIntersectionFactory = {
       const heightOffset = prevRailing!.heightOffset;
       railingConnect = buildRailingConnect(shape, height, heightOffset, wallThickness);
     }
-
-    // The post is always rendered. Collinear vertices are never passed to this
-    // factory — they are excluded in SiteFactory before this point.
-    // isConvex is kept as a parameter for future use (e.g. orientation-dependent
-    // railing connect pieces) but does not affect rendering here.
-    void isConvex;
 
     return {
       index,

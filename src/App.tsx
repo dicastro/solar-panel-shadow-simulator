@@ -52,17 +52,14 @@ export default function App() {
   }, [isPlaying, tickHour]);
 
   if (!site || !activeSetup || !sun) {
-    return <div style={{ color: 'white', padding: 20 }}>{t('loading')}</div>;
+    return <div className="app-loading">{t('loading')}</div>;
   }
 
   const cameraDistance = site.boundingRadius * 4;
   const cameraHeight = site.boundingRadius * 3;
 
   return (
-    <div
-      className="main-container"
-      style={{ width: '100vw', height: '100vh', background: '#050505', position: 'relative' }}
-    >
+    <div className="app-container">
       <MainControls />
       <SimulationControls />
       <DeveloperFooter />

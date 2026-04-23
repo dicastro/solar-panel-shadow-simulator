@@ -41,7 +41,7 @@ export function SimulationControls() {
   const totalRays = totalSamplePoints * timeSteps;
 
   return (
-    <div className="controls-panel simulation-panel" style={{ top: 'auto', bottom: '20px' }}>
+    <div className="controls-panel simulation-panel">
       <h3>{t('simulationControls.title')}</h3>
 
       <div className="control-row">
@@ -92,27 +92,24 @@ export function SimulationControls() {
           }
           disabled={isRunning}
         />
-        <span style={{ fontSize: '0.7rem' }}>/ {maxPointsPerZone}</span>
+        <span className="simulation-threshold-max">/ {maxPointsPerZone}</span>
       </div>
 
-      <div className="status-info" style={{ fontSize: '0.8rem', opacity: 0.8 }}>
+      <div className="simulation-status">
         <p>{t('simulationControls.totalSamplePoints')}: {totalSamplePoints.toLocaleString()}</p>
         <p>{t('simulationControls.timeSteps')}: {timeSteps.toLocaleString()}</p>
         <p><strong>{t('simulationControls.totalRays')}: {totalRays.toLocaleString()}</strong></p>
         {isRunning && <progress value={0} max={100} style={{ width: '100%' }} />}
       </div>
 
-      <div
-        className="instant-results"
-        style={{ marginTop: '10px', borderTop: '1px solid #444', paddingTop: '10px' }}
-      >
+      <div className="instant-results">
         <p>
           {t('simulationControls.instantPower')}:{' '}
-          <strong style={{ color: '#4caf50' }}>
+          <strong className="instant-power-value">
             {instantPower.toFixed(2)} kW
           </strong>
         </p>
-        <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+        <p className="theoretical-peak">
           {t('simulationControls.theoreticalPeak')}: {theoreticalPeak.toFixed(2)} kW
         </p>
       </div>

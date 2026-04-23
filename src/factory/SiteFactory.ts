@@ -23,15 +23,17 @@ export interface SiteFactoryResult {
 /**
  * Computes the longitudinal shortening for one end of a wall at a shared vertex.
  *
- * This application is restricted to 90° wall angles. At a concave vertex
- * (interior recess, right turn in a CCW walk), the wall body displaced
- * thickness/2 outward would overlap the intersection post volume. The wall
- * must be shortened by exactly thickness/2 at that end to avoid the overlap.
+ * In Three.js coordinates (where Z is negated relative to config space), the
+ * cross product used by pointAlignedWithPreviousAndNext returns isConvex = true
+ * for vertices that are interior recesses in real-world terms. These are the
+ * vertices where the wall body, displaced outward by thickness/2, would overlap
+ * the intersection post volume. The wall must be shortened by exactly
+ * wallThickness at that end to prevent the overlap.
  *
- * At convex vertices (exterior corners, left turn in CCW), the displaced wall
- * centre-line naturally meets the post without longitudinal adjustment.
- *
- * At collinear vertices no post exists and no adjustment is needed.
+ * Collinear vertices (isStraight = true) have no intersection post and need
+ * no adjustment. Exterior corner vertices (isConvex = false in Three.js space)
+ * also need no adjustment — the displaced wall centre-lines meet the post
+ * naturally at those corners.
  */
 const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
   if (isStraight || !isConvex) return 0;
@@ -66,24 +68,19 @@ export const SiteFactory = {
       };
     };
 
-    // Validate angles and collect config-space indices of non-90° vertices.
-    // Collinear vertices are excluded — they are structurally valid (two wall
-    // segments with the same direction, differing only in height or railing).
+    // Classify every vertex once. Results feed both angle validation and
+    // wall/intersection geometry — avoiding two separate traversals.
     const angleWarnings: number[] = [];
-    centeredPoints.forEach((p, i) => {
-      const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
-      const pNext = PointXZUtils.getNextPoint(i, centeredPoints);
-      const { isStraight } = PointXZUtils.pointAlignedWithPreviousAndNext(p, pPrev, pNext);
-      if (!isStraight && !PointXZUtils.isRightAngle(p, pPrev, pNext)) {
-        angleWarnings.push(i);
-      }
-    });
-
-    // Classify every vertex once; results are reused for both intersections and walls.
     const vertexInfo = centeredPoints.map((p, i) => {
       const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
       const pNext = PointXZUtils.getNextPoint(i, centeredPoints);
-      return PointXZUtils.pointAlignedWithPreviousAndNext(p, pPrev, pNext);
+      const info = PointXZUtils.pointAlignedWithPreviousAndNext(p, pPrev, pNext);
+
+      if (!info.isStraight && !PointXZUtils.isRightAngle(p, pPrev, pNext)) {
+        angleWarnings.push(i);
+      }
+
+      return info;
     });
 
     // Wall intersections — created only for non-collinear vertices.
@@ -91,7 +88,7 @@ export const SiteFactory = {
     // geometric information for the floor outline and are omitted.
     const wallIntersections = centeredPoints
       .map((p, i) => {
-        const { isStraight, isConvex } = vertexInfo[i];
+        const { isStraight } = vertexInfo[i];
         if (isStraight) return null;
 
         const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
@@ -105,14 +102,13 @@ export const SiteFactory = {
 
         return WallIntersectionFactory.create(
           i, p, pPrev, pNext, wallDefaults.thickness, h,
-          prevRailing, nextRailing, isConvex,
+          prevRailing, nextRailing,
         );
       })
       .filter((wi): wi is NonNullable<typeof wi> => wi !== null);
 
     // Wall segments — each wall may be shortened at one or both ends when its
-    // endpoint is a concave vertex. Convex and collinear endpoints need no
-    // longitudinal adjustment.
+    // endpoint vertex requires a geometric adjustment. See computeAdjust.
     const walls = centeredPoints.map((p1, i) => {
       const p2 = PointXZUtils.getNextPoint(i, centeredPoints);
       const wallSettings = wallsSettings?.find(s => s.wall === i);
@@ -122,7 +118,7 @@ export const SiteFactory = {
       const { isStraight: p2Straight, isConvex: p2Convex } = vertexInfo[nextIndex];
 
       const adjustStart = computeAdjust(p1Convex, p1Straight, wallDefaults.thickness);
-      const adjustEnd   = computeAdjust(p2Convex, p2Straight, wallDefaults.thickness);
+      const adjustEnd = computeAdjust(p2Convex, p2Straight, wallDefaults.thickness);
 
       return WallFactory.create(
         i, p1, p2,

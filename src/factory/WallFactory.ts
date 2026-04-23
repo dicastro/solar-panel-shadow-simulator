@@ -1,6 +1,7 @@
 import { Wall, WallRailing, RailingRailRenderData, RailingSupportRenderData } from '../types/installation';
 import { PointXZ } from '../types/geometry';
 import { RailingConfiguration, WallConfiguration, WallSettingsConfiguration, RailingShape, RailingSupportShape } from '../types/config';
+import { PointXZUtils } from '../utils/PointXZUtils';
 
 const WALL_COLOR = '#777';
 const RAILING_COLOR = '#333';
@@ -127,14 +128,14 @@ export const WallFactory = {
     wallSettings?: WallSettingsConfiguration,
     /**
      * Longitudinal shortening at the p1 end (metres). Positive = shorten.
-     * Non-zero only when p1 is a concave vertex, to prevent the wall body
-     * from overlapping the intersection post at that corner.
+     * Non-zero only when p1 is a vertex that requires adjustment, to prevent
+     * the wall body from overlapping the intersection post at that corner.
      */
     adjustStart = 0,
     /**
      * Longitudinal shortening at the p2 end (metres). Positive = shorten.
-     * Non-zero only when p2 is a concave vertex, to prevent the wall body
-     * from overlapping the intersection post at that corner.
+     * Non-zero only when p2 is a vertex that requires adjustment, to prevent
+     * the wall body from overlapping the intersection post at that corner.
      */
     adjustEnd = 0,
   ): Wall => {
@@ -146,22 +147,22 @@ export const WallFactory = {
     const fullDist = Math.sqrt(dx * dx + dz * dz);
     const yAngle = Math.atan2(dx, dz);
 
-    // The effective length after shortening both ends
+    // The effective length after shortening both ends.
     const currentDist = fullDist - adjustStart - adjustEnd;
 
-    // The group centre shifts toward the longer end when adjustments are unequal
+    // The group centre shifts toward the longer end when adjustments are unequal.
     const offsetFromCenter = (adjustStart / 2) - (adjustEnd / 2);
 
     const ux = dx / fullDist;
     const uz = dz / fullDist;
 
-    // Perpendicular outward normal — walls are displaced thickness/2 outward
-    // so they border the floor without occupying it.
-    const nx = -uz;
-    const nz = ux;
+    // Outward normal of this wall segment: perpendicular, pointing away from
+    // the floor interior. Used to displace the wall body outward by thickness/2
+    // so the wall borders the floor without occupying it.
+    const outwardNormal = PointXZUtils.computeLeftHandNormal(p1, p2);
 
-    const groupX = (p1.x + p2.x) / 2 + (nx * wallThickness / 2) + (ux * offsetFromCenter);
-    const groupZ = (p1.z + p2.z) / 2 + (nz * wallThickness / 2) + (uz * offsetFromCenter);
+    const groupX = (p1.x + p2.x) / 2 + (outwardNormal.x * wallThickness / 2) + (ux * offsetFromCenter);
+    const groupZ = (p1.z + p2.z) / 2 + (outwardNormal.z * wallThickness / 2) + (uz * offsetFromCenter);
 
     const railingOverride = wallSettings?.override?.railing;
     const isRailingActive = railingOverride?.active ?? railingDefaults.active;

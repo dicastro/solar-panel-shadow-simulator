@@ -20,40 +20,17 @@ export function AngleWarningBanner() {
   if (angleWarnings.length === 0) return null;
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: '20px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      zIndex: 20,
-      background: 'rgba(180, 30, 30, 0.97)',
-      color: '#fff',
-      padding: '14px 20px',
-      borderRadius: '8px',
-      border: '2px solid #ff6b6b',
-      fontFamily: 'sans-serif',
-      fontSize: '0.85rem',
-      maxWidth: '480px',
-      boxShadow: '0 0 24px rgba(255, 80, 80, 0.5)',
-      lineHeight: 1.5,
-    }}>
-      <div style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div className="angle-warning-banner">
+      <div className="angle-warning-banner__title">
         <span>⚠</span>
         <span>{t('angleWarning.title')}</span>
       </div>
-      <div style={{ marginBottom: '8px' }}>
+      <div className="angle-warning-banner__message">
         {t('angleWarning.message')}
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+      <div className="angle-warning-banner__points">
         {angleWarnings.map(idx => (
-          <span key={idx} style={{
-            background: 'rgba(255,255,255,0.15)',
-            border: '1px solid rgba(255,255,255,0.4)',
-            borderRadius: '4px',
-            padding: '2px 8px',
-            fontFamily: 'monospace',
-            fontSize: '0.8rem',
-          }}>
+          <span key={idx} className="angle-warning-banner__point-badge">
             {t('angleWarning.pointLabel')} {idx}
           </span>
         ))}

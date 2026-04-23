@@ -15,6 +15,11 @@
     border: 1px solid #444;
 }
 
+.simulation-panel {
+    top: auto;
+    bottom: 20px;
+}
+
 .control-row {
     display: flex;
     justify-content: space-between;
@@ -80,6 +85,125 @@
     border-radius: 4px;
 }
 
+.setup-label {
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+
+.timezone-select {
+    flex: 1;
+    font-size: 0.75rem;
+}
+
+.setup-select {
+    flex: 1;
+}
+
+.date-input-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.date-input-label {
+    font-size: 0.7rem;
+}
+
+/* ── Simulation controls ───────────────────────────────────────────────────── */
+
+.simulation-status {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.simulation-threshold-max {
+    font-size: 0.7rem;
+}
+
+.instant-results {
+    margin-top: 10px;
+    border-top: 1px solid #444;
+    padding-top: 10px;
+}
+
+.instant-power-value {
+    color: #4caf50;
+}
+
+.theoretical-peak {
+    font-size: 0.75rem;
+    opacity: 0.6;
+}
+
+/* ── Angle warning banner ─────────────────────────────────────────────────── */
+
+.angle-warning-banner {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    background: rgba(180, 30, 30, 0.97);
+    color: #fff;
+    padding: 14px 20px;
+    border-radius: 8px;
+    border: 2px solid #ff6b6b;
+    font-family: sans-serif;
+    font-size: 0.85rem;
+    max-width: 480px;
+    box-shadow: 0 0 24px rgba(255, 80, 80, 0.5);
+    line-height: 1.5;
+}
+
+.angle-warning-banner__title {
+    font-weight: bold;
+    font-size: 1rem;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.angle-warning-banner__message {
+    margin-bottom: 8px;
+}
+
+.angle-warning-banner__points {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.angle-warning-banner__point-badge {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-family: monospace;
+    font-size: 0.8rem;
+}
+
+/* ── App container ─────────────────────────────────────────────────────────── */
+
+.app-container {
+    width: 100vw;
+    height: 100vh;
+    background: #050505;
+    position: relative;
+}
+
+.app-loading {
+    color: white;
+    padding: 20px;
+}
+
+/* ── Main controls ─────────────────────────────────────────────────────────── */
+
+.controls-title {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
 /* ── Developer footer ──────────────────────────────────────────────────────── */
 
 .developer-footer {
@@ -93,10 +217,9 @@
     font-family: sans-serif;
     font-size: 0.78rem;
     color: rgba(255, 255, 255, 0.45);
-    pointer-events: none; /* let clicks pass through to the canvas by default */
+    pointer-events: none;
 }
 
-/* Re-enable pointer events only on interactive children */
 .developer-footer a,
 .developer-footer__kofi-link {
     pointer-events: auto;

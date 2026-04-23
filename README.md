@@ -8,6 +8,7 @@
 * Estas instrucciones están en en español, y puede que la sección "To Review" o la de "Open Tasks" tenga mezcla de inglés o de español. A la hora de programar código y comentarlo y actualizar el README será siempre en inglés todo.
 * Al actualizar el README deja las secciones iniciales "Instructions", "To Review" y "Open Tasks" intactas, ya me encargo yo de poner esto al día. Actualiza a partir de la sección "Solar Panel Shadow Simulator"
 * Si tienes discrepancias entre el código y lo que dice el README, lo que manda es el código. Y con código me refiero a únicamente el código, excluyendo los posibles comentarios que haya en el código (que también podrían ser incorrectos y no corresponderse con el código). Las pruebas se hacen sobre el código y el README debería ser un reflejo de lo que hace el código. No se ha escrito primero el README y se ha tratado de implementar lo que dice el README. El proceso es el inverso, el README es una documentación sobre lo que hay.
+* Al final de todos los cambios propuestos quiero me me proporciones un mensaje para el commit al repositorio git. Ten en cuenta que ese mensaje tiene que ser condensado.
 
 # To Review
 
@@ -170,7 +171,7 @@ src/
 │   └── DeveloperFooter.tsx        # Ko-fi link + personal site
 │
 └── utils/
-    ├── PointXZUtils.ts            # Normal vectors, convexity, right-angle check, prev/next helpers
+    ├── PointXZUtils.ts            # computeLeftHandNormal, convexity, right-angle check, prev/next helpers
     ├── ThreeConverter.ts          # Domain Vector3/Euler3 → THREE.Vector3/Euler
     └── TimezoneUtils.ts           # getAllTimezones(), getBrowserTimezone(), resolveInitialTimezone()
 ```
@@ -234,23 +235,37 @@ The application is restricted to wall configurations where every angle between a
 
 If the configuration contains non-90° angles, `SiteFactory` populates `angleWarnings` with the indices of the offending points and the store exposes this list. `AngleWarningBanner` displays a prominent UI warning. Geometry is still constructed but may be visually incorrect.
 
-### Wall vertex classification — convex vs concave
+### Wall vertex classification — isConvex and the Three.js Z inversion
 
-Each vertex is classified by the 2D cross product of the incoming and outgoing edge direction vectors. For a counter-clockwise perimeter walk:
+Each vertex is classified by the 2D cross product of the incoming and outgoing edge direction vectors, computed in Three.js scene coordinates (where Z is negated relative to config space). This negation flips every CCW walk in config space into a CW walk in Three.js space, which inverts the sign of the cross product and therefore inverts the meaning of `isConvex`:
 
-| Cross product | Interior angle | Vertex type | Post | Wall trim |
-|---|---|---|---|---|
-| > 0 | 90° | Convex (exterior corner) | Yes | None |
-| ≈ 0 | 180° | Collinear | No | None |
-| < 0 | 270° | Concave (interior recess) | Yes | `thickness/2` at both adjacent wall ends |
+| `isConvex` in Three.js space | Real-world vertex type | Interior angle | Wall adjustment |
+|---|---|---|---|
+| `false` | Exterior corner | 90° | None |
+| `true` | Interior recess | 270° | `wallThickness` at both adjacent wall ends |
+| — (isStraight) | Collinear | 180° | None |
 
-The post position is computed as `(normalPrev + normalNext) × thickness/2`, where `normalPrev` and `normalNext` are the unit outward normals of the two adjacent wall segments. For 90° angles this equals `thickness/2` in each of the two perpendicular directions, placing the post centre exactly at the intersection of the two displaced wall centre-lines.
+The post position is computed as `(normalPrev + normalNext) × thickness/2`, where `normalPrev` and `normalNext` are the unit outward normals of the two adjacent wall segments (see `computeLeftHandNormal`). For 90° angles this equals `thickness/2` in each of the two perpendicular directions, placing the post centre exactly at the intersection of the two displaced wall centre-lines.
 
-### Wall longitudinal adjustment at concave vertices
+### Wall longitudinal adjustment at interior recess vertices
 
-Walls are displaced `thickness/2` outward (away from the floor) along their perpendicular normal. At convex corners this lateral displacement is sufficient — the displaced wall centre-lines naturally meet the post without overlap. At concave vertices the displaced wall bodies would overlap the post volume; each wall is shortened by `thickness/2` at the end touching the concave vertex.
+Walls are displaced `thickness/2` outward (away from the floor) along their perpendicular normal. At interior recess vertices (`isConvex = true` in Three.js coordinates) the displaced wall bodies would overlap the intersection post volume. Each wall is shortened by `wallThickness` at the end touching the recess vertex to eliminate the overlap.
 
-The adjustment is stored as `adjustStart` and `adjustEnd` on the `Wall` object. Both are always non-negative (shortening only). The naming `adjust` is preferred over `trim` because `trim` implies shortening exclusively, while the field name should reflect that it is a geometric correction that happens to be a shortening in all valid 90° configurations.
+The adjustment is stored as `adjustStart` and `adjustEnd` on the `Wall` object. Both are always non-negative (shortening only). The naming `adjust` is preferred over `trim` because `trim` implies shortening exclusively, while the field name should reflect that it is a geometric correction.
+
+### `computeLeftHandNormal` — single implementation, shared across factories
+
+The unit outward normal of a directed segment is computed once in `PointXZUtils.computeLeftHandNormal` and imported by all three factories that need it: `WallFactory`, `WallIntersectionFactory`, and indirectly `PointXZUtils.pointAlignedWithPreviousAndNext`. There is no duplicate implementation.
+
+The name encodes the geometric contract: the result is the left-hand perpendicular of the direction of travel, which is the outward direction for a CCW-walked polygon. "Left" is more precise than "outward" here because the function itself has no knowledge of the polygon winding — it is the caller's responsibility to pass segments in the correct direction.
+
+### Vertex classification and angle validation in a single pass
+
+`SiteFactory` classifies every vertex with `pointAlignedWithPreviousAndNext` in a single `.map` over `centeredPoints`. The resulting `vertexInfo` array is reused for both angle validation (populating `angleWarnings`) and geometry construction (wall adjustments, intersection posts). This avoids two separate traversals of the same data.
+
+### No inline styles in components
+
+All visual styling is defined in `App.css` using class names. React components use `className` references only. This keeps a single authoritative source for all visual decisions and avoids the maintenance burden of hunting for styles scattered across JSX files.
 
 ### i18n key structure
 
@@ -260,9 +275,9 @@ Translation keys are grouped by the component that owns them:
 - `angleWarning.*` — keys used by `AngleWarningBanner`
 - Top-level keys (`title`, `loading`, `coordinates.*`, `footer.*`) are shared or belong to no specific component
 
-### `Intl.supportedValuesOf` — TypeScript lib extension
+### `Intl.supportedValuesOf` — TypeScript lib target
 
-`Intl.supportedValuesOf('timeZone')` is part of the Intl spec but was introduced after ES2020 and is absent from TypeScript's ES2020 lib types. Rather than widening the project's `lib` target (which would introduce other ES2021+ globals), `TimezoneUtils.ts` contains a local `declare namespace Intl` extension that teaches the compiler about this specific method. This keeps the tsconfig unchanged while eliminating the build error.
+`Intl.supportedValuesOf('timeZone')` is part of the ES2022 Intl spec. The project's `tsconfig.app.json` sets `"lib": ["ES2022", "DOM", "DOM.Iterable"]`, which makes this API available to TypeScript without any workarounds. The `target` remains `ES2020` — `lib` and `target` are independent settings: `target` controls what JavaScript syntax Vite emits, while `lib` tells the TypeScript compiler which runtime APIs to expect. Raising `lib` to ES2022 does not change the compiled output; it only unlocks type definitions for APIs that the browser already provides.
 
 ### `SiteFactory` return type
 
@@ -317,6 +332,50 @@ Use segment indices in `wallsSettings` to override height, railing, or apply tri
 
 The floor is a flat plane. Its outline is derived from `site.wallIntersections`, which contains only non-collinear vertices. Collinear vertices (where two segments meet in a straight line) carry no geometric information for a flat floor and are excluded. This means the floor outline correctly represents the perimeter of the terrace even when some wall segments are split into two for configuration purposes.
  
+---
+
+## 2D geometry — normals, dot product, cross product
+
+These three operations are the building blocks for all wall geometry. Understanding them makes the factory code readable without having to mentally re-derive the math.
+
+### Normal to a segment
+
+Given a directed segment from A to B with direction vector `d = (dx, dz)`, its **unit normal** is a vector perpendicular to `d` with length 1. There are two perpendicular directions (left and right). For a CCW-walked polygon the **outward** normal — pointing away from the interior — is always to the **left** of the direction of travel:
+
+```
+direction d = (dx, dz)
+left-hand normal = (-dz, dx) / |d|
+```
+
+Example: a wall going East `(dx=1, dz=0)` → normal `(0, 1)`, pointing South in Three.js (+Z = South). For a wall on the south side of a CCW floor, South is outward.
+
+`computeLeftHandNormal(pA, pB)` in `PointXZUtils.ts` computes this for any segment. It is the single implementation used by `WallFactory` (to displace the wall body outward), `WallIntersectionFactory` (to place the corner post), and `pointAlignedWithPreviousAndNext` (to detect collinearity).
+
+### Dot product
+
+```
+dot(a, b) = a.x·b.x + a.z·b.z = |a|·|b|·cos(θ)
+```
+
+For unit vectors, `dot(a, b) = cos(θ)` where θ is the angle between them:
+- `dot = +1` → same direction (0°)
+- `dot =  0` → perpendicular (90°)
+- `dot = -1` → opposite directions (180°)
+
+Used here to detect collinear wall segments: two adjacent segments whose outward normals have `dot ≈ +1` are parallel — the vertex between them is a straight pass-through, not a corner.
+
+### Cross product (2D)
+
+```
+cross(a, b) = a.x·b.z − a.z·b.x
+```
+
+The sign encodes the rotation direction from `a` to `b`:
+- `cross > 0` → `b` is to the LEFT of `a` (CCW rotation)
+- `cross < 0` → `b` is to the RIGHT of `a` (CW rotation)
+
+Applied to the incoming and outgoing edge directions at a vertex, the sign tells us the turn type. Because Three.js negates Z relative to config space, every CCW config walk becomes a CW walk in Three.js coordinates, inverting the sign convention — see the `isConvex` note in [Wall vertex classification](#wall-vertex-classification--isconvex-and-the-threejs-z-inversion).
+
 ---
  
 ## Configuration reference
@@ -504,7 +563,7 @@ Cuando el usuario cambia de timezone, `setTimezone` llama a `date.tz(newTimezone
  
 `geo-tz` es la librería más precisa para inferir timezone desde coordenadas GPS, pero lee datos geográficos desde disco en runtime y **no es compatible con bundlers de browser**. Sus datos (~10 MB de GeoJSON) no pueden incluirse en un bundle estático de GitHub Pages.
  
-**Solución usada**: `Intl.supportedValuesOf('timeZone')` (API nativa del navegador, sin dependencias) para la lista completa de timezones IANA. El preset inicial es `Intl.DateTimeFormat().resolvedOptions().timeZone` (timezone detectada por el navegador). El usuario confirma o cambia mediante el selector en la UI.
+**Solución usada**: `Intl.supportedValuesOf('timeZone')` (API nativa del navegador ES2022, sin dependencias) para la lista completa de timezones IANA. El preset inicial es `Intl.DateTimeFormat().resolvedOptions().timeZone` (timezone detectada por el navegador). El usuario confirma o cambia mediante el selector en la UI.
  
 ### UTC en los cálculos
  
@@ -546,15 +605,15 @@ A `kind: 'square' | 'cylinder' | 'half-cylinder'` discriminated union carries it
  
 ### Wall vertex classification via cross product
  
-The 2D cross product of the incoming and outgoing edge directions at a vertex cleanly separates the three geometrically distinct cases (convex, collinear, concave) in a single operation. The sign encodes the turn direction for a counter-clockwise polygon: positive = left turn = convex, negative = right turn = concave. This is more robust than comparing angles and handles degenerate cases gracefully.
+The 2D cross product of the incoming and outgoing edge directions at a vertex cleanly separates the three geometrically distinct cases (collinear, and the two non-collinear turn directions) in a single operation. The sign encodes the turn direction. Because Three.js negates Z relative to config space, the sign convention is inverted compared to a pure CCW walk: `isConvex = true` in Three.js coordinates corresponds to an interior recess in real-world terms. This inversion is documented in `PointXZUtils.ts` and accounted for in `SiteFactory.computeAdjust`.
 
 ### Restricting to 90° simplifies geometry significantly
 
-Supporting arbitrary wall angles requires computing bisector offsets with trigonometric formulas that diverge at near-parallel angles, handling wall end-cuts that are not perpendicular to the wall direction, and reasoning about corner post shapes that change with the angle. Restricting to 90° collapses all of this to a single formula: the post offset is `(normalPrev + normalNext) × thickness/2` and the wall shortening at concave corners is exactly `thickness/2`. The geometric model becomes trivially correct and the code shrinks substantially. Angle validation at load time with a visible UI warning is the correct trade-off: the constraint is documented, enforced at startup, and easy to diagnose.
+Supporting arbitrary wall angles requires computing bisector offsets with trigonometric formulas that diverge at near-parallel angles, handling wall end-cuts that are not perpendicular to the wall direction, and reasoning about corner post shapes that change with the angle. Restricting to 90° collapses all of this to a single formula: the post offset is `(normalPrev + normalNext) × thickness/2` and the wall shortening at interior recess corners is exactly `wallThickness`. The geometric model becomes trivially correct and the code shrinks substantially. Angle validation at load time with a visible UI warning is the correct trade-off: the constraint is documented, enforced at startup, and easy to diagnose.
 
 ### Wall adjustment naming: `adjust` not `trim`
 
-The longitudinal correction applied to wall ends at concave vertices was initially named `trimStart`/`trimEnd`. `trim` implies an operation that only shortens. The rename to `adjustStart`/`adjustEnd` better reflects that the field represents a geometric correction (which happens to always be a positive shortening for 90° configurations, but the name should not encode that assumption).
+The longitudinal correction applied to wall ends at interior recess vertices was initially named `trimStart`/`trimEnd`. `trim` implies an operation that only shortens. The rename to `adjustStart`/`adjustEnd` better reflects that the field represents a geometric correction (which happens to always be a positive shortening for 90° configurations, but the name should not encode that assumption).
 
 ### Collinear vertices excluded from `wallIntersections`
 
@@ -568,9 +627,13 @@ Returning `{ site, angleWarnings }` from `SiteFactory.create` keeps the factory 
 
 Flat top-level keys become hard to navigate as the translation file grows. Grouping keys under the component that owns them (`mainControls.*`, `simulationControls.*`, `angleWarning.*`) makes it immediately clear where each string is used and avoids naming collisions. Keys that are genuinely shared or application-level (`title`, `loading`, `coordinates.*`, `footer.*`) remain at the top level.
 
-### Local `declare namespace Intl` for missing lib types
+### `lib` vs `target` in tsconfig
 
-When a browser API is missing from TypeScript's lib types (because it postdates the configured `lib` target), the cleanest fix is a local `declare namespace` extension in the file that uses it. This is preferable to widening `lib` in `tsconfig` (which introduces many other new globals) or using `(Intl as any)` (which loses all type information). The local declaration is scoped to the file, self-documenting, and does not affect the rest of the codebase.
+`target` controls the JavaScript syntax that TypeScript emits (e.g. ES2020 arrow functions, optional chaining). `lib` tells the TypeScript compiler which runtime APIs to expect in the browser (e.g. `Promise`, `Intl.supportedValuesOf`). They are independent. Raising `lib` to ES2022 to unlock `Intl.supportedValuesOf` does not change the compiled output at all — it only adds type definitions. This is always preferable to `(value as any)` casts or local `declare namespace` workarounds, both of which lose type safety.
+
+### `computeLeftHandNormal` — one implementation, used everywhere
+
+The outward normal of a wall segment is computed exactly once, in `PointXZUtils.computeLeftHandNormal`. All factories import this function. There is no inline copy of the formula anywhere else in the codebase. When geometry behaviour needs to change (e.g. switching from outward to inward displacement), there is exactly one place to change it.
 
 ---
  
@@ -622,8 +685,8 @@ En un string, todos los paneles están conectados en serie. La corriente es como
 
 La aplicación solo soporta ángulos de 90° entre muros adyacentes. Esta restricción se valida al cargar la configuración. Si se detectan ángulos que no son de 90°, se muestra un banner de aviso en la UI indicando los índices de los puntos problemáticos.
 
-Existen tres categorías de vértice:
+Existen tres categorías de vértice. La clasificación se hace en coordenadas Three.js (donde Z está negado respecto al espacio de configuración), lo que invierte el significado del flag `isConvex` respecto a su sentido matemático puro en CCW:
 
-* **Vértice convexo** (esquina exterior, ángulo interior 90°): se crea un post de intersección. El post se desplaza `thickness/2` en cada una de las dos direcciones perpendiculares de los muros adyacentes, quedando en el exterior de la terraza. Los muros no se acortan.
-* **Vértice colineal** (ángulo = 180°): no se crea `WallIntersection`. El suelo se construye a partir de los `WallIntersection` existentes, y los vértices colineales son redundantes en un plano plano.
-* **Vértice cóncavo** (esquina interior, ángulo interior 270°): se crea un post de intersección. El post se desplaza `thickness/2` hacia el interior del recodo. Los muros adyacentes se acortan `thickness/2` en el extremo que toca esta intersección, para evitar que el cuerpo del muro invada el volumen del post.
+* **Vértice con `isConvex = false`** (esquina exterior, ángulo interior 90°): se crea un post de intersección. El post se desplaza `thickness/2` en cada una de las dos direcciones perpendiculares de los muros adyacentes, quedando en el exterior de la terraza. Los muros no se acortan.
+* **Vértice colineal** (`isStraight = true`, ángulo = 180°): no se crea `WallIntersection`. El suelo se construye a partir de los `WallIntersection` existentes, y los vértices colineales son redundantes en un plano plano.
+* **Vértice con `isConvex = true`** (recodo interior, ángulo interior 270°): se crea un post de intersección. El post se desplaza `thickness/2` hacia el interior del recodo. Los muros adyacentes se acortan `wallThickness` en el extremo que toca esta intersección, para evitar que el cuerpo del muro invada el volumen del post.

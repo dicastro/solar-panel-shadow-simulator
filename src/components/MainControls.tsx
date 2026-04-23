@@ -56,7 +56,7 @@ export function MainControls() {
     <div className="controls-panel main-controls">
 
       <div className="control-row">
-        <h2 style={{ margin: 0, fontSize: '1.1rem' }}>{t('title')}</h2>
+        <h2 className="controls-title">{t('title')}</h2>
         <select
           value={i18n.language}
           onChange={e => i18n.changeLanguage(e.target.value)}
@@ -68,13 +68,13 @@ export function MainControls() {
 
       {hasMultipleSetups && (
         <div className="control-row">
-          <label style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+          <label className="setup-label">
             {t('mainControls.setupLabel')}:
           </label>
           <select
             value={activeSetupIndex ?? 0}
             onChange={e => setActiveSetupIndex(Number(e.target.value))}
-            style={{ flex: 1 }}
+            className="setup-select"
           >
             {config!.setups.map((s, i) => (
               <option key={i} value={i}>{s.label}</option>
@@ -84,8 +84,8 @@ export function MainControls() {
       )}
 
       <div className="control-row">
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <label style={{ fontSize: '0.7rem' }}>{t('mainControls.dateLabel')}</label>
+        <div className="date-input-group">
+          <label className="date-input-label">{t('mainControls.dateLabel')}</label>
           <input
             type="date"
             value={displayDate.format('YYYY-MM-DD')}
@@ -94,8 +94,8 @@ export function MainControls() {
             onChange={handleDateChange}
           />
         </div>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <label style={{ fontSize: '0.7rem' }}>{t('mainControls.timeLabel')}</label>
+        <div className="date-input-group">
+          <label className="date-input-label">{t('mainControls.timeLabel')}</label>
           <input
             type="time"
             value={displayDate.format('HH:mm')}
@@ -105,13 +105,13 @@ export function MainControls() {
       </div>
 
       <div className="control-row">
-        <label style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+        <label className="setup-label">
           {t('mainControls.timezoneLabel')}:
         </label>
         <select
           value={timezone}
           onChange={e => setTimezone(e.target.value)}
-          style={{ flex: 1, fontSize: '0.75rem' }}
+          className="timezone-select"
         >
           {ALL_TIMEZONES.map(tz => (
             <option key={tz} value={tz}>{tz}</option>

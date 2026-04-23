@@ -14,7 +14,8 @@
  *
  * 1. `Intl.supportedValuesOf('timeZone')` — returns the full list of IANA
  *    timezone identifiers supported by the browser's Intl implementation
- *    (typically the full IANA database, 500–600 entries).
+ *    (typically the full IANA database, 500–600 entries). Available natively
+ *    in TypeScript when `lib` includes ES2022 or later.
  *
  * 2. The candidate selection strategy:
  *    a. Primary: check the browser's own detected timezone via
@@ -43,7 +44,7 @@
 /** All IANA timezone identifiers supported by this browser, sorted. */
 export const getAllTimezones = (): string[] => {
   try {
-    return [...(Intl as any).supportedValuesOf('timeZone')].sort();
+    return [...Intl.supportedValuesOf('timeZone')].sort();
   } catch {
     // Intl.supportedValuesOf is available in all modern browsers, but fall
     // back gracefully for very old environments.
