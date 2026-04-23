@@ -31,8 +31,8 @@
   },
   "angleWarning": {
     "title": "Configuration Warning",
-    "message": "This application only supports 90° wall angles. The following wall points contain angles that do not meet this requirement and rendering may be inaccurate:",
-    "pointLabel": "Point"
+    "message": "This application only supports 90°/180° wall angles. The following sets of points form angles that do not meet this requirement and rendering may be inaccurate:",
+    "tripletLabel": "{{prev}} → {{point}} → {{next}}"
   },
   "footer": {
     "madeBy": "Made by",

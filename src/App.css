@@ -150,7 +150,7 @@
     border: 2px solid #ff6b6b;
     font-family: sans-serif;
     font-size: 0.85rem;
-    max-width: 480px;
+    max-width: 520px;
     box-shadow: 0 0 24px rgba(255, 80, 80, 0.5);
     line-height: 1.5;
 }
@@ -168,19 +168,24 @@
     margin-bottom: 8px;
 }
 
-.angle-warning-banner__points {
+.angle-warning-banner__list {
+    margin: 0;
+    padding-left: 18px;
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.angle-warning-banner__point-badge {
-    background: rgba(255, 255, 255, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    border-radius: 4px;
-    padding: 2px 8px;
+.angle-warning-banner__list-item {
     font-family: monospace;
     font-size: 0.8rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    padding: 3px 8px;
+    list-style: none;
+    margin-left: -18px;
+    padding-left: 10px;
 }
 
 /* ── App container ─────────────────────────────────────────────────────────── */

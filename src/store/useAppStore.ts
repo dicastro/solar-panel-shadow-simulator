@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import dayjs, { Dayjs } from 'dayjs';
 import { Config, PanelSetup, Site, SimulationResult, SunState } from '../types';
+import { AngleWarning } from '../types/geometry';
 import { SiteFactory } from '../factory/SiteFactory';
 import { PanelSetupFactory } from '../factory/PanelSetupFactory';
 import { calculateSunState } from '../solarEngine';
@@ -35,11 +36,11 @@ interface AppState {
   simulationResult: SimulationResult | null;
 
   /**
-   * Indices of wall points (in config space) where the angle between adjacent
-   * wall segments is not 90°. Populated by loadConfig. Empty when all angles
-   * are valid. Used to display a warning in the UI.
+   * Wall point triples where the angle at the middle point is neither 90° nor
+   * 180°. Populated by loadConfig. Empty when all angles are valid. Used to
+   * display a warning in the UI.
    */
-  angleWarnings: number[];
+  angleWarnings: readonly AngleWarning[];
 
   // Actions
   loadConfig: (config: Config) => void;
@@ -58,14 +59,14 @@ interface AppState {
 }
 
 /**
- * Constructs a dayjs object that represents the given date/time components
- * interpreted as local time in the specified IANA timezone.
+ * Constructs a dayjs object representing the given date/time components as
+ * local time in the specified IANA timezone.
  *
- * This is the only correct way to build dates from user-facing inputs in this
- * application. Using dayjs() or dayjs(string) without a timezone would
- * interpret the components in the browser's local timezone, which may differ
- * from the installation's timezone and would cause the displayed time to
- * diverge from what the user typed.
+ * This is the only correct way to build dates from user-facing inputs. Using
+ * dayjs() or dayjs(string) without a timezone would interpret the components
+ * in the browser's local timezone, which may differ from the installation's
+ * timezone and cause the displayed time to diverge from what the user typed.
+ * See README for a full explanation.
  *
  * month is 0-based (January = 0), matching dayjs convention.
  */
@@ -150,12 +151,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   /**
    * Changes the display timezone while preserving the current UTC instant.
-   *
-   * The solar calculations always use date.toDate() (a UTC instant), so
-   * changing timezone never affects them. The date and time fields in the UI
-   * update to show the same instant in the new timezone, which is the
-   * expected behaviour: the user is choosing how to read the clock, not
-   * shifting the simulation to a different moment in time.
+   * Solar calculations are unaffected — they always use date.toDate() (UTC).
+   * The date and time shown in the UI update to reflect the same instant in
+   * the new timezone. See README.
    */
   setTimezone: (timezone) => {
     const { date } = get();

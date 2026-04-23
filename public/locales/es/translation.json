@@ -31,8 +31,8 @@
   },
   "angleWarning": {
     "title": "Aviso de configuración",
-    "message": "Esta aplicación solo soporta ángulos de 90° entre muros. Los siguientes puntos de configuración contienen ángulos que no cumplen este requisito y el renderizado puede no ser preciso:",
-    "pointLabel": "Punto"
+    "message": "Esta aplicación solo soporta ángulos de 90°/180° entre muros. Los siguientes conjuntos de puntos forman ángulos que no cumplen este requisito y el renderizado puede no ser preciso:",
+    "tripletLabel": "{{prev}} → {{point}} → {{next}}"
   },
   "footer": {
     "madeBy": "Desarrollado por",

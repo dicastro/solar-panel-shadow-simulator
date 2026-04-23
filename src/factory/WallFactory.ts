@@ -1,16 +1,16 @@
-import { Wall, WallRailing, RailingRailRenderData, RailingSupportRenderData } from '../types/installation';
+import { Wall, WallRailing, RailingSupportRenderData } from '../types/installation';
 import { PointXZ } from '../types/geometry';
 import { RailingConfiguration, WallConfiguration, WallSettingsConfiguration, RailingShape, RailingSupportShape } from '../types/config';
 import { PointXZUtils } from '../utils/PointXZUtils';
+import { RailingUtils } from '../utils/RailingUtils';
 
 const WALL_COLOR = '#777';
-const RAILING_COLOR = '#333';
 const SUPPORT_COLOR = '#444';
-
 const CYLINDER_SEGMENTS = 8;
-const HALF_CYLINDER_SEGMENTS = 8;
 
-interface RailingSupportConfiguration {
+const DEFAULT_RAILING_SHAPE: RailingShape = { kind: 'cylinder', radius: 0.025 };
+
+interface ResolvedSupportConfiguration {
   readonly shape: RailingSupportShape;
   readonly count: number;
   readonly includeAtStart: boolean;
@@ -18,65 +18,16 @@ interface RailingSupportConfiguration {
 }
 
 /**
- * Builds the render data for a railing rail of any shape.
+ * Computes the positions and render data for every railing support (baluster)
+ * along a wall segment of the given length.
  *
- * `length` is the extent of the rail along the wall direction (Z local axis
- * of the wall group). The localPosition Y is the wall height plus the
- * heightOffset so the rail sits on top of the wall.
- *
- * For CylinderGeometry the constructor signature is:
- *   (radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength)
- *
- * Half-cylinder uses openEnded=true and thetaLength=π so only half the
- * cylinder surface is drawn. thetaStart controls which half:
- *   orientation 'up'   → thetaStart = 0   (flat face pointing down)
- *   orientation 'down' → thetaStart = π   (flat face pointing up)
- * The cylinder is rotated 90° around X so its height axis aligns with Z (wall direction).
+ * Supports are evenly distributed between the two ends. The `includeAtStart`
+ * and `includeAtEnd` flags add extra supports flush with each end, independent
+ * of the `count`. Support height equals `heightOffset` (the gap between the
+ * wall top and the rail centre-line).
  */
-const buildRailRenderData = (
-  shape: RailingShape,
-  wallHeight: number,
-  heightOffset: number,
-  length: number,
-): RailingRailRenderData => {
-  const localPosition: [number, number, number] = [0, wallHeight + heightOffset, 0];
-  const cylinderRotation: [number, number, number] = [Math.PI / 2, 0, 0];
-  const noRotation: [number, number, number] = [0, 0, 0];
-
-  switch (shape.kind) {
-    case 'square':
-      return {
-        kind: 'square',
-        localPosition,
-        localRotation: noRotation,
-        args: [shape.width, shape.height, length],
-        color: RAILING_COLOR,
-      };
-
-    case 'cylinder':
-      return {
-        kind: 'cylinder',
-        localPosition,
-        localRotation: cylinderRotation,
-        args: [shape.radius, shape.radius, length, CYLINDER_SEGMENTS],
-        color: RAILING_COLOR,
-      };
-
-    case 'half-cylinder': {
-      const thetaStart = shape.orientation === 'up' ? 0 : Math.PI;
-      return {
-        kind: 'half-cylinder',
-        localPosition,
-        localRotation: cylinderRotation,
-        args: [shape.radius, shape.radius, length, HALF_CYLINDER_SEGMENTS, 1, true, thetaStart, Math.PI],
-        color: RAILING_COLOR,
-      };
-    }
-  }
-};
-
 const buildSupportRenderData = (
-  support: RailingSupportConfiguration,
+  support: ResolvedSupportConfiguration,
   wallHeight: number,
   heightOffset: number,
   wallLength: number,
@@ -115,10 +66,18 @@ const buildSupportRenderData = (
   });
 };
 
-const resolveShape = (shape?: RailingShape): RailingShape =>
-  shape ?? { kind: 'cylinder', radius: 0.025 };
-
 export const WallFactory = {
+  /**
+   * Builds a wall segment between two floor vertices, including its railing
+   * and support render data.
+   *
+   * The wall body is displaced outward (away from the floor) by thickness/2
+   * along the left-hand normal of the p1→p2 direction. See README for the normal
+   * derivation and for how adjustStart/adjustEnd are determined.
+   *
+   * @param adjustStart  Shortening at the p1 end (metres, always ≥ 0).
+   * @param adjustEnd    Shortening at the p2 end (metres, always ≥ 0).
+   */
   create: (
     index: number,
     p1: PointXZ,
@@ -126,17 +85,7 @@ export const WallFactory = {
     wallDefaults: WallConfiguration,
     railingDefaults: RailingConfiguration,
     wallSettings?: WallSettingsConfiguration,
-    /**
-     * Longitudinal shortening at the p1 end (metres). Positive = shorten.
-     * Non-zero only when p1 is a vertex that requires adjustment, to prevent
-     * the wall body from overlapping the intersection post at that corner.
-     */
     adjustStart = 0,
-    /**
-     * Longitudinal shortening at the p2 end (metres). Positive = shorten.
-     * Non-zero only when p2 is a vertex that requires adjustment, to prevent
-     * the wall body from overlapping the intersection post at that corner.
-     */
     adjustEnd = 0,
   ): Wall => {
     const wallHeight = wallSettings?.override?.height ?? wallDefaults.height;
@@ -147,18 +96,15 @@ export const WallFactory = {
     const fullDist = Math.sqrt(dx * dx + dz * dz);
     const yAngle = Math.atan2(dx, dz);
 
-    // The effective length after shortening both ends.
     const currentDist = fullDist - adjustStart - adjustEnd;
 
-    // The group centre shifts toward the longer end when adjustments are unequal.
+    // When adjustments at the two ends differ, the group centre shifts toward
+    // the longer end by half the difference.
     const offsetFromCenter = (adjustStart / 2) - (adjustEnd / 2);
 
     const ux = dx / fullDist;
     const uz = dz / fullDist;
 
-    // Outward normal of this wall segment: perpendicular, pointing away from
-    // the floor interior. Used to displace the wall body outward by thickness/2
-    // so the wall borders the floor without occupying it.
     const outwardNormal = PointXZUtils.computeLeftHandNormal(p1, p2);
 
     const groupX = (p1.x + p2.x) / 2 + (outwardNormal.x * wallThickness / 2) + (ux * offsetFromCenter);
@@ -171,21 +117,21 @@ export const WallFactory = {
 
     if (isRailingActive) {
       const heightOffset = railingOverride?.heightOffset ?? railingDefaults.heightOffset;
-      const shape = resolveShape(railingOverride?.shape ?? railingDefaults.shape);
+      const shape = railingOverride?.shape ?? railingDefaults.shape ?? DEFAULT_RAILING_SHAPE;
       const autoConnect = railingOverride?.autoConnect ?? railingDefaults.autoConnect ?? true;
       const supportCount = railingOverride?.support?.count ?? railingDefaults.support?.count ?? 0;
       const supportStart = railingOverride?.support?.includeAtStart ?? false;
       const supportEnd = railingOverride?.support?.includeAtEnd ?? false;
       const supportShape = railingOverride?.support?.shape ?? railingDefaults.support?.shape;
 
-      const rail = buildRailRenderData(shape, wallHeight, heightOffset, currentDist);
+      const rail = RailingUtils.buildRailRenderData(shape, wallHeight, heightOffset, currentDist);
 
       const supports: RailingSupportRenderData[] = supportShape
         ? buildSupportRenderData({
           shape: supportShape,
           count: supportCount,
           includeAtStart: supportStart,
-          includeAtEnd: supportEnd
+          includeAtEnd: supportEnd,
         }, wallHeight, heightOffset, currentDist)
         : [];
 

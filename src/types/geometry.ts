@@ -5,19 +5,24 @@ export interface PointXZ {
 
 /**
  * Result of analysing a vertex against its two neighbours.
- *
- * isStraight: the three points are collinear (angle ≈ 180°).
- * isConvex:   the interior angle is < 180° (the polygon turns left at this
- *             vertex when walked counter-clockwise). Wall intersection posts
- *             should only be rendered at convex vertices.
- * normalizedPrev / normalizedNext: unit normals of the incoming and outgoing
- *             wall segments, used to compute the post's corner offset.
+ * See README for the mathematical background.
  */
 export interface PointXZAlignedResult {
   readonly isStraight: boolean;
   readonly isConvex: boolean;
   readonly normalizedPrev: PointXZ;
   readonly normalizedNext: PointXZ;
+}
+
+/**
+ * Three consecutive config-space wall points that form a non-right angle.
+ * Coordinates are in the original config coordinate system (+X = East, +Z = North),
+ * making them directly readable as the values the user typed in config.json.
+ */
+export interface AngleWarning {
+  readonly pointPrev: readonly [number, number];
+  readonly point: readonly [number, number];
+  readonly pointNext: readonly [number, number];
 }
 
 /**

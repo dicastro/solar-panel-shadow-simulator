@@ -1,6 +1,6 @@
 import { Site } from '../types/installation';
 import { Config, RailingConfiguration } from '../types/config';
-import { PointXZ } from '../types/geometry';
+import { PointXZ, AngleWarning } from '../types/geometry';
 import { PointXZUtils } from '../utils/PointXZUtils';
 import { PointXZFactory } from './PointXZFactory';
 import { WallFactory } from './WallFactory';
@@ -9,31 +9,23 @@ import { WallIntersectionFactory } from './WallIntersectionFactory';
 /**
  * Result of SiteFactory.create, bundling the Site geometry with any angle
  * validation warnings detected during construction.
+ * See README for the rationale behind returning a result object instead
+ * of writing to external state.
  */
 export interface SiteFactoryResult {
   readonly site: Site;
   /**
-   * Indices of wall points (in config space, 0-based) where the angle between
-   * adjacent wall segments is not 90°. Empty when all angles are valid.
-   * Collinear points are not included — they are valid by design.
+   * Each entry describes three consecutive config-space wall points where the
+   * angle at the middle point is neither 90° nor 180°. Empty when all angles
+   * are valid. Coordinates use the original config system (+X = East, +Z = North)
+   * so they match the values the user typed in config.json.
    */
-  readonly angleWarnings: number[];
+  readonly angleWarnings: readonly AngleWarning[];
 }
 
 /**
  * Computes the longitudinal shortening for one end of a wall at a shared vertex.
- *
- * In Three.js coordinates (where Z is negated relative to config space), the
- * cross product used by pointAlignedWithPreviousAndNext returns isConvex = true
- * for vertices that are interior recesses in real-world terms. These are the
- * vertices where the wall body, displaced outward by thickness/2, would overlap
- * the intersection post volume. The wall must be shortened by exactly
- * wallThickness at that end to prevent the overlap.
- *
- * Collinear vertices (isStraight = true) have no intersection post and need
- * no adjustment. Exterior corner vertices (isConvex = false in Three.js space)
- * also need no adjustment — the displaced wall centre-lines meet the post
- * naturally at those corners.
+ * See README for a detailed explanation of when and why this adjustment is applied.
  */
 const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
   if (isStraight || !isConvex) return 0;
@@ -41,6 +33,12 @@ const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: nu
 };
 
 export const SiteFactory = {
+  /**
+   * Builds the complete Site geometry from a raw configuration.
+   * Classifies every wall vertex once, reusing the classification for both
+   * angle validation and geometry construction to avoid two traversals.
+   * See README for the config-space / Three.js-space mapping applied here.
+   */
   create: (config: Config): SiteFactoryResult => {
     const { wallPoints, wallDefaults, railingDefaults, wallsSettings, azimuth } = config.site;
     const n = wallPoints.length;
@@ -69,23 +67,27 @@ export const SiteFactory = {
     };
 
     // Classify every vertex once. Results feed both angle validation and
-    // wall/intersection geometry — avoiding two separate traversals.
-    const angleWarnings: number[] = [];
+    // wall/intersection geometry, avoiding two separate traversals.
+    const angleWarnings: AngleWarning[] = [];
     const vertexInfo = centeredPoints.map((p, i) => {
       const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
       const pNext = PointXZUtils.getNextPoint(i, centeredPoints);
       const info = PointXZUtils.pointAlignedWithPreviousAndNext(p, pPrev, pNext);
 
       if (!info.isStraight && !PointXZUtils.isRightAngle(p, pPrev, pNext)) {
-        angleWarnings.push(i);
+        const prevIdx = (i - 1 + n) % n;
+        const nextIdx = (i + 1) % n;
+        angleWarnings.push({
+          pointPrev: wallPoints[prevIdx],
+          point: wallPoints[i],
+          pointNext: wallPoints[nextIdx],
+        });
       }
 
       return info;
     });
 
     // Wall intersections — created only for non-collinear vertices.
-    // The floor is a flat plane; collinear intermediate vertices carry no
-    // geometric information for the floor outline and are omitted.
     const wallIntersections = centeredPoints
       .map((p, i) => {
         const { isStraight } = vertexInfo[i];
@@ -107,8 +109,6 @@ export const SiteFactory = {
       })
       .filter((wi): wi is NonNullable<typeof wi> => wi !== null);
 
-    // Wall segments — each wall may be shortened at one or both ends when its
-    // endpoint vertex requires a geometric adjustment. See computeAdjust.
     const walls = centeredPoints.map((p1, i) => {
       const p2 = PointXZUtils.getNextPoint(i, centeredPoints);
       const wallSettings = wallsSettings?.find(s => s.wall === i);

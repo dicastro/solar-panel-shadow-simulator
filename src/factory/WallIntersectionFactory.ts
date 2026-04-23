@@ -2,31 +2,20 @@ import { WallIntersection, RailingRailRenderData } from '../types/installation';
 import { PointXZ } from '../types/geometry';
 import { RailingConfiguration, RailingShape } from '../types/config';
 import { PointXZUtils } from '../utils/PointXZUtils';
+import { RailingUtils } from '../utils/RailingUtils';
 
 const WALL_INTERSECTION_COLOR = '#777';
-const RAILING_COLOR = '#333';
-const CYLINDER_SEGMENTS = 8;
-const HALF_CYLINDER_SEGMENTS = 8;
+
+const DEFAULT_RAILING_SHAPE: RailingShape = { kind: 'cylinder', radius: 0.025 };
 
 /**
  * Computes the world-space offset from the floor vertex to the centre of the
- * intersection post for a right-angle corner.
+ * intersection post.
  *
- * Walls are displaced thickness/2 outward (away from the floor) along their
- * perpendicular normal. At a 90° corner the post must sit at the intersection
- * of the two displaced wall centre-lines. For perpendicular walls this point
- * is exactly thickness/2 away from the floor vertex along each of the two
- * wall directions, i.e. the post centre is at:
- *
- *   offset = (normalPrev + normalNext) * thickness/2
- *
- * where normalPrev and normalNext are the unit outward normals of the incoming
- * and outgoing wall segments respectively (see computeLeftHandNormal).
- *
- * For exterior corners the normals point away from the floor and the post
- * sits outside. For interior recesses the normals point inward toward the
- * recess and the post sits inside it — still correctly bordering the floor
- * without occupying it.
+ * At a 90° corner, walls are displaced thickness/2 outward along their
+ * perpendicular normal. The post centre sits at the intersection of the two
+ * displaced wall centre-lines, which for perpendicular walls equals
+ * `(normalPrev + normalNext) × thickness/2`. See README for the derivation.
  */
 const computeCornerOffset = (
   normalPrev: PointXZ,
@@ -38,67 +27,30 @@ const computeCornerOffset = (
 });
 
 /**
- * Builds the small railing segment that bridges the gap at a wall corner.
+ * Builds the small railing connect piece that bridges the gap at a wall corner.
  *
  * At a 90° corner the gap between the ends of the two adjacent railing rails
- * is a square of side ≈ wallThickness. The connect piece spans this gap along
- * the bisector direction. Its length equals wallThickness for a right-angle
- * corner.
- *
- * For CylinderGeometry the constructor signature is:
- *   (radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength)
- * Half-cylinder uses openEnded=true and thetaLength=π. thetaStart selects which half:
- *   orientation 'up'   → thetaStart = 0   (flat face pointing down)
- *   orientation 'down' → thetaStart = π   (flat face pointing up)
+ * is a square of side ≈ wallThickness. The connect piece spans this gap;
+ * its length equals wallThickness for a right-angle corner.
  */
 const buildRailingConnect = (
   shape: RailingShape,
   wallHeight: number,
   heightOffset: number,
   wallThickness: number,
-): RailingRailRenderData => {
-  const localPosition: [number, number, number] = [0, wallHeight + heightOffset, 0];
-  const cylinderRotation: [number, number, number] = [Math.PI / 2, 0, 0];
-  const noRotation: [number, number, number] = [0, 0, 0];
-  const connectLength = wallThickness;
-
-  switch (shape.kind) {
-    case 'square':
-      return {
-        kind: 'square',
-        localPosition,
-        localRotation: noRotation,
-        args: [shape.width, shape.height, connectLength],
-        color: RAILING_COLOR,
-      };
-    case 'cylinder':
-      return {
-        kind: 'cylinder',
-        localPosition,
-        localRotation: cylinderRotation,
-        args: [shape.radius, shape.radius, connectLength, CYLINDER_SEGMENTS],
-        color: RAILING_COLOR,
-      };
-    case 'half-cylinder': {
-      const thetaStart = shape.orientation === 'up' ? 0 : Math.PI;
-      return {
-        kind: 'half-cylinder',
-        localPosition,
-        localRotation: cylinderRotation,
-        args: [shape.radius, shape.radius, connectLength, HALF_CYLINDER_SEGMENTS, 1, true, thetaStart, Math.PI],
-        color: RAILING_COLOR,
-      };
-    }
-  }
-};
+): RailingRailRenderData =>
+  RailingUtils.buildRailRenderData(shape, wallHeight, heightOffset, wallThickness);
 
 export const WallIntersectionFactory = {
   /**
    * Creates a wall intersection post for a non-collinear vertex.
    *
-   * This factory must only be called for vertices that are not collinear
-   * (isStraight = false). Collinear vertices do not produce intersection posts
-   * and should be filtered out in SiteFactory before reaching here.
+   * Only call this for vertices where isStraight = false. Collinear vertices
+   * do not produce intersection posts and are filtered out in SiteFactory.
+   *
+   * The railingConnect piece is built only when both adjacent walls have active
+   * railings with autoConnect enabled. It uses the shape of the incoming wall's
+   * railing. See README for the autoConnect behaviour.
    *
    * @param prevRailing  Effective railing config of the wall ending at this vertex.
    * @param nextRailing  Effective railing config of the wall starting at this vertex.
@@ -126,7 +78,7 @@ export const WallIntersectionFactory = {
     const nextConnect = nextRailing?.autoConnect ?? true;
 
     if (prevActive && nextActive && prevConnect && nextConnect) {
-      const shape = prevRailing!.shape ?? { kind: 'cylinder' as const, radius: 0.025 };
+      const shape = prevRailing!.shape ?? DEFAULT_RAILING_SHAPE;
       const heightOffset = prevRailing!.heightOffset;
       railingConnect = buildRailingConnect(shape, height, heightOffset, wallThickness);
     }

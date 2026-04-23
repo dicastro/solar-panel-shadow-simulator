@@ -12,19 +12,15 @@
 
 # To Review
 
-* Quiero mejorar un poco el mensaje del `AngleWarningBanner`, ahora mismo si está mal el punto 1, 3, y 5... se muestran como `Point 1, Point 3, Point 5`. Lo cual podría llegar a ser confuso para el usuario, ya que no sabe si esos índices son 0-based o no, ni si quiera tiene por qué saber qué es 0-based. En lugar de reportar la posición del punto, me gustaría reportar los puntos que no forman un ángulo de 90º ni son colineales. Y creo que esto sería una tupla de 3 puntos (o sería una tupla de 2 puntos?). Y me gustaría mostrarlo en modo lista, que en el warning diga algo así como "los siguientes (pares/tripletes) de puntos forman un ángulo que no es de 90º"... y un listado, y cada elemento del listado diga algo así como "Puntos: [0, 3.7] y [6.6, 4.0]" (si hacen falta 3 pues se incluyen 3 en el mensaje). Todos estos mensajes tienen que seguir siendo multi-idioma
+* Quiero que te pongas en el papel de un desarrollador experto que tiene que evaluar este proyecto como si hubiese sido desarrollado por un tercero. Antes de incorporarlo en el código base de su compañía y desplegarlo en producción tiene que evaluar la arquitectura, comentarios, documentación. Lo único que tiene que ignorar es la ausencia de tests, están por implementar y por el momento se acepta. Haz una evaluación general del proyecto y emite un reporte con mejoras, cambios, refactors, que harías.
 
-* Tengo la sensación de que he perdido el control sobre el código ya que hay varias partes que no entiendo. Ha habido anteriormente un refactor para tratar de extraer cierta lógica a funciones pequeñas con nombres descriptivos. Antes de continuar implementando "Open Tasks" quiero que hagas un análisis más.
+* Quiero que analices los comentarios en el código para asegurar que lo que describen es lo que está implementado y también que cuando se hace referencia al `README.md` efectivamente está explicado. Si hay discrepancia entre el comentario de código y la implementación, adapta el comentario de código para que refleque la implementación. Si hay referencia al `README.md` y allí no está documentado, añade esa información. Si hay referencia al `README.md` y hay contenido allí, pero lo que dice el `README.md` no se ajusta a la implementación, corrige el `README.md`
 
-* Quiero que te enfoques en mejorar la legibilidad del código, comentarios de código de calidad y documentación completa y exhaustiva en `README.md`
+* Revisa las funciones y clases sin comentarios explicativos y añádelos donde falten.
 
-* Quiero que hagas un análisis de la lógica que está implementada dentro de las funciones principales que hay ahora mismo (sobre todo en los `Factory`) e infieras si hay lógica compartida entre diferentes clases que se pueda extraer a clases de `Utils`. Si esta lógica no es compartidqa entre diferentes clases, pero tiene un sentido funcional en si misma (cálculo de algo) extraela entonces a una función (no expuesta) dentro de la propia clase, para que la función principal sea más legible.
+* En el `README.md` hay un apartado final `My Documentation` que no está bien integrado con el resto del fichero. Estas son unas notas que tomé para comprender el funcionamiento de los paneles con los diodos de bypass, los strings y optimizadores. No quiero perder esta información, pero quiero que esté mejor integrado con la documentación previa. Encuentra el punto donde encaje mejor para reorganizarlo. Mantén la información que ya se dice. Si en otro punto del `README.md` hay un solapamiento y la misma información está en varios sitios, haz un "merge" para que quede una estructura limpia, sin duplicidades y sin perder información.
 
-* Quiero que hagas un análisis de las funciones auxiliares, que no están expuestas, que haya en las diferentes clases, para ver si hay lógica compartida que podría ser extraida a clases de `Utils`.
-
-* Quiero que hagas un análisis de los comentarios de código que hay en la aplicación. Y que hagas un análisis de la documentación que hay en el `README.md`. Quiero hacer una reorganización de los comentarios de código. Ahora mismo hay funciones que tienen unos comentarios muy extensos, y que explican cosas generales, esto está así porque yo lo pedí. Ahora quiero que reorganices todo esto. Las explicaciones detalladas sobre conceptos (qué es un vector, qué es una normal, que es el producto dot, y cualquier concepto) quiero centralizarlas en el `README.md`. Quiero que el `README.md` sea todo lo extenso que sea necesario y que para cada cosa se incluyan ejemplos específicos, y que si se puede representar con un diagrama en ASCII, que también se incluya. Quiero que las funciones donde se implementan o aplican estos conceptos/métodos no tengan como comentario toda la explicación de conceptos, ejemplos y demás, sino que hagan una simple referencia al `README.md`. Quiero que esta referencia al `README.md` sea genérica, que no apunte a un apartado concreto del `README.md`, porque si apuntan a un apartado concreto, si decido reestructurar el README se quedarán mal los comentarios de código.
-
-* Las clases tienen un comentario al principio. Ese comentario quiero que se mantenga donde existe, y donde no existe, que se añada. Pero se sigue el mismo principio que en el punto anterior: conceptos o cosas generales, ejemplos sobre los conceptos, todo esto se quita del comentario del la clase/módulo (como se llame en typescript) y se hace una referencia al `README.md`
+* Quiero definir más en detalle la primera tarea de la sección "Open tasks" en relación a la simulación anual. Hay muchas cosas aquí. Voy a anticiparte todo lo relacionado que he pensado hasta ahora para que te hagas una idea general de lo que me gustaría tener y que puedas plantear una solución y fasearla para ir implementándola poco a poco. No quiero que nos centremos ahora en una cosa muy específica y que al ir ampliando la solución haya que hacer refactors enormes por no haber tenido una visión más amplia desde el principio. Quiero que esa lógica se ejecute en web workers, no sé si pueden ser varios o solo 1, o no sé si se puede hacer en base a los recursos disponibles del navegador. Quiero que ese cálculo se haga para cada setup de la configuración. Quiero que el state con los datos calculados para poder hacer el raycasting se "hashee" y el resultado de la simulación anual se persista en el navegador, de tal forma que si se vuelve a calcular y los datos no han cambiado, no haya que repetir el cálculo y sea inmediato. Que solo se rehaga la simulación si tiene sentido: si algo que afecte a los cálculos haya cambiado (setup, densidad de muestreo, threshold para bypass de zona de panel, intervalo de tiempo para cálculo). Cada una de las simulaciones se podrían guardar con el hash, para poder tener varias, y así si se cambia la configuración y se vuelve a una ya pre-simulada, se pueda recuperar. Se tiene que mostrar el progreso, y lo mostraría en 2 barras: una para saber el setup que se está procesando (viendo su label, qué setup es sobre el total de setups), otra barra para ver el progreso del raycasting sobre el total que se tiene que calcular. Mientras se está haciendo una simulación, no se puede lanzar otra ni cambiar parámetros para la simulación, lo único que se podrá hacer es parar la simulación actual. Al parar la simulación actual se pedirá confirmación al usuario por si estuviera muy avanzada y le diera al botón de parar por error. No sé qué cálculos hacer ahora porque todavía no tengo muy claro cómo mostrar la información. Lo que he pensado hasta ahora es tener la producción estimada total anual y por meses. La total se visualizaría con un gráfico de barras para poder comparar setups, la que va por meses se podría visualizar con un radar/spider graph, de esta forma se podría comparar por meses cada setup. No sé si `Plotly` sería una librería adecuada para mostrar estas gráficas. No tengo claro cómo mostrar estas gráficas en la aplicación. También me gustaría tener una curva de producción diaria (por horas), mensual (por días y por horas), para esto utilizaría un diagrama de líneas que compare setups. Ahora mismo toda la web la ocupa el renderizado. Quizá habría que dividirlo en 2 zonas: una para renderizado y que tenga los controles de renderizado, otra zona (a la derecha o debajo, que sea adaptativo) para mostrar los reportes. También me gustaría tener un mapa de calor para cada panel y setup donde se vea cómo le afectan las sombras, no sé si tenerlo por año y también por meses, y para cada setup. Con este mapa de calor se podría analizar qué paneles necesitan optimizadores. Estos resultados de gráficos de alguna manera los quiero poder exportar, con la idea de poder consultarlos a posteriori (si fuese en pdf o png) o volver a cargarlos en la aplicación para poder interactuar con los gráficos. Otra cosa a tener en cuenta, ahora mismo se hace una estimación de la producción en condiciones ideales teniendo en cuenta la posición del sol y la inclinación con respecto al panel, me gustaría también tener la opción de que la simulación pueda tener una estimación de la radiación solar para ese instante de tiempo, no sé si esto se podría extraer de un tercero como PVGIS. Si esta información sobre la estimación de la radiación (o de si hay nubes, vamos teniendo en cuenta el clima) se puede obtener de algún API de terceros y de forma gratuita y cómoda (que no haya que hacer miles the requests) quiero dar la opción a incorporarlo en la simulación (con un toggle). Si hubiera varias fuentes que proporcionen esto además del toggle para incluirlo se daría a elegir la fuente a utilizar. Esta información se cachearía también en el navegador para no tener que pedirla de nuevo.
 
 # Open tasks
  
@@ -55,10 +51,10 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 3. [Project structure](#project-structure)
 4. [Architecture decisions](#architecture-decisions)
 5. [Coordinate system](#coordinate-system)
-6. [Configuration reference](#configuration-reference)
-7. [Solar production model](#solar-production-model)
-8. [Shadow detection — Raycasting + BVH](#shadow-detection--raycasting--bvh)
-9. [BVH and three-mesh-bvh override](#bvh-and-three-mesh-bvh-override)
+6. [2D geometry — normals, dot product, cross product](#2d-geometry--normals-dot-product-cross-product)
+7. [Configuration reference](#configuration-reference)
+8. [Solar production model](#solar-production-model)
+9. [Shadow detection — Raycasting + BVH](#shadow-detection--raycasting--bvh)
 10. [Timezone y DST](#timezone-y-dst)
 11. [Known limitations](#known-limitations)
 12. [Lessons learned](#lessons-learned)
@@ -72,7 +68,7 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Detects which panel zones are shaded using raycasting against all shadow-casting geometry (walls, railings, supports, and other panels).
 - Estimates instantaneous power output in kW, applying bypass-diode, string-mismatch and optimizer logic.
 - Supports multiple installation layouts ("setups") selectable via the UI.
-- Validates the wall configuration and displays a prominent warning when non-90° angles are detected.
+- Validates the wall configuration and displays a prominent warning listing the exact config-space coordinate triples that form non-90° or non-180° angles.
 - Planned: full annual simulation stepping through every N minutes of the year.
 
 ---
@@ -103,7 +99,7 @@ src/
 │
 ├── types/
 │   ├── config.ts                  # JSON config shapes (InstallationConfiguration, ...)
-│   ├── geometry.ts                # PointXZ, Vector3, Euler3 (renderer-agnostic)
+│   ├── geometry.ts                # PointXZ, Vector3, Euler3, AngleWarning (renderer-agnostic)
 │   ├── installation.ts            # Domain models: Site, Wall, SolarPanel, ...
 │   ├── simulation.ts              # SunState, SimulationResult
 │   └── index.ts                   # Re-exports
@@ -133,11 +129,12 @@ src/
 │   ├── Compass.tsx                # N/S/E/W labels in 3D
 │   ├── MainControls.tsx           # Date/time/play UI panel
 │   ├── SimulationControls.tsx     # Simulation settings UI panel
-│   ├── AngleWarningBanner.tsx     # Warning banner for non-90° wall angles
+│   ├── AngleWarningBanner.tsx     # Warning banner listing non-90° angle coordinate triples
 │   └── DeveloperFooter.tsx        # Ko-fi link + personal site
 │
 └── utils/
     ├── PointXZUtils.ts            # computeLeftHandNormal, convexity, right-angle check, prev/next helpers
+    ├── RailingUtils.ts            # Shared railing rail render data builder (used by WallFactory and WallIntersectionFactory)
     ├── ThreeConverter.ts          # Domain Vector3/Euler3 → THREE.Vector3/Euler
     └── TimezoneUtils.ts           # getAllTimezones(), getBrowserTimezone(), resolveInitialTimezone()
 ```
@@ -199,7 +196,17 @@ The application is restricted to wall configurations where every angle between a
 - **Collinear vertices** (angle = 180°): no intersection post is created. These vertices are structurally valid and exist to allow adjacent wall segments to have different heights or railing configurations. They add no information to the floor outline (which is a flat plane) and are therefore omitted from `wallIntersections`.
 - **All other vertices** (angle = 90° or 270°): an intersection post is always created. There is no distinction between "rendered" and "not rendered" at the data level — every entry in `site.wallIntersections` is rendered.
 
-If the configuration contains non-90° angles, `SiteFactory` populates `angleWarnings` with the indices of the offending points and the store exposes this list. `AngleWarningBanner` displays a prominent UI warning. Geometry is still constructed but may be visually incorrect.
+If the configuration contains non-90° angles, `SiteFactory` populates `angleWarnings` with `AngleWarning` objects, each carrying the three config-space coordinates of the offending vertex and its two neighbours. The store exposes this list and `AngleWarningBanner` renders it as a human-readable list showing the actual coordinate values from config.json — not internal indices. Geometry is still constructed but may be visually incorrect.
+
+### AngleWarning carries config-space coordinates, not indices
+
+`AngleWarning` stores the three `[x, z]` coordinate pairs from the original `config.json` (`pointPrev`, `point`, `pointNext`). This design was chosen so that the warning banner can show the user the exact values they typed in the configuration file, making it immediately actionable ("find `[3.7, 6.6]` in your wallPoints array"). Internal indices are meaningless to the user and require them to count array positions to locate the problem.
+
+Three points are needed (not two) because an angle is defined by three points: the vertex and its two neighbours. Showing only two points would not uniquely identify the angle.
+
+### `RailingUtils` — shared railing render data builder
+
+`WallFactory` and `WallIntersectionFactory` both need to build `RailingRailRenderData` for all three railing shapes. Previously each factory had its own copy of this logic (`buildRailRenderData` and `buildRailingConnect` respectively). The logic is now consolidated in `RailingUtils.buildRailRenderData(shape, wallHeight, heightOffset, length)`, which is imported by both factories. The connect piece in `WallIntersectionFactory` uses `wallThickness` as its length — `RailingUtils` is length-agnostic by design.
 
 ### Wall vertex classification — isConvex and the Three.js Z inversion
 
@@ -217,7 +224,7 @@ The post position is computed as `(normalPrev + normalNext) × thickness/2`, whe
 
 Walls are displaced `thickness/2` outward (away from the floor) along their perpendicular normal. At interior recess vertices (`isConvex = true` in Three.js coordinates) the displaced wall bodies would overlap the intersection post volume. Each wall is shortened by `wallThickness` at the end touching the recess vertex to eliminate the overlap.
 
-The adjustment is stored as `adjustStart` and `adjustEnd` on the `Wall` object. Both are always non-negative (shortening only). The naming `adjust` is preferred over `trim` because `trim` implies shortening exclusively, while the field name should reflect that it is a geometric correction.
+The adjustment is stored as `adjustStart` and `adjustEnd` on the `Wall` object. Both are always non-negative (shortening only).
 
 ### `computeLeftHandNormal` — single implementation, shared across factories
 
@@ -240,6 +247,8 @@ Translation keys are grouped by the component that owns them:
 - `simulationControls.*` — keys used exclusively by `SimulationControls`
 - `angleWarning.*` — keys used by `AngleWarningBanner`
 - Top-level keys (`title`, `loading`, `coordinates.*`, `footer.*`) are shared or belong to no specific component
+
+The `angleWarning.tripletLabel` key uses i18next interpolation (`{{prev}}`, `{{point}}`, `{{next}}`) to format the three coordinate pairs. The format string can be adjusted per language without changing any component code.
 
 ### `Intl.supportedValuesOf` — TypeScript lib target
 
@@ -302,20 +311,42 @@ The floor is a flat plane. Its outline is derived from `site.wallIntersections`,
 
 ## 2D geometry — normals, dot product, cross product
 
-These three operations are the building blocks for all wall geometry. Understanding them makes the factory code readable without having to mentally re-derive the math.
+These three operations are the building blocks for all wall geometry in this project. The implementation lives in `PointXZUtils.ts`. Understanding them makes the factory code readable without having to mentally re-derive the math.
 
-### Normal to a segment
+### Unit normal to a segment
 
-Given a directed segment from A to B with direction vector `d = (dx, dz)`, its **unit normal** is a vector perpendicular to `d` with length 1. There are two perpendicular directions (left and right). For a CCW-walked polygon the **outward** normal — pointing away from the interior — is always to the **left** of the direction of travel:
+A **normal** to a line segment is a vector perpendicular to it. A **unit** normal has length exactly 1.
+
+Given a directed segment from A to B:
 
 ```
-direction d = (dx, dz)
-left-hand normal = (-dz, dx) / |d|
+A ──────────────► B
+direction d = (dx, dz) = B - A
 ```
 
-Example: a wall going East `(dx=1, dz=0)` → normal `(0, 1)`, pointing South in Three.js (+Z = South). For a wall on the south side of a CCW floor, South is outward.
+There are always two perpendicular directions: left and right of the direction of travel. For a polygon walked **counter-clockwise** (CCW), the **outward** normal — pointing away from the interior — is always to the **left**:
 
-`computeLeftHandNormal(pA, pB)` in `PointXZUtils.ts` computes this for any segment. It is the single implementation used by `WallFactory` (to displace the wall body outward), `WallIntersectionFactory` (to place the corner post), and `pointAlignedWithPreviousAndNext` (to detect collinearity).
+```
+         outward normal
+              ↑
+A ──────────────► B
+```
+
+**Formula** (rotate direction vector 90° counter-clockwise):
+```
+d = (dx, dz) / |d|          unit direction
+n = (-dz, dx)                left-hand perpendicular (already unit length if d is unit)
+```
+
+**Example**: a wall going East, `d = (1, 0)`:
+- Unit direction: `(1, 0)`
+- Left-hand normal: `(0, 1)` → pointing South in Three.js (+Z = South)
+- For a wall on the south side of a CCW floor, South is indeed outward ✓
+
+`PointXZUtils.computeLeftHandNormal(pA, pB)` computes this for any segment. It is used by:
+- `WallFactory` — to displace the wall body outward by `thickness/2`
+- `WallIntersectionFactory` — to compute the corner post offset
+- `PointXZUtils.pointAlignedWithPreviousAndNext` — to detect collinearity via the dot product
 
 ### Dot product
 
@@ -323,24 +354,96 @@ Example: a wall going East `(dx=1, dz=0)` → normal `(0, 1)`, pointing South in
 dot(a, b) = a.x·b.x + a.z·b.z = |a|·|b|·cos(θ)
 ```
 
-For unit vectors, `dot(a, b) = cos(θ)` where θ is the angle between them:
-- `dot = +1` → same direction (0°)
-- `dot =  0` → perpendicular (90°)
-- `dot = -1` → opposite directions (180°)
+For **unit vectors**: `dot(a, b) = cos(θ)` where θ is the angle between them.
 
-Used here to detect collinear wall segments: two adjacent segments whose outward normals have `dot ≈ +1` are parallel — the vertex between them is a straight pass-through, not a corner.
+| dot value | angle θ | meaning |
+|---|---|---|
+| +1 | 0° | same direction |
+| 0 | 90° | perpendicular |
+| −1 | 180° | opposite directions |
+
+**Used for collinearity detection**: if two adjacent wall segments are collinear, their outward normals point in the same direction → `dot(normalPrev, normalNext) ≈ +1`.
+
+```
+── segment A ──►  ── segment B ──►
+     normalA ↑        normalB ↑
+     dot(normalA, normalB) ≈ +1  → collinear vertex (straight pass-through)
+```
 
 ### Cross product (2D)
+
+The 2D cross product is the Z component of the 3D cross product:
 
 ```
 cross(a, b) = a.x·b.z − a.z·b.x
 ```
 
-The sign encodes the rotation direction from `a` to `b`:
-- `cross > 0` → `b` is to the LEFT of `a` (CCW rotation)
-- `cross < 0` → `b` is to the RIGHT of `a` (CW rotation)
+Its **sign** encodes the rotation direction from `a` to `b`:
+- `cross > 0` → `b` is to the LEFT of `a` (CCW rotation, left turn)
+- `cross < 0` → `b` is to the RIGHT of `a` (CW rotation, right turn)
+- `cross = 0` → parallel vectors
 
-Applied to the incoming and outgoing edge directions at a vertex, the sign tells us the turn type. Because Three.js negates Z relative to config space, every CCW config walk becomes a CW walk in Three.js coordinates, inverting the sign convention — see the `isConvex` note in [Wall vertex classification](#wall-vertex-classification--isconvex-and-the-threejs-z-inversion).
+**Applied to a polygon vertex**: compute the cross product of the incoming and outgoing edge directions:
+
+```
+         pPrev
+           │
+           │  incoming edge direction
+           ↓
+           p ──────────► pNext
+                outgoing edge direction
+
+cross(incoming, outgoing) > 0  →  left turn  →  convex vertex (CCW polygon)
+cross(incoming, outgoing) < 0  →  right turn →  concave vertex (CCW polygon)
+```
+
+### The Three.js Z inversion effect on cross product sign
+
+Config space uses `+Z = North`. Three.js uses `+Z = South`, so the Z axis is negated when converting. This negation **flips every CCW walk in config space into a CW walk** in Three.js coordinates:
+
+```
+Config space (CCW walk):    Three.js space (CW walk after Z flip):
+     ┌───────────►                 ◄───────────┐
+     │           │                 │           │
+     │           │       →         │           │
+     │           │                 │           │
+     └───────────┘                 └───────────┘
+```
+
+A CW walk inverts the sign of every cross product, and therefore inverts `isConvex`:
+
+| `isConvex` in Three.js | Real-world meaning | Interior angle |
+|---|---|---|
+| `false` | Exterior corner | 90° outward |
+| `true` | Interior recess | 270° inward |
+
+This is why `SiteFactory.computeAdjust` applies wall shortening when `isConvex = true` (interior recess in Three.js space), not when `isConvex = false`.
+
+### Worked example: L-shaped floor
+
+```
+Config space wallPoints (CCW walk, +Z = North):
+
+ (0,8)  ───────────────  (3,8)
+       │               │
+       │               │
+ (0,5)  ───── (1,5)    | (3,5)
+             │         |
+             │         |
+ (0,2)  ───── (1,2)    |
+       |               |
+ (0,0) ────────────────  (3,0)
+
+Segment walk: (0,0) → (3,0) → (3,5) → (3,8) → (0,8) → (0,5) → (1,5) → (1,2) → (0,2) → (0,0)
+```
+
+At the interior recess vertex `(0,5)`:
+- Incoming direction: `(0,−1)` (going South in config = going North in Three.js after Z flip)
+- Outgoing direction: `(1,0)` (going East)
+- Config cross product: `0·0 − (−1)·1 = +1` → left turn → convex in CCW
+- Three.js cross product (Z negated): sign flipped → `isConvex = true` → interior recess ✓
+
+The wall shortening is applied at the ends of the two walls meeting at `(0,5)` to prevent the displaced wall bodies from overlapping the intersection post.
 
 ---
  
@@ -448,23 +551,46 @@ If the sun is behind the panel the dot product is negative, clamped to 0.
 Each panel is divided into `zones` diode zones. A NxN grid of sample points is cast toward the sun via raycasting. A zone is considered **shaded** if the number of shaded sample points reaches the configured `threshold`. Raycasting tests against all shadow-casting geometry in the scene, including other solar panels.
  
 ### 4. Panel output with bypass diodes
- 
+
+Each panel is divided into zones, each protected by a bypass diode. When a zone is shaded, its diode activates and that zone is electrically bypassed — the rest of the panel continues producing.
+
 | Shaded zones | Without optimizer | With optimizer |
 |---|---|---|
 | 0 | `basePower` | `basePower` |
 | k out of n | `basePower × (n−k)/n × 0.9` (−10% mismatch penalty) | `basePower × (n−k)/n` |
 | all | 0 | 0 |
+
+The 10% mismatch penalty for non-optimized panels models the voltage mismatch loss that occurs when some bypass diodes are active and the remaining cells must operate at a sub-optimal voltage to match the inverter.
  
 ### 5. String mismatch
  
-Panels in the same string without optimizers are connected in series. The string output is limited by the least-efficient panel (bottleneck effect):
- 
+Panels in the same string without optimizers are connected in series. Current flows like water in a pipe — the flow rate is set by the narrowest point. The string efficiency is limited by the least-efficient panel:
+
 ```
-stringEfficiency = min(individualEfficiency for each panel in string)
+stringEfficiency = min(power/peakKw) across all panels in the string
 each panel output = peakKw × stringEfficiency
 ```
- 
-Strings where every panel has an optimizer are treated as independent — each panel produces at its own efficiency.
+
+Strings where every panel has an optimizer are treated as independent — each panel produces at its own efficiency. The optimizer performs DC/DC conversion per panel, isolating each one from the string's current constraint.
+
+**Example without optimizer (3 panels, one panel loses 1 of 2 zones):**
+```
+Panel A: 100% efficient
+Panel B:  50% efficient (1 zone shaded)
+Panel C: 100% efficient
+
+String efficiency = min(100%, 50%, 100%) = 50%
+→ All three panels produce at 50%
+Total = 3 × peakKw × 50% = 1.5 × peakKw
+```
+
+**Example with optimizer (same scenario):**
+```
+Panel A: 100% → produces peakKw
+Panel B:  50% → produces 0.5 × peakKw
+Panel C: 100% → produces peakKw
+Total = 2.5 × peakKw
+```
  
 ---
  
@@ -475,6 +601,17 @@ Strings where every panel has an optimizer are treated as independent — each p
 Without acceleration, `raycaster.intersectObjects` tests every ray against every triangle in the scene — O(rays × triangles). For a scene with hundreds of wall and panel faces, and thousands of sample points, this is too slow for interactive use.
  
 `three-mesh-bvh` pre-organises each geometry into a **Bounding Volume Hierarchy**: a tree of axis-aligned bounding boxes where each leaf contains a small subset of triangles. A ray only needs to test O(log n) nodes instead of O(n) triangles, giving a dramatic speedup.
+
+```
+Scene triangles without BVH:          Scene triangles with BVH:
+                                              [root AABB]
+  △△△△△△△△△△△△△△△△△△△△                     /           \
+  (test all O(n) triangles)          [left AABB]       [right AABB]
+                                     /      \           /       \
+                                  [AABBs] [AABBs]  [AABBs]   [AABBs]
+                                  △△△      △△△       △△        △△△△
+                                  (test only O(log n) leaf triangles)
+```
  
 ### How it is set up
  
@@ -515,31 +652,31 @@ Inter-panel shading (one panel casting a shadow on another) is therefore natural
  
 ## Timezone y DST
  
-### El problema
- 
-`dayjs(string)` y `dayjs()` crean objetos en la timezone **local del navegador**. Cuando la timezone del navegador difiere de la de la instalación (usuario remoto) o cuando hay un cambio horario (DST), la hora que el usuario escribe en los inputs no coincide con la que se muestra en el display de fecha.
- 
-### La solución
- 
-`makeDateInTimezone(year, month, day, hour, minute, timezone)` usa `dayjs.tz(isoString, timezone)`, que interpreta los componentes como hora local en la timezone indicada — no en la del navegador. Esta función es la **única** forma correcta de construir fechas desde inputs de usuario en esta aplicación.
- 
-Cuando el usuario cambia de timezone, `setTimezone` llama a `date.tz(newTimezone)` sobre el `Dayjs` actual. Esto preserva el instante UTC (los cálculos solares no cambian) y actualiza la hora local mostrada en los controles al equivalente en la nueva timezone.
- 
-### geo-tz — descartado para browser
- 
-`geo-tz` es la librería más precisa para inferir timezone desde coordenadas GPS, pero lee datos geográficos desde disco en runtime y **no es compatible con bundlers de browser**. Sus datos (~10 MB de GeoJSON) no pueden incluirse en un bundle estático de GitHub Pages.
- 
-**Solución usada**: `Intl.supportedValuesOf('timeZone')` (API nativa del navegador ES2022, sin dependencias) para la lista completa de timezones IANA. El preset inicial es `Intl.DateTimeFormat().resolvedOptions().timeZone` (timezone detectada por el navegador). El usuario confirma o cambia mediante el selector en la UI.
- 
-### UTC en los cálculos
- 
-`date.toDate()` (nativo `Date` de JS) siempre representa un instante UTC. SunCalc recibe este valor. La timezone nunca afecta a los cálculos de posición solar ni de producción.
- 
+### The Problem
+
+`dayjs(string)` and `dayjs()` create objects in the **browser's local timezone**. When the browser's timezone differs from that of the installation (remote user) or when there is a Daylight Saving Time (DST) shift, the time the user enters in inputs does not match the time shown in the date display.
+
+### The Solution
+
+`makeDateInTimezone(year, month, day, hour, minute, timezone)` uses `dayjs.tz(isoString, timezone)`, which interprets the components as local time in the specified timezone, not the browser's. This function is the **only** correct way to construct dates from user inputs in this application.
+
+When the user changes timezones, `setTimezone` calls `date.tz(newTimezone)` on the current `Dayjs` object. This preserves the UTC instant (solar calculations do not change) and updates the local time shown in the controls to the equivalent in the new timezone.
+
+### geo-tz — Discarded for Browser
+
+`geo-tz` is the most accurate library for inferring timezones from GPS coordinates, but it reads geographic data from the disk at runtime and is **not compatible with browser bundlers**. Its data (~10 MB of GeoJSON) cannot be included in a static GitHub Pages bundle.
+
+**Implemented Solution**: `Intl.supportedValuesOf('timeZone')` (a native ES2022 browser API, dependency-free) for the complete list of IANA timezones. The initial preset is `Intl.DateTimeFormat().resolvedOptions().timeZone` (the timezone detected by the browser). The user confirms or changes this via the UI selector.
+
+### UTC in Calculations
+
+`date.toDate()` (native JS `Date`) always represents a UTC instant. SunCalc receives this value. The timezone never affects the solar position or production calculations.
+
 ---
  
 ## Known limitations
  
-- **90° wall angles only**: the wall and intersection geometry model is restricted to right-angle corners. Non-right angles produce incorrect post placement and wall overlaps. A validation warning is shown in the UI when violations are detected in the configuration.
+- **90° wall angles only**: the wall and intersection geometry model is restricted to right-angle corners. Non-right angles produce incorrect post placement and wall overlaps. A validation warning is shown in the UI listing the exact coordinate triples from config.json when violations are detected.
 - **Single year**: time controls are constrained to the current year.
 - **No diffuse irradiance**: only direct (beam) irradiance is modelled.
 - **Annual simulation not yet implemented**.
@@ -589,6 +726,14 @@ Collinear wall points (where two segments meet at 180°) are valid configuration
 
 Returning `{ site, angleWarnings }` from `SiteFactory.create` keeps the factory free of side effects. The factory does not write to any store or emit events — it produces data and returns it. The caller (`loadConfig` in the store) decides what to do with each part. This pattern generalises: if the factory ever needs to return additional metadata (e.g. validation errors for panel positions), the result object can be extended without changing the factory's signature.
 
+### `AngleWarning` carries coordinates, not indices
+
+Showing the user raw 0-based array indices when a wall angle is invalid forces them to count positions in their config file and reason about 0-based indexing. Storing the actual `[x, z]` coordinate pairs from `config.json` in the `AngleWarning` type makes the warning immediately actionable — the user can search for those exact values in their configuration file.
+
+### Shared railing render data logic extracted to `RailingUtils`
+
+`WallFactory` builds a full-length rail for each wall segment; `WallIntersectionFactory` builds a short connect piece of length `wallThickness` for each corner. Both operations produce `RailingRailRenderData` using identical Three.js geometry logic for all three railing shapes. Extracting this to `RailingUtils.buildRailRenderData` ensures that adding a new railing shape requires editing only one place, and that both call sites get the change automatically.
+
 ### i18n keys grouped by owning component
 
 Flat top-level keys become hard to navigate as the translation file grows. Grouping keys under the component that owns them (`mainControls.*`, `simulationControls.*`, `angleWarning.*`) makes it immediately clear where each string is used and avoids naming collisions. Keys that are genuinely shared or application-level (`title`, `loading`, `coordinates.*`, `footer.*`) remain at the top level.
@@ -605,54 +750,40 @@ The outward normal of a wall segment is computed exactly once, in `PointXZUtils.
  
 # My Documentation
  
-## ☀️ Lógica de Producción y Sombras
+## ☀️ Solar Production and Shadow Logic
  
-### 1. El Concepto de Zonas (Diodos de Bypass)
+### 1. The Zone Concept (Bypass Diodes)
  
-Un panel solar no es una única pieza eléctrica, sino un conjunto de celdas conectadas en serie. Habitualmente, los paneles se dividen en zonas protegidas por diodos de bypass.
+A solar panel is not a single electrical component. It is an array of cells connected in series, typically divided into zones protected by bypass diodes.
  
-* **Sin Sombra**: La corriente fluye por todas las celdas
-* **Con Sombra en una zona**: El diodo de esa zona "se activa" y hace que la corriente salte esa zona para que el resto del panel siga funcionando
-  * *Resultado*: Si 1 de 3 zonas tiene sombra, el panel pierde **1/3** de su producción (produce el 66.6%)
-  * *Importante*: Si la sombra toca aunque sea un solo punto de una zona, esa zona entera se considera "anulada" eléctricamente
+* **No shade**: current flows through all cells.
+* **Shade on one zone**: the diode for that zone activates, bypassing it so the rest of the panel continues producing.
+  * *Result*: if 1 of 3 zones is shaded, the panel loses 1/3 of its output (produces 66.6%).
+  * *Important*: if even a single sample point in a zone is shaded, the entire zone is considered electrically bypassed.
 
-### 2. Comportamiento del String (Sin Optimizadores)
+### 2. String behaviour without optimizers
  
-En un string, todos los paneles están conectados en serie. La corriente es como el agua en una tubería: **el caudal lo marca el punto más estrecho**.
+In a string, all panels are connected in series. Current behaves like water in a pipe — the flow rate is set by the narrowest point.
  
-* **Caso A (Sombra en 1 zona de 1 panel)**: Ese panel baja al 66%. Como el string es una serie "pura", **todos los paneles del string bajan su producción al 66%**, aunque les esté dando el sol plenamente. Es el efecto "cuello de botella"
-* **Caso B (Sombra total en 1 panel)**: Si un panel se sombrea por completo (todas sus zonas), el string entero cae a **0%** (o a un valor residual ínfimo), a menos que los diodos del panel sombreado permitan puentearlo por completo, pero la pérdida de voltaje suele desplomar la eficiencia del inversor
+* **Shade on 1 zone of 1 panel**: that panel drops to 66%. Because the string is in series, all panels in the string drop to 66% even if they receive full sunlight. This is the bottleneck effect.
+* **Full shade on 1 panel**: the entire string drops to near 0%, unless the shaded panel's diodes allow it to be fully bypassed, but the voltage drop typically collapses the inverter's operating point.
 
-### 3. Comportamiento con Optimizadores
+### 3. Behaviour with optimizers
  
-* **¿Cómo funciona?**: El optimizador ajusta el voltaje y la corriente de su panel para que el "cuello de botella" no afecte a los demás. Un optimizador DC/DC aísla el rendimiento de cada panel del resto del string. Con sombra en un panel, el resto sigue produciendo al 100%.
-* **Caso A (Sombra en 1 zona de 1 panel optimizado)**:
-  * El panel afectado pierde **1/3** de su producción (produce el 66%)
-  * **¡El resto de paneles del string siguen produciendo al 100%!**
-* **Caso B (Sombra total en 1 panel optimizado)**:
-  * Ese panel produce **0%**
-  * El resto del string sigue produciendo al **100%**
-
-### 4. Matriz de Combinaciones
+A DC/DC optimizer per panel isolates each panel's operating point from the rest of the string. With shade on one panel, the others continue at 100%.
  
-| Escenario | Afectación Individual (Panel) | Afectación Global (String) |
-|-----------|-------------------------------|----------------------------|
-| Sin Sombras | 100% | 100% |
-| Sombra en 1 Zona (Sin Optimizador) | Produce: (`Zonas Libres / Zonas Totales`) | **Todos** los paneles del string limitados a ese mismo % |
-| Sombra en 1 Zona (Con Optimizador) | Produce: (`Zonas Libres / Zonas Totales`) | El resto del string produce al **100%** |
-| Sombra en Varias Zonas (Mezcla) | Cada panel calcula su % máximo posible. | El string sin optimizadores se queda con el **% del panel más afectado**. |
+* **Shade on 1 zone of 1 optimized panel**:
+  * The affected panel produces 66%.
+  * The rest of the string remains at 100%.
+* **Full shade on 1 optimized panel**:
+  * That panel produces 0%.
+  * The rest of the string remains at 100%.
+
+### 4. Combination matrix
  
-## Hooks
- 
-* **useBVH**: construye el BVH una sola vez cuando cambia la escena (setup/site). Reconstruye solo si cambia `rebuildKey`.
-* **useShadowSampler**: lanza todos los rayos en una sola pasada usando el BVH. Cachea la lista de meshes con `castShadow`. Devuelve `Map<pointId, isShaded>`.
-
-## Geometría de Muros — Restricción a 90°
-
-La aplicación solo soporta ángulos de 90° entre muros adyacentes. Esta restricción se valida al cargar la configuración. Si se detectan ángulos que no son de 90°, se muestra un banner de aviso en la UI indicando los índices de los puntos problemáticos.
-
-Existen tres categorías de vértice. La clasificación se hace en coordenadas Three.js (donde Z está negado respecto al espacio de configuración), lo que invierte el significado del flag `isConvex` respecto a su sentido matemático puro en CCW:
-
-* **Vértice con `isConvex = false`** (esquina exterior, ángulo interior 90°): se crea un post de intersección. El post se desplaza `thickness/2` en cada una de las dos direcciones perpendiculares de los muros adyacentes, quedando en el exterior de la terraza. Los muros no se acortan.
-* **Vértice colineal** (`isStraight = true`, ángulo = 180°): no se crea `WallIntersection`. El suelo se construye a partir de los `WallIntersection` existentes, y los vértices colineales son redundantes en un plano plano.
-* **Vértice con `isConvex = true`** (recodo interior, ángulo interior 270°): se crea un post de intersección. El post se desplaza `thickness/2` hacia el interior del recodo. Los muros adyacentes se acortan `wallThickness` en el extremo que toca esta intersección, para evitar que el cuerpo del muro invada el volumen del post.
+| Scenario | Panel output | String output |
+|---|---|---|
+| No shade | 100% | 100% |
+| 1 zone shaded (no optimizer) | free zones / total zones | All panels limited to that % |
+| 1 zone shaded (with optimizer) | free zones / total zones | Rest of string at 100% |
+| Multiple zones shaded (mixed) | Each panel calculates its own max % | Without optimizer: limited by worst panel |
