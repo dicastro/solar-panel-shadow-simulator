@@ -1,64 +1,30 @@
 # Instructions
  
-* Quiero que revises el apartado "To Review" de este mismo fichero donde están los puntos que quiero que revises antes de continuar con las tareas de Open Tasks. Tras procesar todo el apartado "To Review" inspecciona el código para comprender mejor lo que se dice antes de ponerte a cambiar código. Si tras hacer esto tienes alguna duda o no entiendes algo de lo que se dice o no coincide lo que se dice con el código, pregúntame antes de proponer ningún cambio de código.
-* Quiero una solución de alta calidad técnica y que lo que haya programado tenga su sentido y que sea defendible ante cualquier programador/desarrollador/arquitecto experto en el stack tecnológico del proyecto.
-* Tras los cambios de código que se hagan debería de actualizarse el README en consecuencia para reflejar las decisiones tomadas, cambios de configuración, cambios de arquitectura, etc. cualquier cosa que sea relevante y que encaje con lo que se escribe en el README
-* El criterio para actualizar el README es siempre con la idea de complementar lo existente (o adaptarlo si es necesario). La idea no es que el README refleje únicamente los los cambios que se están realizando. Se tiene que hacer un ejercicio de "merge" entre el contenido existente en el README y los cambios que se han realizado. Todo el contenido del README tiene que estar en inglés.
+* Quiero que revises el todo el apartado "To Review" de este mismo fichero donde están los puntos que quiero que revises antes de continuar con las tareas de Open Tasks. Tras procesar todo el apartado "To Review" inspecciona el código para comprender mejor lo que se dice antes de ponerte a cambiar código. Si tras hacer esto tienes alguna duda o no entiendes algo de lo que se dice/pregunta/propone, pregúntame antes de proponer ningún cambio de código.
+* Quiero una solución de alta calidad técnica, que lo que haya programado tenga su sentido y que sea defendible ante cualquier programador/desarrollador/arquitecto experto en el stack tecnológico del proyecto.
+* Tras realizar cambios de código hay que actualizar el `README.md` en consecuencia para reflejar las decisiones tomadas, cómo queda la configuración finalmente, cómo queda la arquitectura finalmente, etc. cualquier cosa que sea relevante y que encaje con lo que se escribe en el `README.md`. Para poder actualizar el `README.md` haz un análisis previo de su contenido para proceder a determinar cómo actualizarlo.
+* El criterio para actualizar el `README.md` es siempre con la idea de complementar lo existente (o adaptarlo si es necesario). La idea NO es que el `README.md` refleje únicamente los los cambios que se están realizando. Se tiene que hacer un ejercicio de "merge" entre el contenido existente en el `README.md` y los cambios que se han realizado. Todo el contenido del `README.md` tiene que estar en inglés.
 * El criterio para actualizar los comentarios del código. Los comentarios del código tienen que ser explicativos, no tienen que hacer referencia al refactor que se está haciendo, incluyendo frases como: introducido para..., antes del refactor se hacía..., ahora se hace... Y si ya hay comentarios previos en el código que siguen teniendo sentido tras los cambios que se hagan hay que dejarlos. No quiero comentarios que sirvan para marcar inicios de secciones, por ejemplo en las definiciones de clases, un comentario que simplemente diga que debajo de esta línea hay clases de cierto ámbito, esto con el tiempo no se respeta y deja de tener sentido el comentario
-* Estas instrucciones están en en español, y puede que la sección "To Review" o la de "Open Tasks" tenga mezcla de inglés o de español. A la hora de programar código y comentarlo y actualizar el README será siempre en inglés todo.
-* Al actualizar el README deja las secciones iniciales "Instructions", "To Review" y "Open Tasks" intactas, ya me encargo yo de poner esto al día. Actualiza a partir de la sección "Solar Panel Shadow Simulator"
-* Si tienes discrepancias entre el código y lo que dice el README, lo que manda es el código. Y con código me refiero a únicamente el código, excluyendo los posibles comentarios que haya en el código (que también podrían ser incorrectos y no corresponderse con el código). Las pruebas se hacen sobre el código y el README debería ser un reflejo de lo que hace el código. No se ha escrito primero el README y se ha tratado de implementar lo que dice el README. El proceso es el inverso, el README es una documentación sobre lo que hay.
+* Estas instrucciones están en en español, y puede que la sección "To Review" o la de "Open Tasks" tenga mezcla de inglés o de español. A la hora de programar código y comentarlo y actualizar el `README.md` será siempre en inglés todo.
+* Al actualizar el `README.md` deja las secciones iniciales "Instructions", "To Review" y "Open Tasks" intactas, ya me encargo yo de poner esto al día. Actualiza a partir de la sección "Solar Panel Shadow Simulator"
+* Si tienes discrepancias entre el código y lo que dice el `README.md`, lo que manda es el código. Y con código me refiero a únicamente el código, excluyendo los posibles comentarios que haya en el código (que también podrían ser incorrectos y no corresponderse con el código). Las pruebas se hacen sobre el código y el `README.md` debería ser un reflejo de lo que hace el código. No se ha escrito primero el `README.md` y se ha tratado de implementar lo que dice el `README.md`. El proceso es el inverso, el `README.md` es una documentación sobre lo que hay.
 * Al final de todos los cambios propuestos quiero me me proporciones un mensaje para el commit al repositorio git. Ten en cuenta que ese mensaje tiene que ser condensado.
 
 # To Review
 
-* Para solucionar el problema `Property 'supportedValuesOf' does not exist on type 'typeof Intl'.` en `return [...Intl.supportedValuesOf('timeZone')].sort();` de `TimezoneUtils.ts` se ha propuesto en otra conversación incluir el siguiente código:
+* Quiero mejorar un poco el mensaje del `AngleWarningBanner`, ahora mismo si está mal el punto 1, 3, y 5... se muestran como `Point 1, Point 3, Point 5`. Lo cual podría llegar a ser confuso para el usuario, ya que no sabe si esos índices son 0-based o no, ni si quiera tiene por qué saber qué es 0-based. En lugar de reportar la posición del punto, me gustaría reportar los puntos que no forman un ángulo de 90º ni son colineales. Y creo que esto sería una tupla de 3 puntos (o sería una tupla de 2 puntos?). Y me gustaría mostrarlo en modo lista, que en el warning diga algo así como "los siguientes (pares/tripletes) de puntos forman un ángulo que no es de 90º"... y un listado, y cada elemento del listado diga algo así como "Puntos: [0, 3.7] y [6.6, 4.0]" (si hacen falta 3 pues se incluyen 3 en el mensaje). Todos estos mensajes tienen que seguir siendo multi-idioma
 
-```typescript
-declare namespace Intl {
-  function supportedValuesOf(key: 'timeZone' | 'calendar' | 'collation' | 'currency' | 'numberingSystem' | 'unit'): string[];
-}
-```
+* Tengo la sensación de que he perdido el control sobre el código ya que hay varias partes que no entiendo. Ha habido anteriormente un refactor para tratar de extraer cierta lógica a funciones pequeñas con nombres descriptivos. Antes de continuar implementando "Open Tasks" quiero que hagas un análisis más.
 
-Esto rompe la línea `Intl.DateTimeFormat().resolvedOptions().timeZone;` porque no reconoce `DateTimeFormat`
+* Quiero que te enfoques en mejorar la legibilidad del código, comentarios de código de calidad y documentación completa y exhaustiva en `README.md`
 
-No estoy anclado a una versión de Node/ES/Typescript, así que si lo mejor es cambiar algo de esto, pues lo cambio y no hay que hacer redefiniciones raras. En otra conversación se ha mencionado "ampliar a ES2022", que no sé qué es lo que significa ni las implicaciones que podría tener
+* Quiero que hagas un análisis de la lógica que está implementada dentro de las funciones principales que hay ahora mismo (sobre todo en los `Factory`) e infieras si hay lógica compartida entre diferentes clases que se pueda extraer a clases de `Utils`. Si esta lógica no es compartidqa entre diferentes clases, pero tiene un sentido funcional en si misma (cálculo de algo) extraela entonces a una función (no expuesta) dentro de la propia clase, para que la función principal sea más legible.
 
-Por el momento lo he arreglado así `return [...(Intl as any).supportedValuesOf('timeZone')].sort();` pero no me gusta ese `(Intl as any)`
+* Quiero que hagas un análisis de las funciones auxiliares, que no están expuestas, que haya en las diferentes clases, para ver si hay lógica compartida que podría ser extraida a clases de `Utils`.
 
-* En `WallIntersectionFactory.ts` está la función `getOutwardNormal`. Es una copia de la que hay en `PointXZUtils.ts`, que no está expuesta. Habría que exponerla en `PointXZUtils.ts` y usar esta desde `WallIntersectionFactory.ts`. No sé por qué en un caso se nombra con `Outward`, aunque la implementación es la misma que la que se llama `getNormal`. Hay que utilizar el nombre más preciso posible y que tenga un comentario explicativo. Si el comentario de `getOutwardNormal` sigue aplicando al trasladarla a `PointXZUtils.ts`, se deja ese comentario. Si hay que adaptar el comentario para que sea genérico, ya que `PointXZUtils.ts` es una utilidad que puede ser usada en cualquier punto de la aplicación, no debería tener comentarios específicos a una parte concreta como `WallIntersection` o `Wall`, ya que en el contexto de esa clase de utilidad no se sabe nada de esas entidades, ni se reciben como argumento.
+* Quiero que hagas un análisis de los comentarios de código que hay en la aplicación. Y que hagas un análisis de la documentación que hay en el `README.md`. Quiero hacer una reorganización de los comentarios de código. Ahora mismo hay funciones que tienen unos comentarios muy extensos, y que explican cosas generales, esto está así porque yo lo pedí. Ahora quiero que reorganices todo esto. Las explicaciones detalladas sobre conceptos (qué es un vector, qué es una normal, que es el producto dot, y cualquier concepto) quiero centralizarlas en el `README.md`. Quiero que el `README.md` sea todo lo extenso que sea necesario y que para cada cosa se incluyan ejemplos específicos, y que si se puede representar con un diagrama en ASCII, que también se incluya. Quiero que las funciones donde se implementan o aplican estos conceptos/métodos no tengan como comentario toda la explicación de conceptos, ejemplos y demás, sino que hagan una simple referencia al `README.md`. Quiero que esta referencia al `README.md` sea genérica, que no apunte a un apartado concreto del `README.md`, porque si apuntan a un apartado concreto, si decido reestructurar el README se quedarán mal los comentarios de código.
 
-* En `SiteFactory.ts` he tenido que corregir la función `computeAdjust` para que se renderice todo bien. La he dejado de esta forma
-
-```typescript
-const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
-  if (isStraight || !isConvex) return 0;
-  return wallThickness;
-};
-```
-
-Inicialmente estaba definida así
-
-```typescript
-const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
-  if (isStraight || isConvex) return 0;
-  return wallThickness / 2;
-};
-```
-
-No he revisado el comentario de documentación de la función, habrá que actualizarlo con la implementación final. También habrá que actualizar el README.md si hay alguna mención a este respecto.
-
-Insisto en que la implementación final funciona correctamente ya que lo he probado y se renderiza todo perfecto.
-
-* En `SiteFactory.ts` cuando se calcula `angleWarnings` se está iterando `centeredPoints` y llamando a `PointXZUtils.pointAlignedWithPreviousAndNext` recogiendo únicamente el `isStraight`. Justo después para calcular `vertexInfo` se está iterando de nuevo `centeredPoints` y se vuelve a hacer la misma llamada `PointXZUtils.pointAlignedWithPreviousAndNext`. Estas 2 iteraciones sobre `centeredPoints` se podrían hacer de una sola vez y calcular al mismo tiempo tanto `angleWarnings` como `vertexInfo`.
-
-* Antes de continuar implementando "Open Tasks". Tengo la sensación de que he perdido el control sobre el código ya que hay varias partes que no entiendo. Me gustaría hacer una reorganización de la lógica, creando funciones auxiliares con nombres descriptivos y con comentarios explicativos. Sé que no debería de ser necesario pero quiero que se incluyan todas las explicaciones necesarias. Por ejemplo: qué es una normal, qué es la función `dot` entre dos puntos, y todo lo relacionado con cálculos espaciales para Three.js
-
-* Analiza lógica duplicada en varias clases en general y sobre todo en relación a la gestión de puntos, coordenadas, cálculos de puntos en línea, tipos de ángulos, etc. Quiero que no haya lógica duplicada o distintas implementaciones para hacer los mismos cálculos en diferentes lugares. Creo que esto es la parte más compleja de la aplicación y quiero que esté bien claro y limpio.
-
-* Quiero que el código sea lo más fácil de mantener. En un futuro se me olvidará gran parte de esto y sin nombres claros de funciones y con muchos cálculos dentro de las funciones que hay ahora, sin saber para qué se hacen no me voy a enterar de mucho.
-
-* Haz una revisión de estilos que estén embebidos directamente en html. Todos los estilos deberían de estar en css y hacer referencia a los mismos con class en el html.
+* Las clases tienen un comentario al principio. Ese comentario quiero que se mantenga donde existe, y donde no existe, que se añada. Pero se sigue el mismo principio que en el punto anterior: conceptos o cosas generales, ejemplos sobre los conceptos, todo esto se quita del comentario del la clase/módulo (como se llame en typescript) y se hace una referencia al `README.md`
 
 # Open tasks
  
