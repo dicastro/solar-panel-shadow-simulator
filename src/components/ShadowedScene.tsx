@@ -1,5 +1,5 @@
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Site, PanelSetup, SunState } from '../types';
 import { ShadowMap, useShadowSampler } from '../hooks/useShadowSampler';
 import { useBVH } from '../hooks/useBVH';
@@ -27,9 +27,12 @@ interface Props {
  *
  * `showPoints` is intentionally absent from Props. It controls whether sample
  * point spheres are rendered visually in SolarPanelComponent, but has no
- * effect on shadow computation. Accepting it here would tempt callers to
- * include it in dependencies, triggering expensive raycasting passes on every
- * visibility toggle with no change in output.
+ * effect on shadow computation. Accepting it here would cause raycasting to
+ * run on every visibility toggle with no change in output.
+ *
+ * `allPanels` is memoised on `activeSetup` so that the flat panel array is not
+ * reconstructed on every render, which would also invalidate `useShadowSampler`
+ * on every frame.
  */
 export function ShadowedScene({
   site, activeSetup, sun, density, threshold,
@@ -40,7 +43,11 @@ export function ShadowedScene({
   const rebuildKey = `${site.centerX}-${site.centerZ}-${activeSetup.id}`;
   useBVH(rebuildKey);
 
-  const allPanels = activeSetup.panelArrays.flatMap(pa => pa.panels);
+  const allPanels = useMemo(
+    () => activeSetup.panelArrays.flatMap(pa => pa.panels),
+    [activeSetup],
+  );
+
   const { computeShadows } = useShadowSampler(allPanels, rebuildKey);
 
   const [shadowMap, setShadowMap] = useState<ShadowMap>(new Map());

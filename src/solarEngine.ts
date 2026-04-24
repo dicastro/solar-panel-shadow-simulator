@@ -6,80 +6,84 @@ import { SolarPanel } from './types/installation';
 import { ShadowMap } from './hooks/useShadowSampler';
 
 export const calculateSunState = (date: Date, lat: number, lon: number): SunState => {
-    const sunPos = SunCalc.getPosition(date, lat, lon);
-    const isDaylight = sunPos.altitude > 0;
-    
-    const threeDirection = new THREE.Vector3(
-        Math.cos(sunPos.altitude) * Math.sin(-sunPos.azimuth),
-        Math.sin(sunPos.altitude),
-        Math.cos(sunPos.altitude) * Math.cos(sunPos.azimuth)
-    ).normalize();
+  const sunPos = SunCalc.getPosition(date, lat, lon);
+  const isDaylight = sunPos.altitude > 0;
 
-    const direction: Vector3 = { x: threeDirection.x, y: threeDirection.y, z: threeDirection.z };
+  const threeDirection = new THREE.Vector3(
+    Math.cos(sunPos.altitude) * Math.sin(-sunPos.azimuth),
+    Math.sin(sunPos.altitude),
+    Math.cos(sunPos.altitude) * Math.cos(sunPos.azimuth)
+  ).normalize();
 
-    return {
-        altitude: sunPos.altitude,
-        azimuth: sunPos.azimuth,
-        isDaylight,
-        direction
-    };
+  const direction: Vector3 = { x: threeDirection.x, y: threeDirection.y, z: threeDirection.z };
+
+  return {
+    altitude: sunPos.altitude,
+    azimuth: sunPos.azimuth,
+    isDaylight,
+    direction
+  };
 };
 
 /**
- * Calculates panel efficiency based uniquely in sun angle
+ * Calculates the cosine of the angle between the sun direction and the panel normal
+ * (Lambert's cosine law). Returns 0 when the sun is behind the panel.
  */
 export const calculateIncidenceFactor = (sunDir: Vector3, panelNormal: Vector3): number => {
-    const dot = sunDir.x * panelNormal.x + sunDir.y * panelNormal.y + sunDir.z * panelNormal.z;
-    return Math.max(0, dot); // if it is negative, the sun is behind the panel
+  const dot = sunDir.x * panelNormal.x + sunDir.y * panelNormal.y + sunDir.z * panelNormal.z;
+  return Math.max(0, dot);
 };
 
 /**
- * Calcula la potencia de un panel basándose en sus zonas sombreadas
- * @param basePower Potencia pico ajustada por el factor de incidencia (W)
- * @param shadedZones Array de booleanos (true = zona sombreada)
- * @param hasOptimizer Si el panel tiene optimizador independiente
+ * Calculates the output power of a single panel based on its shaded zones.
+ *
+ * @param basePower   Peak power adjusted by the incidence factor (kW).
+ * @param shadedZones Boolean array where true means the zone is shaded.
+ * @param hasOptimizer Whether the panel has an independent DC/DC optimizer.
+ *
+ * Without an optimizer, bypass diodes activate for shaded zones and a 10%
+ * mismatch penalty is applied to the remaining output, modelling the voltage
+ * mismatch that occurs when some diodes are active and the remaining cells must
+ * operate at a sub-optimal voltage.
+ *
+ * With an optimizer, loss is purely proportional to the fraction of shaded zones
+ * because the optimizer isolates the panel's operating point from the string.
  */
 export const calculatePanelOutput = (
-    basePower: number, 
-    shadedZones: boolean[], 
-    hasOptimizer: boolean
+  basePower: number,
+  shadedZones: boolean[],
+  hasOptimizer: boolean
 ): number => {
-    const zonesCount = shadedZones.length;
-    const shadedCount = shadedZones.filter(z => z).length;
+  const zonesCount = shadedZones.length;
+  const shadedCount = shadedZones.filter(z => z).length;
 
-    if (shadedCount === 0) return basePower;
-    if (shadedCount === zonesCount) return 0;
+  if (shadedCount === 0) return basePower;
+  if (shadedCount === zonesCount) return 0;
 
-    const efficiency = (zonesCount - shadedCount) / zonesCount;
+  const efficiency = (zonesCount - shadedCount) / zonesCount;
 
-    if (hasOptimizer) { // Scenario A: With Optimizer
-        // La pérdida es puramente proporcional. 
-        // Si tienes 3 zonas y falla 1, produces exactamente el 66.6%.
-        return basePower * efficiency;
-    } else { // Scenario B: Without Optimizador (Traditional Bypass Diodes)
-        // En muchos paneles reales, si una zona entra en sombra, el diodo 
-        // "salta" y la producción de esa zona cae a 0, pero además suele haber 
-        // una pequeña penalización por desajuste de voltaje (mismatch).
-        // Para nuestra simulación, aplicaremos una penalización extra del 10% 
-        // sobre la capacidad restante por no tener optimización activa.
-        const mismatchLoss = 0.9; // mismatch penalty of 10% without optimizer
-        return basePower * efficiency * mismatchLoss;
-    }
+  if (hasOptimizer) {
+    return basePower * efficiency;
+  } else {
+    const mismatchLoss = 0.9;
+    return basePower * efficiency * mismatchLoss;
+  }
 };
 
 /**
- * Determines if a zone is shaded based on how many of its sample points are shaded.
- * threshold: minimum number of shaded points to consider the zone as shaded.
+ * Determines whether a zone is shaded based on how many of its sample points
+ * are shaded. The zone is considered shaded when the shaded point count reaches
+ * or exceeds `threshold`.
  */
 const isZoneShaded = (
-    panelId: string,
-    zoneIndex: number,
-    density: number,
-    shadowMap: ShadowMap,
-    threshold: number,
+  panelId: string,
+  zoneIndex: number,
+  density: number,
+  shadowMap: ShadowMap,
+  threshold: number,
 ): boolean => {
   let shadedCount = 0;
-  
+
   for (let row = 0; row < density; row++) {
     for (let col = 0; col < density; col++) {
       const pointId = `${panelId}-z${zoneIndex}-r${row}-c${col}`;
@@ -91,31 +95,32 @@ const isZoneShaded = (
 };
 
 /**
- * Calculates the panel normal vector from its world rotation.
- * A panel lying flat has normal pointing up (0,1,0).
- * When inclined, the normal rotates with the panel.
+ * Derives the panel's world-space normal vector from its world rotation.
+ * A flat panel (zero rotation) has its normal pointing straight up (0, 1, 0).
+ * The normal rotates with the panel as inclination and azimuth are applied.
  */
 const getPanelNormal = (worldRotation: { x: number, y: number, z: number }): Vector3 => {
-  // Panel normal in local space points up (0, 1, 0)
-  // We apply the panel rotation to get the world-space normal
   const normal = new THREE.Vector3(0, 1, 0);
-  const euler  = new THREE.Euler(worldRotation.x, worldRotation.y, worldRotation.z);
-  
+  const euler = new THREE.Euler(worldRotation.x, worldRotation.y, worldRotation.z);
   normal.applyEuler(euler);
-  
   return { x: normal.x, y: normal.y, z: normal.z };
 };
 
 /**
- * Full instantaneous production calculation.
- * Groups panels by string and applies string-level mismatch if no optimizer.
+ * Calculates instantaneous production across all panels for a given sun state
+ * and shadow map.
+ *
+ * Panels are grouped by string. Strings where no panel has an optimizer apply
+ * a bottleneck effect: all panels in the string are limited to the efficiency
+ * of the least-efficient panel (series current constraint). Strings where at
+ * least one panel has an optimizer treat every panel as independent.
  */
 export const calculateInstantProduction = (
-    panels: readonly SolarPanel[],
-    sun: SunState,
-    shadowMap: ShadowMap,
-    density: number,
-    threshold: number,
+  panels: readonly SolarPanel[],
+  sun: SunState,
+  shadowMap: ShadowMap,
+  density: number,
+  threshold: number,
 ): SimulationResult => {
   if (!sun.isDaylight) {
     return {
@@ -124,11 +129,10 @@ export const calculateInstantProduction = (
     };
   }
 
-  // Step 1 — calculate each panel's maximum possible output (incidence factor applied)
   const panelResults = panels.map(panel => {
     const normal = getPanelNormal(panel.worldRotation);
     const incidenceFactor = calculateIncidenceFactor(sun.direction, normal);
-    const basePower = (panel.peakPower / 1000) * incidenceFactor; // W → kW
+    const basePower = (panel.peakPower / 1000) * incidenceFactor;
 
     const shadedZones = Array.from({ length: panel.zones }, (_, zIdx) =>
       isZoneShaded(panel.id, zIdx, density, shadowMap, threshold)
@@ -147,8 +151,6 @@ export const calculateInstantProduction = (
     };
   });
 
-  // Step 2 — apply string-level mismatch for panels without optimizer
-  // In a string without optimizers, all panels are limited to the worst panel's efficiency
   const stringGroups = new Map<string, typeof panelResults>();
   panelResults.forEach(p => {
     const group = stringGroups.get(p.string) ?? [];
@@ -163,14 +165,11 @@ export const calculateInstantProduction = (
     const hasAnyOptimizer = group.some(p => p.hasOptimizer);
 
     if (hasAnyOptimizer) {
-      // Mixed or full optimizer string: each panel produces independently
       group.forEach(p => {
         finalPanels.push({ id: p.id, power: p.power, isShaded: p.isShaded });
         totalPower += p.power;
       });
     } else {
-      // Pure string without optimizers: bottleneck effect
-      // The string efficiency is the minimum individual efficiency
       const worstEfficiency = Math.min(
         ...group.map(p => p.peakKw > 0 ? p.power / p.peakKw : 1)
       );

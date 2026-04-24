@@ -18,13 +18,13 @@ interface ResolvedSupportConfiguration {
 }
 
 /**
- * Computes the positions and render data for every railing support (baluster)
- * along a wall segment of the given length.
+ * Computes the render data for every railing support (baluster) along a wall
+ * segment of the given length.
  *
- * Supports are evenly distributed between the two ends. The `includeAtStart`
- * and `includeAtEnd` flags add extra supports flush with each end, independent
- * of the `count`. Support height equals `heightOffset` (the gap between the
- * wall top and the rail centre-line).
+ * Supports are evenly distributed between the two ends of the wall at `count`
+ * intermediate positions. `includeAtStart` and `includeAtEnd` add extra supports
+ * flush with each end, independent of `count`. Support height equals
+ * `heightOffset`, the vertical gap between the wall top and the rail centre.
  */
 const buildSupportRenderData = (
   support: ResolvedSupportConfiguration,
@@ -71,9 +71,9 @@ export const WallFactory = {
    * Builds a wall segment between two floor vertices, including its railing
    * and support render data.
    *
-   * The wall body is displaced outward (away from the floor) by thickness/2
-   * along the left-hand normal of the p1→p2 direction. See README for the normal
-   * derivation and for how adjustStart/adjustEnd are determined.
+   * The wall body is displaced outward (away from the floor) by `thickness/2`
+   * along the left-hand normal of the p1→p2 direction. See the README for the
+   * normal derivation and for how adjustStart/adjustEnd are determined.
    *
    * @param adjustStart  Shortening at the p1 end (metres, always ≥ 0).
    * @param adjustEnd    Shortening at the p2 end (metres, always ≥ 0).

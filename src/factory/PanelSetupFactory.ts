@@ -6,18 +6,18 @@ import { SamplePointFactory } from './SamplePointFactory';
 
 /**
  * Derives a stable internal id from a setup's label and its position in the
- * config array. The label is normalised (lower-cased, accents stripped, spaces
- * replaced with hyphens) so that the id is URL-safe and human-readable.
- * The index suffix guarantees uniqueness even if two setups share the same
+ * config array. The label is normalised (lower-cased, diacritics stripped,
+ * spaces replaced with hyphens) so the id is URL-safe and human-readable.
+ * The index suffix guarantees uniqueness even when two setups share the same
  * normalised label.
  */
 const deriveSetupId = (label: string, index: number): string => {
   const normalised = label
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')   // strip diacritics
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/\s+/g, '-')              // spaces → hyphens
-    .replace(/[^a-z0-9-]/g, '');       // remove non-alphanumeric
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
   return `${normalised}-${index}`;
 };
 
@@ -60,8 +60,7 @@ export const PanelSetupFactory = {
    * reusing all panel geometry (world positions, rotations, render data) from
    * the existing setup unchanged.
    *
-   * Panel geometry (world position, rotation, zone layout, render data) is
-   * independent of sampling density. Rebuilding it unnecessarily on every
+   * Panel geometry is independent of sampling density. Rebuilding it on every
    * density slider change wastes CPU and triggers React re-renders of the
    * entire panel tree even though nothing visual has changed.
    */

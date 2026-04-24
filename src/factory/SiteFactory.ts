@@ -9,8 +9,9 @@ import { WallIntersectionFactory } from './WallIntersectionFactory';
 /**
  * Result of SiteFactory.create, bundling the Site geometry with any angle
  * validation warnings detected during construction.
- * See README for the rationale behind returning a result object instead
- * of writing to external state.
+ *
+ * Returning a result object rather than writing to external state keeps the
+ * factory free of side effects — the caller decides what to do with each part.
  */
 export interface SiteFactoryResult {
   readonly site: Site;
@@ -24,8 +25,16 @@ export interface SiteFactoryResult {
 }
 
 /**
- * Computes the longitudinal shortening for one end of a wall at a shared vertex.
- * See README for a detailed explanation of when and why this adjustment is applied.
+ * Returns the longitudinal shortening (in metres) to apply at one end of a
+ * wall segment at a shared vertex.
+ *
+ * Shortening is only needed at interior recess vertices (`isConvex = true` in
+ * Three.js coordinates, which corresponds to a 270° interior angle). At those
+ * vertices the displaced wall bodies would overlap the intersection post volume,
+ * so each wall end is shortened by exactly `wallThickness` to eliminate the
+ * overlap. Exterior corners and collinear vertices require no adjustment.
+ *
+ * See the the README for the full geometric derivation.
  */
 const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
   if (isStraight || !isConvex) return 0;
@@ -35,9 +44,14 @@ const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: nu
 export const SiteFactory = {
   /**
    * Builds the complete Site geometry from a raw configuration.
-   * Classifies every wall vertex once, reusing the classification for both
-   * angle validation and geometry construction to avoid two traversals.
-   * See README for the config-space / Three.js-space mapping applied here.
+   *
+   * Every vertex is classified once with `pointAlignedWithPreviousAndNext`.
+   * The resulting `vertexInfo` array is reused for both angle validation
+   * (populating `angleWarnings`) and geometry construction (wall adjustments,
+   * intersection posts), avoiding two separate traversals of the same data.
+   *
+   * Config coordinates use +Z = North. Three.js uses +Z = South, so Z is
+   * negated when centering. See the README for more details.
    */
   create: (config: Config): SiteFactoryResult => {
     const { wallPoints, wallDefaults, railingDefaults, wallsSettings, azimuth } = config.site;
@@ -50,7 +64,6 @@ export const SiteFactory = {
       Math.sqrt((p[0] - centerX) ** 2 + (p[1] - centerZ) ** 2)
     ));
 
-    // Config: +Z = North. Three.js: +Z = South. Negate Z when centering.
     const centeredPoints: PointXZ[] = wallPoints.map(p =>
       PointXZFactory.create(p[0] - centerX, -(p[1] - centerZ))
     );
@@ -66,8 +79,6 @@ export const SiteFactory = {
       };
     };
 
-    // Classify every vertex once. Results feed both angle validation and
-    // wall/intersection geometry, avoiding two separate traversals.
     const angleWarnings: AngleWarning[] = [];
     const vertexInfo = centeredPoints.map((p, i) => {
       const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
@@ -87,7 +98,6 @@ export const SiteFactory = {
       return info;
     });
 
-    // Wall intersections — created only for non-collinear vertices.
     const wallIntersections = centeredPoints
       .map((p, i) => {
         const { isStraight } = vertexInfo[i];

@@ -2,7 +2,7 @@ import { useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { SunState } from '../types';
 import { SolarPanel } from '../types/installation';
-import { ThreeConverter } from '../utils/ThreeConverter';
+import { ThreeConverter } from '../converter/ThreeConverter';
 
 export type ShadowMap = Map<string, boolean>;
 
@@ -30,17 +30,20 @@ const _matrix = new THREE.Matrix4();
  *   point and the sun (not how many things are).
  *
  * - **Shadow mesh cache**: the list of shadow-casting meshes is built once via
- *   `scene.traverse` and stored in a ref. It is only invalidated when
- *   `rebuildKey` changes (same trigger as `useBVH`). Without this, every
- *   raycasting pass would traverse the entire scene graph, which is O(nodes)
- *   overhead repeated thousands of times per frame during simulation.
+ *   `scene.traverse` and stored in a ref. It is invalidated when `rebuildKey`
+ *   changes, which is the same signal used by `useBVH` — both receive the key
+ *   from `ShadowedScene`, which is the single source of truth for that value.
+ *   Without this cache, every raycasting pass would traverse the entire scene
+ *   graph, which is O(nodes) overhead repeated thousands of times per frame.
  *
  * - **Scratch THREE objects** (Vector3, Matrix4, Quaternion) are allocated once
  *   at module scope and reused for every ray, avoiding GC pressure.
  *
  * @param panels     All panels in the active setup.
  * @param rebuildKey Changes when the scene topology changes (setup or site
- *                   switch). Must match the key passed to `useBVH`.
+ *                   switch). Must equal the key passed to `useBVH` in the same
+ *                   component so that the mesh cache and the BVH are always
+ *                   invalidated together.
  */
 export function useShadowSampler(panels: readonly SolarPanel[], rebuildKey: string) {
   const raycaster = useRef(new THREE.Raycaster());
@@ -64,8 +67,6 @@ export function useShadowSampler(panels: readonly SolarPanel[], rebuildKey: stri
       return result;
     }
 
-    // Rebuild the mesh cache only when the scene topology has changed.
-    // rebuildKey is the same signal used by useBVH so they stay in sync.
     if (meshCacheKey.current !== rebuildKey) {
       castShadowMeshes.current = [];
       scene.traverse(obj => {
