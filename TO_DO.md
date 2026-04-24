@@ -1,5 +1,32 @@
-* Sobre el `AngleWarningBanner`, ahora mismo se muestra siempre que en la configuración hay algún angulo que no sea de 90/180. Se muestra la lista de puntos. Lo que no se muesta es a qué setup pertenecen dichos puntos. Deberían agruparse por setup y colgando de cada setup, la lista de puntos como ahora. Para mostrar el setup se utilizaría el mismo label que hay en la configuración. Está bien que se muestre el banner aunque el setup seleccionado no sea el incorrecto, porque de cara a la simulación se tendrán en cuenta todos los setups y si el renderizado no es correcto, las sombras podrían no serlo tampoco y el cálculo sería erróneo.
+* Analiza el fichero `ANNUAL_SIMULATION_ANALYSIS.md`
 
-* Los atributos `includeAtStart` y `includeAtEnd` de la clase `RailingSupportOverrideConfiguration` no se están comportando como yo quiero. Vamos a ignorar lo que hacen ahora. Voy a tratar de explicar lo que yo quiero. Ahora mismo con `count` bien en `RailingSupportConfiguration` o `RailingSupportOverrideConfiguration` se puede definir cuántos soportes tendrá la barandilla y se distribuyen homogéneamente a lo largo del muro. Quiero esto, pero además quiero poder definir la distancia entre el extremo del muro y el primer soporte. Mínimo tiene que haber 2 soportes, si hay 1 no tiene sentido porque la barandilla no se sostendría. Si hay solamente 2 soportes, cada uno estará a la distancia configurada del extremo del muro. Si hay más de 2, los de los extremos están a la distancia configurada y los demás se distribuyen homogéneamente en el espacio restante entre los 2 soportes de los extremos. Además de esto quiero poder configurar si la barandilla se extiende por el principio y por el final, de tal forma que esa extensión de la barandilla quedaría por encima de las intersecciones/postes (`WallIntersection`). Lo ideal sería que la parte de la barandilla que se extiende sobre la intersección no tenga un corte a 90º, sino que sea en chaflán (entiendo que a 45º, porque todas las esquinas están limitadas a 90º), para que quede estético con la barandilla del siguiente muro, que estará a 90º. Entiendo que este último deseo (extensiones de barandillas terminando en chaflán a 45º) complica la geometría de la barandilla y además habría que hacerlo para los 3 tipos de barandillas que ya hay ahora, así que si efectivamente es complicado, vamos a dejarlo en un corte de 90º. Si finalmente se deja la extensión en un corte de 90º, y la barandilla se extiende la mitad del "thickness" del muro, entonces la extensión de la barandilla del final de un muro se va a solapar con la extensión de barandilla del principio del siguiente muro. Sería interesante configurar (opcionalmente) un espacio entre las extensiones de barandillas, por lo que cada extensión de barandilla sería "wallThickness / 2 - espacio entre barandillas / 2". Analiza si se puede hacer, de forma sencilla, que para todos los "shape" de barandillas sus extensiones podrían terminar en ángulo de 45º (que sería lo más estético). Si no se puede, procede con la opción de 90º que entiendo que es más sencilla y factible.
+* En el apartado `Infrastructure (committed after validations pass)` de `ANNUAL_SIMULATION_ANALYSIS.md` están los ficheros que se han creado como base para este desarrollo
 
-* Analiza el fichero `ANNUAL_SIMULATION_ANALYSIS.md` y procede con los cambios necesarios para la fase "phase 0" de validación de la solución
+* Ya se han realizado los cambios necesarios para la validación de la fase 0 (en `src/_annual_simulation_validation`), se han ejecutado y este es el output, así que considero que es válida la solución y **se puede proceder con la "Phase 1"**
+
+```
+=== Phase 0 Validations ===
+
+Running all Phase 0 validations. Check each section below.
+
+[Phase 0] Validation 1 — BVH serialisation round-trip
+  PASS — hit distance matches: 4.000000
+
+[Phase 0] Validation 4 — IndexedDB round-trip
+  PASS — write: 3.0 ms, read: 1.0 ms
+  Cleanup: store cleared
+
+[Phase 0] Validation 2 & 3 — Three.js + SunCalc in worker
+  Three.js revision in worker: 183
+  SunCalc available in worker: true
+  PASS
+
+[Phase 0] Validation 5 — Worker count heuristic
+  navigator.hardwareConcurrency (worker): 32
+  Recommended workers for 1 setup: 1
+  Recommended workers for 3 setups: 3
+  Recommended workers for 8 setups: 8
+  PASS — review values above manually
+
+=== Phase 0 complete — review each section above ===
+```

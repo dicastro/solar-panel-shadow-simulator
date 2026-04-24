@@ -358,11 +358,11 @@ The primary goal of Phase 0 is to validate every non-obvious technical assumptio
 
 **Infrastructure (committed after validations pass):**
 
-- `src/utils/hash.ts` — FNV-1a, ~15 lines, no dependencies.
-- `src/db/simulationCache.ts` — IndexedDB Promise wrapper (get/set/list/delete) with quota-exceeded handling.
+- `src/utils/HashUtils.ts` — FNV-1a, ~15 lines, no dependencies.
+- `src/db/SimulationCache.ts` — IndexedDB Promise wrapper (get/set/list/delete) with quota-exceeded handling.
 - Extended types in `src/types/simulation.ts`: `PanelAnnualData`, `SetupAnnualResult`, `SimulationCacheKey`.
-- `src/utils/simulationCacheKey.ts` — `buildCacheKey()` and `hashCacheKey()`.
-- `src/workers/annualSimulation.worker.ts` — scaffolded worker: receives a ping, responds with a pong. No simulation logic yet.
+- `src/utils/SimulationCacheUtils.ts` — `buildCacheKey()` and `hashCacheKey()`.
+- `src/workers/AnnualSimulation.worker.ts` — scaffolded worker: receives a ping, responds with a pong. No simulation logic yet.
 - No UI changes.
 
 ### Phase 1 — Worker simulation loop
