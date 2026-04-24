@@ -1,5 +1,5 @@
 import { Site } from '../types/installation';
-import { Config, RailingConfiguration } from '../types/config';
+import { Config } from '../types/config';
 import { PointXZ, AngleWarning } from '../types/geometry';
 import { PointXZUtils } from '../utils/PointXZUtils';
 import { PointXZFactory } from './PointXZFactory';
@@ -34,7 +34,7 @@ export interface SiteFactoryResult {
  * so each wall end is shortened by exactly `wallThickness` to eliminate the
  * overlap. Exterior corners and collinear vertices require no adjustment.
  *
- * See the the README for the full geometric derivation.
+ * See the README for the full geometric derivation.
  */
 const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
   if (isStraight || !isConvex) return 0;
@@ -68,17 +68,6 @@ export const SiteFactory = {
       PointXZFactory.create(p[0] - centerX, -(p[1] - centerZ))
     );
 
-    const resolveRailing = (wallIndex: number): RailingConfiguration => {
-      const override = wallsSettings?.find(s => s.wall === wallIndex)?.override?.railing;
-      return {
-        active: override?.active ?? railingDefaults.active,
-        heightOffset: override?.heightOffset ?? railingDefaults.heightOffset,
-        shape: override?.shape ?? railingDefaults.shape,
-        support: override?.support ?? railingDefaults.support,
-        autoConnect: override?.autoConnect ?? railingDefaults.autoConnect ?? true,
-      };
-    };
-
     const angleWarnings: AngleWarning[] = [];
     const vertexInfo = centeredPoints.map((p, i) => {
       const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
@@ -108,13 +97,8 @@ export const SiteFactory = {
         const override = wallsSettings?.find(o => o.wall === i);
         const h = override?.override?.height ?? wallDefaults.height;
 
-        const prevWallIndex = (i - 1 + n) % n;
-        const prevRailing = resolveRailing(prevWallIndex);
-        const nextRailing = resolveRailing(i);
-
         return WallIntersectionFactory.create(
           i, p, pPrev, pNext, wallDefaults.thickness, h,
-          prevRailing, nextRailing,
         );
       })
       .filter((wi): wi is NonNullable<typeof wi> => wi !== null);

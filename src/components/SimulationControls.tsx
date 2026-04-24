@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useAppStore, SimulationInterval } from '../store/useAppStore';
+import { runPhase0Validations } from '../_annual_simulation_validation/Phase0Validations';
 
 /**
  * Bottom-left panel: simulation settings and instant production readout.
@@ -123,6 +124,14 @@ export function SimulationControls() {
             {t('simulationControls.stop')}
           </button>
         }
+      </div>
+
+      {/* TEMPORARY — Phase 0 validation. Delete this block and the
+          _phase0_validation folder when Phase 1 begins. */}
+      <div className="button-group" style={{ marginTop: 8 }}>
+        <button onClick={runPhase0Validations} style={{ background: '#555', fontSize: '0.75rem' }}>
+          Phase 0 — Run validations (console)
+        </button>
       </div>
     </div>
   );

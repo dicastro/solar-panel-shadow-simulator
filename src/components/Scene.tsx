@@ -116,21 +116,14 @@ export function Scene({
         {/* Wall intersection posts — all entries in the array are rendered.
             Collinear vertices are excluded from the array during site construction. */}
         {site.wallIntersections.map(wi => (
-          <group key={`post-${wi.index}`}>
-            <mesh
-              position={[wi.worldPosition.x, wi.worldPosition.y, wi.worldPosition.z]}
-              castShadow
-            >
-              <boxGeometry args={wi.renderData.boxArgs} />
-              <meshStandardMaterial color={wi.renderData.color} />
-            </mesh>
-
-            {wi.railingConnect && (
-              <group position={[wi.worldPosition.x, 0, wi.worldPosition.z]}>
-                <RailingRail data={wi.railingConnect} />
-              </group>
-            )}
-          </group>
+          <mesh
+            key={`post-${wi.index}`}
+            position={[wi.worldPosition.x, wi.worldPosition.y, wi.worldPosition.z]}
+            castShadow
+          >
+            <boxGeometry args={wi.renderData.boxArgs} />
+            <meshStandardMaterial color={wi.renderData.color} />
+          </mesh>
         ))}
 
         {/* Wall segments: body + rail + supports */}

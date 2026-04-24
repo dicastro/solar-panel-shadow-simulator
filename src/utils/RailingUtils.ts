@@ -8,17 +8,21 @@ const HALF_CYLINDER_SEGMENTS = 8;
 /**
  * Builds the render data for a railing rail segment of any shape.
  *
- * `length` is the extent of the rail along the wall direction (the local Z
- * axis of the wall group). The Y position places the rail on top of the wall
- * at `wallHeight + heightOffset`.
+ * `length` is the total extent of the rail along the wall direction (the local
+ * Z axis of the wall group), including any extensions beyond the wall ends.
+ *
+ * `zOffset` shifts the rail centre along local Z. It is non-zero only when
+ * the rail extends by different amounts at each end (e.g. one end has an
+ * extension and the other does not), keeping the mesh correctly centred within
+ * the wall group.
+ *
+ * The Y position places the rail on top of the wall at `wallHeight + heightOffset`.
  *
  * CylinderGeometry constructor signature used for cylinder and half-cylinder:
  *   (radiusTop, radiusBottom, height, radialSegments, heightSegments,
  *    openEnded, thetaStart, thetaLength)
  * The geometry is rotated 90° around X so its height axis aligns with Z
  * (the wall direction). Half-cylinder uses openEnded=true and thetaLength=π.
- * See README for the full table of shape parameters and their Three.js
- * geometry equivalents.
  */
 export const RailingUtils = {
   buildRailRenderData: (
@@ -26,8 +30,9 @@ export const RailingUtils = {
     wallHeight: number,
     heightOffset: number,
     length: number,
+    zOffset = 0,
   ): RailingRailRenderData => {
-    const localPosition: [number, number, number] = [0, wallHeight + heightOffset, 0];
+    const localPosition: [number, number, number] = [0, wallHeight + heightOffset, zOffset];
     const cylinderRotation: [number, number, number] = [Math.PI / 2, 0, 0];
     const noRotation: [number, number, number] = [0, 0, 0];
 

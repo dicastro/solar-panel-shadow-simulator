@@ -1,6 +1,12 @@
 import { Wall, WallRailing, RailingSupportRenderData } from '../types/installation';
 import { PointXZ } from '../types/geometry';
-import { RailingConfiguration, WallConfiguration, WallSettingsConfiguration, RailingShape, RailingSupportShape } from '../types/config';
+import {
+  RailingConfiguration,
+  WallConfiguration,
+  WallSettingsConfiguration,
+  RailingShape,
+  RailingSupportShape,
+} from '../types/config';
 import { PointXZUtils } from '../utils/PointXZUtils';
 import { RailingUtils } from '../utils/RailingUtils';
 
@@ -13,19 +19,56 @@ const DEFAULT_RAILING_SHAPE: RailingShape = { kind: 'cylinder', radius: 0.025 };
 interface ResolvedSupportConfiguration {
   readonly shape: RailingSupportShape;
   readonly count: number;
-  readonly includeAtStart: boolean;
-  readonly includeAtEnd: boolean;
+  readonly edgeDistance: number | undefined;
 }
 
 /**
- * Computes the render data for every railing support (baluster) along a wall
- * segment of the given length.
+ * Computes the Z positions (in wall-local space, origin at wall centre) of
+ * every railing support along a wall of the given effective length.
  *
- * Supports are evenly distributed between the two ends of the wall at `count`
- * intermediate positions. `includeAtStart` and `includeAtEnd` add extra supports
- * flush with each end, independent of `count`. Support height equals
- * `heightOffset`, the vertical gap between the wall top and the rail centre.
+ * When `edgeDistance` is provided:
+ *   - The two outermost supports are placed at `edgeDistance` from each wall
+ *     end. If `count` is exactly 2, only those two supports are placed.
+ *   - Additional supports (count > 2) are evenly distributed in the remaining
+ *     space between the two outermost ones.
+ *   - A minimum of 2 supports is required; values below 2 are silently clamped.
+ *
+ * When `edgeDistance` is omitted:
+ *   - All `count` supports are distributed homogeneously along the full wall
+ *     length using `count + 1` equal intervals (legacy behaviour).
  */
+const computeSupportPositions = (
+  count: number,
+  edgeDistance: number | undefined,
+  wallLength: number,
+): number[] => {
+  if (count <= 0) return [];
+
+  if (edgeDistance === undefined) {
+    // Homogeneous distribution — legacy behaviour.
+    const steps = count + 1;
+    return Array.from({ length: count }, (_, i) =>
+      -wallLength / 2 + (wallLength * (i + 1)) / steps,
+    );
+  }
+
+  // Edge-anchored distribution.
+  const effectiveCount = Math.max(2, count);
+  const startZ = -wallLength / 2 + edgeDistance;
+  const endZ = wallLength / 2 - edgeDistance;
+
+  if (effectiveCount === 2) return [startZ, endZ];
+
+  const inner = effectiveCount - 2;
+  const innerSpan = endZ - startZ;
+  const positions: number[] = [startZ];
+  for (let i = 1; i <= inner; i++) {
+    positions.push(startZ + (innerSpan * i) / (inner + 1));
+  }
+  positions.push(endZ);
+  return positions;
+};
+
 const buildSupportRenderData = (
   support: ResolvedSupportConfiguration,
   wallHeight: number,
@@ -35,15 +78,7 @@ const buildSupportRenderData = (
   const supportHeight = heightOffset;
   const midY = wallHeight + supportHeight / 2;
 
-  const positions: number[] = [];
-
-  if (support.includeAtStart) positions.push(-wallLength / 2);
-  if (support.includeAtEnd) positions.push(wallLength / 2);
-
-  const steps = support.count + 1;
-  for (let i = 1; i < steps; i++) {
-    positions.push(-wallLength / 2 + (wallLength * i) / steps);
-  }
+  const positions = computeSupportPositions(support.count, support.edgeDistance, wallLength);
 
   return positions.map(z => {
     const localPosition: [number, number, number] = [0, midY, z];
@@ -74,6 +109,15 @@ export const WallFactory = {
    * The wall body is displaced outward (away from the floor) by `thickness/2`
    * along the left-hand normal of the p1→p2 direction. See the README for the
    * normal derivation and for how adjustStart/adjustEnd are determined.
+   *
+   * When railing extensions are configured (`extendAtStart` / `extendAtEnd`),
+   * the rail is lengthened beyond the adjusted wall ends so it overlaps the
+   * intersection post at that corner. Each extension has length
+   * `wallThickness / 2 − extensionGap / 2`. The rail's local Z position is
+   * shifted accordingly so the mesh stays centred within the wall group.
+   *
+   * Supports are always distributed along `currentDist` (the adjusted wall
+   * length), never along the extended portion.
    *
    * @param adjustStart  Shortening at the p1 end (metres, always ≥ 0).
    * @param adjustEnd    Shortening at the p2 end (metres, always ≥ 0).
@@ -118,24 +162,40 @@ export const WallFactory = {
     if (isRailingActive) {
       const heightOffset = railingOverride?.heightOffset ?? railingDefaults.heightOffset;
       const shape = railingOverride?.shape ?? railingDefaults.shape ?? DEFAULT_RAILING_SHAPE;
-      const autoConnect = railingOverride?.autoConnect ?? railingDefaults.autoConnect ?? true;
+
+      const extendAtStart = railingOverride?.extendAtStart ?? railingDefaults.extendAtStart ?? false;
+      const extendAtEnd = railingOverride?.extendAtEnd ?? railingDefaults.extendAtEnd ?? false;
+      const extensionGap = railingOverride?.extensionGap ?? railingDefaults.extensionGap ?? 0;
+      const extensionLength = wallThickness / 2 - extensionGap / 2;
+
+      const startExt = extendAtStart ? extensionLength : 0;
+      const endExt = extendAtEnd ? extensionLength : 0;
+      const railLength = currentDist + startExt + endExt;
+
+      // Shift the rail centre so extensions are symmetric about the new length.
+      // Positive Z is toward p2 in the wall group's local space.
+      const railZOffset = (endExt - startExt) / 2;
+
+      const rail = RailingUtils.buildRailRenderData(shape, wallHeight, heightOffset, railLength, railZOffset);
+
       const supportCount = railingOverride?.support?.count ?? railingDefaults.support?.count ?? 0;
-      const supportStart = railingOverride?.support?.includeAtStart ?? false;
-      const supportEnd = railingOverride?.support?.includeAtEnd ?? false;
+      const supportEdgeDistance = railingOverride?.support?.edgeDistance ?? railingDefaults.support?.edgeDistance;
       const supportShape = railingOverride?.support?.shape ?? railingDefaults.support?.shape;
 
-      const rail = RailingUtils.buildRailRenderData(shape, wallHeight, heightOffset, currentDist);
-
       const supports: RailingSupportRenderData[] = supportShape
-        ? buildSupportRenderData({
-          shape: supportShape,
-          count: supportCount,
-          includeAtStart: supportStart,
-          includeAtEnd: supportEnd,
-        }, wallHeight, heightOffset, currentDist)
+        ? buildSupportRenderData(
+          {
+            shape: supportShape,
+            count: supportCount,
+            edgeDistance: supportEdgeDistance,
+          },
+          wallHeight,
+          heightOffset,
+          currentDist,
+        )
         : [];
 
-      railing = { shape, autoConnect, rail, supports };
+      railing = { shape, rail, supports };
     }
 
     return {

@@ -83,7 +83,6 @@ export interface PanelRenderData {
 
 export interface WallRailing {
   readonly shape: RailingShape;
-  readonly autoConnect: boolean;
   readonly rail: RailingRailRenderData;
   readonly supports: readonly RailingSupportRenderData[];
 }
@@ -95,12 +94,6 @@ export interface WallIntersection {
   readonly thickness: number;
   readonly worldPosition: Vector3;
   readonly renderData: WallIntersectionRenderData;
-  /**
-   * Small railing segment that fills the corner gap between adjacent wall
-   * railings. Non-null only when both adjacent walls have active railings
-   * with autoConnect enabled.
-   */
-  readonly railingConnect: RailingRailRenderData | null;
 }
 
 export interface Wall {

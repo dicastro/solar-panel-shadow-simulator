@@ -59,9 +59,12 @@
         "shape": {
           "kind": "cylinder",
           "radius": 0.01
-        }
+        },
+        "edgeDistance": 0.2
       },
-      "autoConnect": false
+      "extendAtStart": true,
+      "extendAtEnd": true,
+      "extensionGap": 0.04
     },
     "wallsSettings": [
       {
@@ -80,7 +83,8 @@
           "railing": {
             "support": {
               "count": 4
-            }
+            },
+            "extendAtEnd": false
           }
         }
       },

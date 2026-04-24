@@ -42,7 +42,25 @@ export type RailingSupportShape =
 
 export interface RailingSupportConfiguration {
   readonly shape: RailingSupportShape;
+  /**
+   * Number of supports along the wall. Must be at least 2 (a single support
+   * cannot hold the railing on its own).
+   *
+   * With exactly 2 supports, each one is placed at `edgeDistance` from its
+   * respective wall end. With more than 2, the two outermost supports sit at
+   * `edgeDistance` and the remaining ones are distributed evenly in the space
+   * between them.
+   *
+   * Defaults to 0 (no supports rendered).
+   */
   readonly count?: number;
+  /**
+   * Distance in metres from each wall end to the nearest support.
+   *
+   * When omitted, supports are distributed homogeneously along the full wall
+   * length, matching the legacy behaviour.
+   */
+  readonly edgeDistance?: number;
 }
 
 export interface LocationConfiguration {
@@ -60,14 +78,33 @@ export interface RailingConfiguration {
   readonly heightOffset: number;
   readonly shape?: RailingShape;
   readonly support?: RailingSupportConfiguration;
-  readonly autoConnect?: boolean;
+  /**
+   * Whether the railing rail extends past the wall end over the intersection
+   * post at the start (p1) of this wall segment.
+   *
+   * The extension length is `wallThickness / 2 − extensionGap / 2`, so that
+   * when both the incoming and outgoing rails extend toward the same corner
+   * post they meet without overlap (or leave a gap of `extensionGap`).
+   */
+  readonly extendAtStart?: boolean;
+  /**
+   * Whether the railing rail extends past the wall end over the intersection
+   * post at the end (p2) of this wall segment.
+   */
+  readonly extendAtEnd?: boolean;
+  /**
+   * Gap in metres left between the tips of two meeting rail extensions at a
+   * corner post. Each extension is shortened by half this value.
+   *
+   * Defaults to 0 (extensions meet flush).
+   */
+  readonly extensionGap?: number;
 }
 
 export interface RailingSupportOverrideConfiguration {
-  readonly shape: RailingSupportShape;
-  readonly count: number;
-  readonly includeAtStart?: boolean;
-  readonly includeAtEnd?: boolean;
+  readonly shape?: RailingSupportShape;
+  readonly count?: number;
+  readonly edgeDistance?: number;
 }
 
 export interface RailingOverrideConfiguration {
@@ -75,7 +112,9 @@ export interface RailingOverrideConfiguration {
   readonly heightOffset?: number;
   readonly shape?: RailingShape;
   readonly support?: RailingSupportOverrideConfiguration;
-  readonly autoConnect?: boolean;
+  readonly extendAtStart?: boolean;
+  readonly extendAtEnd?: boolean;
+  readonly extensionGap?: number;
 }
 
 export interface WallOverrideConfiguration {

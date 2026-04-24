@@ -15,9 +15,10 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 7. [Configuration reference](#configuration-reference)
 8. [Solar production model](#solar-production-model)
 9. [Shadow detection — Raycasting + BVH](#shadow-detection--raycasting--bvh)
-10. [Timezone and DST](#timezone-and-dst)
-11. [Known limitations](#known-limitations)
-12. [Lessons learned](#lessons-learned)
+10. [Annual simulation — infrastructure](#annual-simulation--infrastructure)
+11. [Timezone and DST](#timezone-and-dst)
+12. [Known limitations](#known-limitations)
+13. [Lessons learned](#lessons-learned)
 
 ---
  
@@ -29,7 +30,6 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Estimates instantaneous power output in kW, applying bypass-diode, string-mismatch and optimizer logic.
 - Supports multiple installation layouts ("setups") selectable via the UI.
 - Validates the wall configuration and displays a prominent warning listing the exact config-space coordinate triples that form non-90° or non-180° angles.
-- Planned: full annual simulation stepping through every N minutes of the year, with per-setup comparison charts and irradiance integration.
 
 ---
  
@@ -61,12 +61,12 @@ src/
 │   ├── config.ts                  # JSON config shapes (InstallationConfiguration, ...)
 │   ├── geometry.ts                # PointXZ, Vector3, Euler3, AngleWarning (renderer-agnostic)
 │   ├── installation.ts            # Domain models: Site, Wall, SolarPanel, ...
-│   ├── simulation.ts              # SunState, SimulationResult
+│   ├── simulation.ts              # SunState, SimulationResult, annual simulation types
 │   └── index.ts                   # Re-exports
 │
 ├── factory/
 │   ├── SiteFactory.ts             # Config → Site (walls, intersections, bounding radius, angle validation)
-│   ├── WallFactory.ts             # Wall segment geometry + railing
+│   ├── WallFactory.ts             # Wall segment geometry + railing + supports + extensions
 │   ├── WallIntersectionFactory.ts # Corner posts (all non-collinear vertices)
 │   ├── PanelSetupFactory.ts       # PanelSetupConfiguration + Site → PanelSetup
 │   ├── SolarPanelArrayFactory.ts  # Computes array origin, creates panels
@@ -84,6 +84,19 @@ src/
 │   ├── useBVH.ts                  # Builds BVH over shadow-casting meshes
 │   └── useShadowSampler.ts        # Casts rays, returns ShadowMap
 │
+├── db/
+│   └── simulationCache.ts         # IndexedDB wrapper for SetupAnnualResult persistence
+│
+├── workers/
+│   └── annualSimulation.worker.ts # Annual simulation Web Worker (Phase 0: ping/pong scaffold)
+│
+├── utils/
+│   ├── hash.ts                    # FNV-1a 32-bit hash — deterministic cache key generation
+│   ├── simulationCacheKey.ts      # buildCacheKey() and hashCacheKey() for simulation results
+│   ├── PointXZUtils.ts            # computeLeftHandNormal, convexity, right-angle check, prev/next helpers
+│   ├── RailingUtils.ts            # Shared railing rail render data builder
+│   └── TimezoneUtils.ts           # getAllTimezones(), getBrowserTimezone(), resolveInitialTimezone()
+│
 ├── components/
 │   ├── Scene.tsx                  # Root 3D scene (walls + panels + helpers)
 │   ├── ShadowedScene.tsx          # Dirty-flag raycasting loop, feeds ShadowMap
@@ -95,10 +108,8 @@ src/
 │   ├── AngleWarningBanner.tsx     # Warning banner listing non-90° angle coordinate triples
 │   └── DeveloperFooter.tsx        # Ko-fi link + personal site
 │
-└── utils/
-    ├── PointXZUtils.ts            # computeLeftHandNormal, convexity, right-angle check, prev/next helpers
-    ├── RailingUtils.ts            # Shared railing rail render data builder (used by WallFactory and WallIntersectionFactory)
-    └── TimezoneUtils.ts           # getAllTimezones(), getBrowserTimezone(), resolveInitialTimezone()
+└── _phase0_validation/            # TEMPORARY — delete when Phase 1 begins
+    └── phase0Validations.ts       # Exercises BVH round-trip, IndexedDB, worker, SunCalc
 ```
  
 ---
@@ -132,7 +143,7 @@ A half-cylinder uses `openEnded=true` and `thetaLength=Math.PI`. `thetaStart` se
 ### Two distinct tick mechanisms
  
 - **Interactive playback** (`tickHour`): advances 1 hour per 100 ms interval. Unit fixed at 1 hour.
-- **Annual simulation** (planned): will use `simulationInterval` (15/30/60 min) in its own loop running in a Web Worker, separate from interactive playback.
+- **Annual simulation**: uses `simulationInterval` (15/30/60 min) in its own loop running in a Web Worker, separate from interactive playback.
 
 ### `showPoints` excluded from ShadowedScene
  
@@ -170,7 +181,34 @@ If the configuration contains non-90° angles, `SiteFactory` populates `angleWar
 
 ### `RailingUtils` — shared railing render data builder
 
-`WallFactory` and `WallIntersectionFactory` both need to build `RailingRailRenderData` for all three railing shapes. The logic is consolidated in `RailingUtils.buildRailRenderData(shape, wallHeight, heightOffset, length)`, which is imported by both factories. The connect piece in `WallIntersectionFactory` uses `wallThickness` as its length — `RailingUtils` is length-agnostic by design.
+`WallFactory` and `WallIntersectionFactory` both need to build `RailingRailRenderData` for all three railing shapes. The logic is consolidated in `RailingUtils.buildRailRenderData(shape, wallHeight, heightOffset, length, zOffset?)`, which is imported by both factories. The optional `zOffset` parameter shifts the rail centre along the wall's local Z axis; it is used by `WallFactory` when a rail extends asymmetrically at its two ends. `WallIntersectionFactory` always uses the default (`zOffset = 0`) and needs no changes when new shapes are added — only `RailingUtils` needs updating.
+
+### Railing support distribution
+
+Support positions are computed by `computeSupportPositions` inside `WallFactory`. Two modes:
+
+- **Homogeneous** (no `edgeDistance`): all `count` supports are spaced evenly across the full adjusted wall length using `count + 1` equal intervals. This matches the classic "divide the wall into equal segments" mental model.
+- **Edge-anchored** (`edgeDistance` provided): the two outermost supports are placed at exactly `edgeDistance` from each wall end. Any additional supports are distributed evenly in the remaining span between them. A minimum of 2 supports is enforced — a single support cannot hold a railing.
+
+The mode is selected by the presence of `edgeDistance` in the config. Both modes operate on `currentDist` (the adjusted wall length), never on the extended rail length.
+
+### Railing rail extensions
+
+When `extendAtStart` or `extendAtEnd` is `true` for a wall's railing, the rail mesh extends beyond the adjusted wall end and overlaps the intersection post at that corner. The extension length per end is:
+
+```
+extensionLength = wallThickness / 2 − extensionGap / 2
+```
+
+With `extensionGap = 0` (the default), each rail extends by exactly `wallThickness / 2`, so the tips of two meeting rails at a corner meet flush at the post centre. A positive `extensionGap` leaves a visible gap between the rail tips.
+
+The extension is implemented by computing a longer `railLength` and a `railZOffset` to keep the mesh centred within the wall group. `RailingUtils.buildRailRenderData` accepts the optional `zOffset` parameter for this purpose. Supports are always placed along `currentDist`, not along the extended portion.
+
+Extensions use a straight 90° cut at the tip. A 45° mitre cut was evaluated but requires a custom `BufferGeometry` for all three rail shapes (square, cylinder, half-cylinder) and was deemed disproportionate to the visual benefit.
+
+### `extensionGap` inheritance — defaults and overrides
+
+`extensionGap`, `extendAtStart`, and `extendAtEnd` follow the same defaults-then-override pattern as all other railing fields: set once in `railingDefaults` to apply to every wall, then override per wall in `wallsSettings`. This is consistent with how `heightOffset`, `shape`, and `support` work, and requires no special handling in the factory.
 
 ### Wall vertex classification — isConvex and the Three.js Z inversion
 
@@ -198,7 +236,7 @@ The unit outward normal of a directed segment is computed once in `PointXZUtils.
 
 ### No inline styles in components
 
-All visual styling is defined in `App.css` using class names. React components use `className` references only.
+All visual styling is defined in `App.css` using class names. React components use `className` references only. The Phase 0 validation button in `SimulationControls` is a temporary exception — the button and its inline style are removed when `_phase0_validation` is deleted.
 
 ### i18n key structure
 
@@ -218,9 +256,9 @@ The `angleWarning.tripletLabel` key uses i18next interpolation (`{{prev}}`, `{{p
 
 `SiteFactory.create` returns a `SiteFactoryResult` object containing both the `Site` geometry and the `angleWarnings` array. This avoids side effects and keeps all output in one place. The store's `loadConfig` action destructures the result.
 
-### `PointXZConverter` — flat array adapters
+### `three-mesh-bvh` declaration file
 
-`PointXZConverter` provides `toXZArray` and `toXYZArray` for converting the domain `PointXZ` type to plain tuples when a library or algorithm expects flat arrays rather than named-property objects. The optional `y` parameter in `toXYZArray` defaults to `0`, covering floor-level geometry where Y is always a fixed elevation.
+`src/types/three-mesh-bvh.d.ts` extends `THREE.BufferGeometry` with the three methods that `three-mesh-bvh` patches onto the prototype: `computeBoundsTree`, `disposeBoundsTree`, and `boundsTree`. The `boundsTree` property is typed as `MeshBVH` (imported from `three-mesh-bvh`), not as `unknown`. This allows `MeshBVH.serialize(geometry.boundsTree)` to be called in the BVH serialisation code without a cast — the compiler knows the type and can check the call site. Declaration files (`.d.ts`) contain only type information and produce no JavaScript output; they exist solely to tell the TypeScript compiler about runtime APIs that are not part of the library's own type definitions.
 
 ---
  
@@ -415,42 +453,66 @@ The wall shortening is applied at the ends of the two walls meeting at `(0,5)` t
     "railingDefaults": {
       "active": true,
       "heightOffset": 0.18,
-      "autoConnect": true,
+      "extendAtStart": false,    // extend rail over start-end intersection post
+      "extendAtEnd": false,      // extend rail over end intersection post
+      "extensionGap": 0,         // metres gap between two meeting extensions (default 0 = flush)
       "shape": { "kind": "cylinder", "radius": 0.025 },
       "support": {
         "shape": { "kind": "cylinder", "radius": 0.012 },
         "count": 3,
-        "includeAtStart": false,
-        "includeAtEnd": false
+        "edgeDistance": 0.15    // optional: metres from wall end to nearest support
       }
     },
     "wallsSettings": [
-      // Override per-segment. wall = segment index (see numbering above)
-      { "wall": 2, "override": { "height": 1.8, "railing": { "active": false } } }
+      {
+        "wall": 2,
+        "override": {
+          "height": 1.8,
+          "railing": {
+            "active": false
+          }
+        }
+      },
+      {
+        "wall": 5,
+        "override": {
+          "railing": {
+            "extendAtStart": true,
+            "extendAtEnd": true,
+            "extensionGap": 0.01,
+            "support": {
+              "count": 4,
+              "edgeDistance": 0.1
+            }
+          }
+        }
+      }
     ]
   },
-  "setups": [{
-    "label": "Human-readable name",   // no id field — selection is by position
-    "panelDefaults": {
-      "width": 1, "height": 2,   // metres
-      "peakPower": 415,           // Wp
-      "zones": 2,                 // bypass-diode zones per panel
-      "zonesDisposition": "horizontal",  // "horizontal" = stacked top/bottom, "vertical" = side by side
-      "hasOptimizer": false,
-      "string": "S1"
-    },
-    "arrays": [{
-      "position": [0.2, 0.2],   // [East offset, North offset] from site origin, metres
-      "azimuth": 0,              // absolute panel azimuth, South=0
-      "elevation": 0.5,          // height of array bottom edge, metres
-      "inclination": 20,         // tilt angle from horizontal, degrees
-      "rows": 1, "columns": 3,
-      "spacing": [0.02, 0.02],   // [horizontal gap, vertical gap] between panels, metres
-      "orientation": "portrait"  // or "landscape"
-    }]
-  }]
+  "setups": [...]
 }
 ```
+
+#### Support distribution modes
+
+Two modes are available depending on whether `edgeDistance` is set:
+
+| `edgeDistance` | Behaviour                                                                                                                                |
+|----------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| omitted        | Supports distributed homogeneously: `count` supports at intervals of `wallLength / (count + 1)`                                          |
+| provided       | Two outermost supports at `edgeDistance` from each end; remaining supports distributed evenly between them. Minimum 2 supports enforced. |
+
+#### Rail extensions
+
+When `extendAtStart` or `extendAtEnd` is `true`, the rail overhangs the intersection post at that corner. Extension length per end:
+
+```
+extensionLength = wallThickness / 2 − extensionGap / 2
+```
+
+With `extensionGap = 0` (default), two meeting rails at the same corner post meet flush at the post centre. Setting `extensionGap` to a small positive value (e.g. `0.01`) leaves a visible gap between them.
+
+Extensions end in a 90° cut. Supports are placed along the non-extended wall length only.
  
 ### Railing shapes
  
@@ -462,10 +524,10 @@ The wall shortening is applied at the ends of the two walls meeting at `(0,5)` t
  
 ### Railing support shapes
  
-| kind | Parameters |
-|---|---|
-| `square` | `width`, `depth` (height derived from wall geometry) |
-| `cylinder` | `radius` |
+| kind       | Parameters                                           |
+|------------|------------------------------------------------------|
+| `square`   | `width`, `depth` (height derived from wall geometry) |
+| `cylinder` | `radius`                                             |
  
 ### `zonesDisposition`
  
@@ -611,6 +673,48 @@ Inter-panel shading (one panel casting a shadow on another) is naturally modelle
 ```
  
 **Must be kept.** `@react-three/drei` pulls in `three-mesh-bvh` as a transitive dependency without pinning a version. The BVH integration patches `THREE.BufferGeometry.prototype` and `THREE.Mesh.prototype` — if two versions coexist, only one is patched and the other falls back to brute-force intersection silently.
+
+---
+
+## Annual simulation — infrastructure
+
+The annual simulation runs in a Web Worker to keep the main thread and 3D viewport fully responsive during a potentially multi-minute computation. The infrastructure is in place; the simulation loop itself is implemented in Phase 1.
+
+### Cache key and hashing
+
+Every simulation result is keyed by a `SimulationCacheKey` object that captures every input that affects the output: setup geometry hash, density, threshold, interval, location, year, and irradiance source. Two runs with the same key are guaranteed to produce identical output.
+
+The geometry hash is computed with FNV-1a (`src/utils/hash.ts`) over a JSON serialisation of each panel's world position, rotation, zones, peak power, string, and optimizer flag. FNV-1a was chosen for its public-domain status, zero dependencies, and compact 8-character hex output.
+
+`buildCacheKey` and `hashCacheKey` in `src/utils/simulationCacheKey.ts` are the only correct way to construct and hash cache keys.
+
+### IndexedDB persistence
+
+`src/db/simulationCache.ts` provides a Promise-based wrapper over the native IndexedDB API. The database has a single object store keyed by `cacheKey`. All operations (`saveResult`, `getResult`, `listResults`, `deleteResult`, `clearAllResults`) open the database on demand and close it automatically — there is no persistent connection to manage.
+
+Storage failures (quota exceeded, private-browsing restrictions) surface as rejected Promises. Callers that only need best-effort caching can catch and discard the error.
+
+### Web Worker
+
+`src/workers/annualSimulation.worker.ts` is imported with Vite's `?worker` suffix, which bundles the worker as a separate chunk. Three.js and SunCalc are imported directly inside the worker — neither has DOM or WebGL dependencies, so both work correctly in a worker context.
+
+The worker currently implements a ping/pong protocol for Phase 0 validation. The response includes diagnostics: Three.js version, SunCalc availability, `navigator.hardwareConcurrency`, and the recommended worker count formula (`max(1, min(hardwareConcurrency − 1, setupCount))`).
+
+### BVH serialisation (Phase 1 prerequisite)
+
+The BVH for each shadow-casting mesh will be serialised on the main thread with `MeshBVH.serialize()` and transferred to the worker via `postMessage` with the `transfer` option (zero-copy typed array transfer). The worker will reconstruct the BVH with `MeshBVH.deserialize()` and run the raycast loop entirely off the main thread. The `boundsTree` property on `THREE.BufferGeometry` is typed as `MeshBVH` (not `unknown`) in `src/types/three-mesh-bvh.d.ts`, enabling this call without a cast.
+
+### Phase 0 validation
+
+`src/_phase0_validation/phase0Validations.ts` exercises all five technical assumptions before Phase 1 is built:
+
+1. BVH serialise → deserialise → raycast round-trip (main thread, checks hit distance matches).
+2. Three.js imports correctly inside a Vite `?worker` bundle.
+3. SunCalc is DOM-free and works in a worker.
+4. IndexedDB write/read round-trip with latency measurement.
+5. `navigator.hardwareConcurrency` heuristic produces sensible values.
+
+Run by clicking "Phase 0 — Run validations (console)" in the Simulation Controls panel and inspecting the browser console. **Delete `src/_phase0_validation/` when Phase 1 begins.**
  
 ---
  
@@ -642,9 +746,8 @@ When the user changes timezones, `setTimezone` calls `date.tz(newTimezone)` on t
  
 - **90° wall angles only**: non-right angles produce incorrect post placement and wall overlaps. A warning lists the exact coordinate triples from config.json when violations are detected.
 - **Single year**: time controls are constrained to the current year.
-- **No diffuse irradiance**: only direct (beam) irradiance is modelled. PVGIS integration for climate-adjusted irradiance is planned.
-- **Annual simulation not yet implemented**.
-- **Railing connect piece for mismatched shapes**: when two walls meeting at a corner have different railing shapes, the connect piece uses the shape of the incoming wall. A small visual mismatch may be visible.
+- **No diffuse irradiance**: only direct (beam) irradiance is modelled.
+- **Rail extensions end in a 90° cut**: a 45° mitre would be more aesthetic but requires custom `BufferGeometry` for all three rail shapes and was not implemented.
 
 ---
  
@@ -700,7 +803,21 @@ Showing raw 0-based indices forces the user to count positions in their config f
 
 ### Shared railing render data logic in `RailingUtils`
 
-Adding a new railing shape requires editing only `RailingUtils.buildRailRenderData`. Both `WallFactory` and `WallIntersectionFactory` get the change automatically.
+Adding a new railing shape requires editing only `RailingUtils.buildRailRenderData`. Both `WallFactory` and `WallIntersectionFactory` get the change automatically. The `zOffset` parameter is optional (defaults to 0) so `WallIntersectionFactory` needs no changes when wall extensions are added.
+
+### Rail extensions versus mitre cuts
+
+A 45° mitre cut at rail extension tips would look more aesthetic where two rails meet at a corner post. However, computing the correct mitre geometry requires a custom `BufferGeometry` for each of the three rail shapes (box, cylinder, half-cylinder), each with different vertex layouts. The engineering cost is disproportionate to the visual benefit for an application focused on solar production analysis. A 90° cut is implemented and the limitation is documented.
+
+A 45° mitre cut at rail extension tips would look more aesthetic where two rails meet at a corner post. However, computing the correct mitre geometry requires a custom `BufferGeometry` for each of the three rail shapes (box, cylinder, half-cylinder), each with different vertex layouts. The engineering cost is disproportionate to the visual benefit for an application focused on solar production analysis. A 90° cut is implemented and the limitation is documented.
+
+### Support `edgeDistance` versus homogeneous distribution
+
+The original support distribution was purely homogeneous (equal intervals along the wall). Edge-anchored distribution with `edgeDistance` is more realistic for physical installations where supports must clear the corner posts. The two modes coexist: omitting `edgeDistance` preserves the original behaviour exactly.
+
+### FNV-1a for cache key hashing
+
+Cryptographic hashes (SHA-256) require the Web Crypto API and return a Promise, adding async overhead at a point in the code where synchronous execution is simpler. FNV-1a is synchronous, fits in ~10 lines, is public domain, and produces collisions only with astronomically low probability for the small config objects hashed here.
 
 ### `lib` vs `target` in tsconfig
 
@@ -713,3 +830,7 @@ The outward normal of a wall segment is computed in exactly one place. When geom
 ### i18n keys grouped by owning component
 
 Grouping keys under the component that owns them avoids naming collisions and makes it immediately clear where each string is used as the translation file grows.
+
+### Typing `boundsTree` as `MeshBVH`, not `unknown`
+
+The `.d.ts` declaration for `boundsTree` must use the concrete `MeshBVH` type so that `MeshBVH.serialize(geometry.boundsTree)` compiles without a cast. `unknown` requires a type assertion at every call site, which defeats the purpose of having the declaration file in the first place. Importing `MeshBVH` from `three-mesh-bvh` inside a `.d.ts` file is valid — declaration files can import types from other modules.
