@@ -4,7 +4,7 @@ import { Site, PanelSetup, SunState } from '../types';
 import { ShadowMap, useShadowSampler } from '../hooks/useShadowSampler';
 import { useBVH } from '../hooks/useBVH';
 import { SimulationResult } from '../types/simulation';
-import { calculateInstantProduction } from '../solarEngine';
+import { SolarEngine } from '../engine/SolarEngine';
 
 interface Props {
   site: Site;
@@ -76,7 +76,7 @@ export function ShadowedScene({
 
     const currentSun = sunRef.current;
     const newMap = computeShadows(scene, currentSun);
-    const result = calculateInstantProduction(
+    const result = SolarEngine.calculateInstantProduction(
       allPanels, currentSun, newMap, densityRef.current, thresholdRef.current,
     );
 

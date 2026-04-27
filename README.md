@@ -55,7 +55,6 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 ```
 src/
 ├── App.tsx                        # Root: loads config, wires canvas + UI
-├── solarEngine.ts                 # Pure functions: sun state, incidence, production
 ├── i18n.ts                        # i18next initialisation
 │
 ├── types/
@@ -64,8 +63,17 @@ src/
 │   ├── installation.ts            # Domain models: Site, Wall, SolarPanel, ...
 │   ├── simulation.ts              # SunState, SimulationResult, annual simulation types,
 │   │                              #   worker message protocol (WorkerIncomingMessage,
-│   │                              #   WorkerOutgoingMessage, WorkerSimulationPayload, ...)
+│   │                              #   WorkerOutgoingMessage, WorkerSimulationPayload, ...),
+│   │                              #   SimulationPanelData, SimulationSamplePoint
 │   └── index.ts                   # Re-exports
+│
+├── engine/
+│   ├── SolarEngine.ts             # Pure functions: sun state, incidence, panel output,
+│   │                              #   string mismatch (applyStringMismatch exported).
+│   │                              #   Used by both the interactive view and the worker.
+│   └── AnnualSimulationEngine.ts  # Pure accumulation functions for the annual loop:
+│                                  #   initAccumulators, accumulateStep, finalizePanel,
+│                                  #   buildSetupResult. No Three.js, no worker coupling.
 │
 ├── factory/
 │   ├── SiteFactory.ts             # Config → Site (walls, intersections, bounding radius, angle validation)
@@ -75,10 +83,16 @@ src/
 │   ├── SolarPanelArrayFactory.ts  # Computes array origin, creates panels
 │   ├── SolarPanelFactory.ts       # Single panel world position + render data
 │   ├── SamplePointFactory.ts      # Sample points for raycasting per panel
-│   └── PointXZFactory.ts          # Safe PointXZ constructor
+│   ├── PointXZFactory.ts          # Safe PointXZ constructor
+│   └── MeshFactory.ts             # Collects shadow-casting meshes from the scene and
+│                                  #   serialises them for worker transfer (one independent
+│                                  #   copy per worker via MeshFactory.fromScene().build()).
 │
 ├── converter/
-│   └── ThreeConverter.ts          # Domain Vector3/Euler3 → THREE.Vector3/Euler
+│   ├── ThreeConverter.ts          # Domain Vector3/Euler3 → THREE.Vector3/Euler
+│   └── SolarPanelConverter.ts     # SolarPanel → SimulationPanelData / SimulationSamplePoint
+│                                  #   / Vector3 (world normal). Pre-computes world-space
+│                                  #   transforms so the worker loop only does arithmetic.
 │
 ├── store/
 │   └── useAppStore.ts             # Zustand store — all app state + actions
@@ -92,15 +106,22 @@ src/
 │   └── SimulationCache.ts         # IndexedDB wrapper for SetupAnnualResult persistence
 │
 ├── workers/
-│   └── AnnualSimulation.worker.ts # Full annual simulation loop (Three.js + SunCalc, no DOM)
+│   └── AnnualSimulation.worker.ts # Full annual simulation loop. Imports from SolarEngine,
+│                                  #   AnnualSimulationEngine, ThreeUtils, and TimeUtils.
+│                                  #   Contains only worker orchestration and the raycasting
+│                                  #   call (computeShadedZones), which requires THREE.Raycaster
+│                                  #   and cannot be shared with the main-thread path.
 │
-├── utils/
-│   ├── HashUtils.ts               # FNV-1a 32-bit hash — deterministic cache key generation
-│   ├── SimulationCacheUtils.ts    # buildCacheKey() and hashCacheKey() for simulation results
-│   ├── PointXZUtils.ts            # computeLeftHandNormal, convexity, right-angle check, prev/next helpers
-│   ├── RailingUtils.ts            # Shared railing rail render data builder
-│   └── TimezoneUtils.ts           # getAllTimezones(), getBrowserTimezone(), resolveInitialTimezone()
-│
+└── utils/
+    ├── HashUtils.ts               # FNV-1a 32-bit hash — deterministic cache key generation
+    ├── SimulationCacheUtils.ts    # buildCacheKey() and hashCacheKey() for simulation results
+    ├── PointXZUtils.ts            # computeLeftHandNormal, convexity, right-angle check, prev/next helpers
+    ├── RailingUtils.ts            # Shared railing rail render data builder
+    ├── ThreeUtils.ts              # serializeMesh / reconstructMesh / reconstructMeshes —
+    │                              #   Three.js mesh ↔ typed-array conversion for worker transfer
+    └── TimeUtils.ts               # getAllTimezones, getBrowserTimezone, resolveInitialTimezone,
+                                   #   timeSteps generator, totalTimeSteps, formatEta
+
 └── components/
     ├── Scene.tsx                  # Root 3D scene (walls + panels + helpers); wires annual simulation
     ├── ShadowedScene.tsx          # Dirty-flag raycasting loop, feeds ShadowMap
@@ -247,6 +268,32 @@ Translation keys are grouped by the component that owns them:
 ### `three-mesh-bvh` declaration file
 
 `src/types/three-mesh-bvh.d.ts` extends `THREE.BufferGeometry` with the three methods that `three-mesh-bvh` patches onto the prototype. The `boundsTree` property is typed as `MeshBVH` so that `MeshBVH.serialize(geometry.boundsTree)` compiles without a cast.
+
+### `engine/` — separation of physics from orchestration
+
+Solar physics functions (`calculateSunState`, `calculateIncidenceFactor`, `calculatePanelOutput`, `applyStringMismatch`) live in `engine/SolarEngine.ts` and are imported by both the interactive `ShadowedScene` and the annual simulation worker. There is no duplication: the worker calls the same functions as the main thread.
+
+Annual-specific accumulation logic (`initAccumulators`, `accumulateStep`, `finalizePanel`, `buildSetupResult`) lives in `engine/AnnualSimulationEngine.ts`. These are pure functions with no Three.js or worker dependencies — they can be tested independently and are kept separate from the physics to maintain a clear boundary between "what physics produces at one instant" and "how we aggregate across a year".
+
+### `ThreeUtils` — mesh serialisation and reconstruction
+
+`serializeMesh` (main thread) and `reconstructMesh` / `reconstructMeshes` (worker) are consolidated in `utils/ThreeUtils.ts`. Both directions of the serialisation round-trip live in the same module, making it the single place to update if the BVH serialisation API changes. Both functions are DOM-free and importable in either context.
+
+### `MeshFactory` — independent copies per worker
+
+`MeshFactory.fromScene(scene)` traverses the scene once and returns a `{ build }` object. Each call to `build()` produces a fresh `MeshBatch` (meshes + transferables). This is the only safe pattern when multiple workers each need a zero-copy transfer: typed array buffers are detached after the first `postMessage` with the `transfer` option, so each worker must receive its own independently allocated copy. `MeshFactory` encapsulates this requirement so callers cannot accidentally reuse a transferred buffer.
+
+### `SolarPanelConverter` — world-space pre-computation
+
+`toSimulationPanelData` and `toSimulationPanelDataArray` in `converter/SolarPanelConverter.ts` convert `SolarPanel` domain objects into `SimulationPanelData` — the shape the annual worker consumes. World-space sample point positions and the panel normal are computed once here on the main thread, avoiding repeated matrix multiplications inside the worker at every time step. The converter uses `Vector3` (from `types/geometry.ts`) as the return type of `toWorldNormal`, keeping the result decoupled from any rendering library.
+
+### `TimeUtils` — all time utilities in one place
+
+`utils/TimeUtils.ts` consolidates timezone resolution (`getAllTimezones`, `getBrowserTimezone`, `resolveInitialTimezone`), the `timeSteps` generator and `totalTimeSteps` helper used by the annual simulation, and `formatEta` for the progress UI. Grouping them avoids a proliferation of single-purpose utility modules and reflects that they all operate on the same domain — time.
+
+### Simulation type naming — `SimulationPanelData` and `SimulationSamplePoint`
+
+Types representing data sent to the annual simulation worker are named after their semantic role (`SimulationPanelData`, `SimulationSamplePoint`) rather than their transport mechanism (`WorkerPanelData`, `WorkerSamplePoint`). This makes the types reusable if the simulation strategy changes (e.g. running in the main thread for debugging) without renaming.
 
 ---
  
@@ -405,6 +452,8 @@ Without optimizers, string efficiency is limited by the least-efficient panel:
 stringEfficiency = min(power/peakKw) across all panels in the string
 ```
 Strings where any panel has an optimizer treat every panel independently.
+
+`applyStringMismatch` is exported from `engine/SolarEngine.ts` and shared between the interactive production calculation and the annual simulation worker.
  
 ---
  
@@ -450,17 +499,19 @@ The selector currently offers three options: geometric (no weather data), PVGIS,
 The annual simulation runs in Web Workers to keep the main thread and 3D viewport fully responsive during a multi-minute computation.
 
 **Why workers can run the simulation:**
-Three.js math classes (`Vector3`, `Matrix4`, `Raycaster`, `Euler`) and SunCalc have no DOM or WebGL dependencies and work correctly inside a worker. Only `THREE.Scene` and rendering-related classes require the main thread.
+Three.js math classes (`Vector3`, `Matrix4`, `Raycaster`, `Euler`) and SunCalc have no DOM or WebGL dependencies and work correctly inside a worker. Only `THREE.Scene` and rendering-related classes require the main thread. `engine/SolarEngine.ts` is importable in both contexts for this reason.
 
 **BVH serialisation and per-worker geometry copies:**
 
-`useAnnualSimulation` collects all shadow-casting meshes from the Three.js scene and builds a `getMeshes` factory. Each call to the factory produces a fresh set of typed-array copies (positions, indices, serialised BVH, world matrix) for one worker. This ensures each worker's buffers can be zero-copy transferred via `postMessage` with the `transfer` option without detaching the data for other workers. Peak memory usage is approximately 2× the geometry size regardless of the number of workers.
+`MeshFactory.fromScene(scene)` collects all shadow-casting meshes from the Three.js scene. Each call to `build()` produces a fresh `MeshBatch` — independent typed-array copies (positions, indices, serialised BVH, world matrix) for one worker. This ensures each worker's buffers can be zero-copy transferred via `postMessage` with the `transfer` option without detaching the data for other workers. Peak memory usage is approximately 2× the geometry size regardless of the number of workers.
+
+The serialisation and reconstruction logic is centralised in `utils/ThreeUtils.ts` (`serializeMesh`, `reconstructMesh`, `reconstructMeshes`), making it the single place to update if the BVH API changes.
 
 The worker reconstructs the BVH with `MeshBVH.deserialize()` and runs raycasting entirely off the main thread.
 
-**Sample points pre-computed on the main thread:**
+**Sample points and normals pre-computed on the main thread:**
 
-Each panel's sample points are transformed from local space to world space on the main thread before transfer, using the panel's world matrix (position + rotation). This avoids repeating the matrix multiplication inside the worker at every time step. The world-space normal (used for the incidence factor) is also pre-computed.
+`SolarPanelConverter.toSimulationPanelDataArray` transforms each panel's local-space sample points to world space and computes the world-space normal before transfer. This avoids repeating the matrix multiplication inside the worker at every time step. The converter produces `SimulationPanelData` objects, whose type names reflect their semantic role rather than their transport mechanism.
 
 **Worker pool:**
 
@@ -478,7 +529,18 @@ Workers emit a `progress` message every 100 time steps. The main thread applies 
 smoothedRemaining = 0.2 × rawRemaining + 0.8 × previousSmoothed
 ```
 
-The ETA is shown only after 5% of steps are complete, to avoid wildly inaccurate early estimates.
+The ETA is shown only after 5% of steps are complete, to avoid wildly inaccurate early estimates. `formatEta` in `utils/TimeUtils.ts` converts seconds to a human-readable string shared by the worker orchestration and the progress UI.
+
+### Accumulation and finalisation
+
+`engine/AnnualSimulationEngine.ts` provides the pure functions that manage per-panel data across the year:
+
+- `initAccumulators` — allocates zeroed 3D arrays (month × day × hour) per panel.
+- `accumulateStep` — records one time step's energy and shade counts into the accumulator.
+- `finalizePanel` — converts raw counts to shade fractions and produces a `PanelAnnualData`.
+- `buildSetupResult` — assembles the final `SetupAnnualResult` with pre-rolled monthly totals.
+
+These functions have no Three.js or worker dependencies and can be tested in isolation. The worker is responsible only for driving the time-step loop and calling `computeShadedZones` (which requires `THREE.Raycaster` and cannot be shared with the main-thread interactive path).
 
 ### Cache key and hashing
 
@@ -550,11 +612,11 @@ A dependency should be included if its change logically invalidates the effect's
 
 ### Per-worker geometry copies, not shared transfer
 
-When multiple workers are spawned, each must receive its own copy of the serialised geometry data. Typed array buffers are detached after the first `postMessage` with the `transfer` option — subsequent workers would receive empty buffers. `buildMeshFactory` in `useAnnualSimulation` produces a factory that generates fresh typed-array copies on each call, one per worker. Peak memory cost is ~2× geometry size, which is acceptable given that geometry is small compared to the simulation workload.
+When multiple workers are spawned, each must receive its own copy of the serialised geometry data. Typed array buffers are detached after the first `postMessage` with the `transfer` option — subsequent workers would receive empty buffers. `MeshFactory.fromScene(scene).build()` produces a fresh `MeshBatch` on each call, one per worker. Peak memory cost is ~2× geometry size, which is acceptable given that geometry is small compared to the simulation workload.
 
 ### Sample points pre-computed before worker transfer
 
-World-space sample point positions depend only on each panel's world matrix, which is already available on the main thread. Pre-computing them once before transfer avoids repeating the matrix multiplication inside the worker at every one of the ~8,760 time steps, at the cost of a one-time allocation that is immediately transferred and freed.
+World-space sample point positions depend only on each panel's world matrix, which is already available on the main thread. `SolarPanelConverter.toSimulationPanelDataArray` pre-computes them once before transfer, avoiding the matrix multiplication inside the worker at every one of the ~8,760 time steps, at the cost of a one-time allocation that is immediately transferred and freed.
 
 ### EMA for ETA smoothing
 
@@ -582,7 +644,7 @@ Cryptographic hashes require the Web Crypto API and return a Promise, adding asy
 
 ### Typing `boundsTree` as `MeshBVH`, not `unknown`
 
-The `.d.ts` declaration for `boundsTree` must use the concrete `MeshBVH` type so that `MeshBVH.serialize(geometry.boundsTree)` compiles without a cast at the serialisation call site in `useAnnualSimulation`.
+The `.d.ts` declaration for `boundsTree` must use the concrete `MeshBVH` type so that `MeshBVH.serialize(geometry.boundsTree)` compiles without a cast at the serialisation call site in `ThreeUtils.ts`.
 
 ### Shared railing render data logic in `RailingUtils`
 
@@ -595,3 +657,15 @@ Returning `{ site, angleWarnings }` keeps the factory free of side effects. The 
 ### `AngleWarning` carries coordinates, not indices
 
 Showing raw 0-based indices forces the user to count positions in their config file. Storing the actual `[x, z]` pairs makes the warning immediately actionable.
+
+### Solar engine shared between interactive view and worker
+
+`engine/SolarEngine.ts` is imported by both `ShadowedScene` (main thread, interactive) and `AnnualSimulation.worker.ts`. This is safe because `SolarEngine` only uses Three.js math classes (`Vector3`, `Euler`, `Matrix4`) which are DOM-free. The functions that require `THREE.Scene` or `THREE.Raycaster` remain in their respective contexts (`useShadowSampler` for interactive, `computeShadedZones` in the worker) and are not shared.
+
+### Naming types by role, not by transport
+
+`SimulationPanelData` and `SimulationSamplePoint` describe what the data represents (simulation inputs for a panel / a sample point), not how it is transported (via a worker). This decouples the type contract from the implementation strategy and allows the same types to be used if the simulation is ever run in the main thread for debugging.
+
+### `AnnualSimulationEngine` contains no I/O or orchestration
+
+Every function in `engine/AnnualSimulationEngine.ts` is pure: given inputs, return outputs, no side effects. The worker drives the loop and emits progress messages; the engine only knows how to accumulate one step and how to finalise one panel. This separation makes the accumulation logic independently testable.

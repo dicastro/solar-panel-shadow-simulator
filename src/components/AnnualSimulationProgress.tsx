@@ -1,22 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
-
-/**
- * Formats a remaining-seconds estimate into a human-readable string.
- * Displays minutes and seconds once the value is below one hour,
- * hours and minutes above that.
- */
-const formatEta = (seconds: number): string => {
-  const s = Math.round(seconds);
-  if (s < 3600) {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `~${m}m ${sec}s`;
-  }
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return `~${h}h ${m}m`;
-};
+import { TimeUtils } from '../utils/TimeUtils';
 
 /**
  * Renders the annual simulation progress section inside SimulationControls.
@@ -58,7 +42,7 @@ export function AnnualSimulationProgress() {
                 {pct}%
                 {showEta && (
                   <span className="simulation-progress__eta">
-                    {' '}{formatEta(p.smoothedRemainingSeconds!)}
+                    {' '}{TimeUtils.formatEta(p.smoothedRemainingSeconds!)}
                   </span>
                 )}
               </span>

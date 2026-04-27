@@ -1,11 +1,11 @@
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import { useAppStore, makeDateInTimezone } from '../store/useAppStore';
-import { getAllTimezones } from '../utils/TimezoneUtils';
+import { TimeUtils } from '../utils/TimeUtils';
 
 const CURRENT_YEAR = dayjs().year();
 
-const ALL_TIMEZONES = getAllTimezones();
+const ALL_TIMEZONES = TimeUtils.getAllTimezones();
 
 /**
  * Top-left panel: setup selector, date/time pickers, play/pause and step

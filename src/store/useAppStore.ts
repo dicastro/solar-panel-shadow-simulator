@@ -8,8 +8,8 @@ import {
 } from '../types/simulation';
 import { SiteFactory } from '../factory/SiteFactory';
 import { PanelSetupFactory } from '../factory/PanelSetupFactory';
-import { calculateSunState } from '../solarEngine';
-import { resolveInitialTimezone } from '../utils/TimezoneUtils';
+import { SolarEngine } from '../engine/SolarEngine';
+import { TimeUtils } from '../utils/TimeUtils';
 
 const CURRENT_YEAR = dayjs().year();
 
@@ -155,7 +155,7 @@ const rebuildSamplePoints = (
 ): PanelSetup => PanelSetupFactory.rebuildSamplePoints(activeSetup, newDensity);
 
 const buildSun = (date: Dayjs, config: Config): SunState =>
-  calculateSunState(
+  SolarEngine.calculateSunState(
     date.toDate(),
     config.site.location.latitude,
     config.site.location.longitude,
@@ -172,7 +172,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   site: null,
   activeSetup: null,
   activeSetupIndex: null,
-  timezone: resolveInitialTimezone(),
+  timezone: TimeUtils.resolveInitialTimezone(),
   date: dayjs(),
   isPlaying: false,
   sun: null,

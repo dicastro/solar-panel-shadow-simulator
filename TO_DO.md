@@ -1,19 +1,7 @@
-* Analiza el fichero `ANNUAL_SIMULATION_ANALYSIS.md`
+* Analiza todo el fichero `ANNUAL_SIMULATION_ANALYSIS.md`. Puedes complementar esta información con el contenido del `README.md` para tener una visión global de la aplicación hasta el momento.
 
-* Se acaban de realizar los cambios para la "fase 1". Funciona correctamente y se hace el cálculo anual según lo esperado. Pero tengo varios comentarios sobre posibles mejoras/refactors/optimizaciones para esta fase, antes de pasar a la siguiente. Tienes el código accesible incluyendo los cambios implementados en esta "fase 1"
+* Se acaban de realizar los cambios para la "fase 1" especificados en `ANNUAL_SIMULATION_ANALYSIS.md`. Funciona correctamente y se hace el cálculo anual según lo esperado. Tienes el código accesible incluyendo los cambios implementados en esta "fase 1".
 
-* Quizá estaría bien crear un `ThreeUtils.ts` y centralizar ahí utilizades relacionadas con Three. Como por ejemplo para serializar/deserializar (reconstruct) meshes. Ahora mismo hay lógica en `AnnualSimulation.worker.ts` (`reconstructMesh`) y también veo lógica en `useAnnualSimulation.ts` (`serializeMesh`). Es posible que para esto haya que recolocar algunas definiciones de tipos que ahora son locales a estas clases y no están expuestas, ubica estos tipos en el mejor sitio, o bien en un módulo ya existente en `types` o en un nuevo módulo si tiene sentido.
+* Analiza el código en relación a la simulación para ver si hay refactorizaciones que se puedan hacer para mejorar el código, hacer el código más legible, extraer lógica común a clases de utilidad, converters, definición de tipos
 
-* En `AnnualSimulation.worker.ts` veo métodos `getSunDirection`, `incidenceFactor`, `computeShadedZones` (y no sé si algún otro método). Esto se solapa con lo que hay en `solarEngine.ts` no? Lo relacionado con cálculos solares debería estar centralizado en `solarEngine.ts`. Diría que lo que hay en `solarEngine.ts` ahora mismo se utiliza para el cálculo de producción instantáneo, pero para la simulación anual no debería duplicarse código, entiendo que la lógica es la misma, pero iterando sobre varios setups e instantes de tiempo. Refactoriza toda esa parte para que no haya duplicidades de código y que los cálculos estén localizados en `solarEngine.ts`
-
-* En `AnnualSimulation.worker.ts` hay un `timeSteps`. Por otro lado tenemos un `TimezoneUtils.ts`. Creo que sería interesante convertir el `TimezoneUtils.ts` en `TimeUtils.ts` y mover el `timeSteps` del worker al reconvertido `TimeUtils.ts`
-
-* En `AnnualSimulation.worker.ts` hay un `panelOutput`, `applyStringMismatch` y dentro del `runSimulation` veo `// Initialise per-panel accumulators.` y también lógica para `// Compute per-panel outputs for this step.` y también lógica para `// Compute shade fractions from raw counts.` y lógica para `// Build final PanelAnnualData array.` y lógica para `monthlyTotalKwh` y para `annualTotalKwh`. Esta lógica debería estar fuera del worker, el worker no tiene que saber cómo hacer esto. No sé si tiene sentido llevar esto a `solarEngine.ts` o a otro módulo especializado en trabajar con paneles. Esta refactorización tiene que tener en cuenta que se quiere ir mostrando un grado de avance/progreso durante el proceso
-
-* En `useAnnualSimulation.ts` hay un método `toWorldNormal` que convierte un `SolarPanel` en `{ x: number; y: number; z: number }` que coincide con la definición de `PointXYZ`. Debería usarse el tipo propio. Además debería haber un `SolarPanelConverter` que dado un `SolarPanel` lo convierta en `PointXYZ`
-
-* En `useAnnualSimulation.ts` hay métodos `toWorldSpaceSamplePoints` que convierte lun `SolarPanel` en `WorkerSamplePoint[]`. Este método `toWorldSpaceSamplePoints` debería estar en un `SolarPanelConverter` (el mismo que se menciona en el punto anterior). No me gusta el nombre `WorkerSamplePoint`, está atado al hecho de que se use en un worker, no sé si sería mejor el nombre `SimulationSamplePoint` que es más genérico, ya que representa un punto que se va a usar para la simulación
-
-* En `useAnnualSimulation.ts` veo que hay lógica para transformar `SolarPanel[]` en `WorkerPanelData[]`. Por un lado, no me gusta el nombre `WorkerPanelData`, lo veo acoplado al hecho de que se ejecute en un worker, y eso debería ser transparente, veo mejor `SimulationPanelData`, ya que son datos de un panel para la simulación. Y creo que esta transformación debería estar en un converter `SolarPanelConverter` que dado un `SolarPanel[]` lo transforme.
-
-* En `AnnualSimulationProgress.tsx` hay un `formatEta`. Esta utilidad tendría más sentido en el reconvertido `TimeUtils.ts` mencionado anteriormente
+* Implementa la "fase 2"

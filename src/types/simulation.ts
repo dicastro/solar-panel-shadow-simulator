@@ -98,6 +98,38 @@ export interface SerializedMesh {
 }
 
 /**
+ * A sample point with its position already transformed to world space.
+ * Used as the unit of raycasting input in the annual simulation.
+ */
+export interface SimulationSamplePoint {
+  readonly id: string;
+  readonly zoneIndex: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/**
+ * Per-panel data required to run the annual simulation.
+ * World-space positions and normals are pre-computed on the main thread
+ * to avoid repeating matrix multiplications inside the worker at every time step.
+ */
+export interface SimulationPanelData {
+  readonly id: string;
+  readonly arrayIndex: number;
+  readonly row: number;
+  readonly col: number;
+  readonly peakPower: number;
+  readonly zones: number;
+  readonly hasOptimizer: boolean;
+  readonly string: string;
+  /** Panel normal in world space, pre-computed from worldRotation. */
+  readonly worldNormal: Vector3;
+  /** Sample points already in world space. */
+  readonly samplePoints: SimulationSamplePoint[];
+}
+
+/**
  * All data the worker needs to run a full annual simulation for one setup.
  * Transferred once per worker launch; large typed arrays are zero-copy transferred.
  */
@@ -114,37 +146,7 @@ export interface WorkerSimulationPayload {
   readonly threshold: number;
   /** All shadow-casting meshes in the scene (walls, railings, panels of this setup). */
   readonly meshes: SerializedMesh[];
-  /**
-   * Panel sample points in world space, grouped by panel.
-   * Pre-computed on the main thread because the world-space transform requires
-   * the panel's world matrix, which is already available there.
-   */
-  readonly panels: WorkerPanelData[];
-}
-
-/** Per-panel data sent to the worker. */
-export interface WorkerPanelData {
-  readonly id: string;
-  readonly arrayIndex: number;
-  readonly row: number;
-  readonly col: number;
-  readonly peakPower: number;
-  readonly zones: number;
-  readonly hasOptimizer: boolean;
-  readonly string: string;
-  /** Panel normal in world space (pre-computed from worldRotation). */
-  readonly worldNormal: { x: number; y: number; z: number };
-  /** Sample points already in world space. */
-  readonly samplePoints: WorkerSamplePoint[];
-}
-
-export interface WorkerSamplePoint {
-  readonly id: string;
-  readonly zoneIndex: number;
-  /** World-space position. */
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
+  readonly panels: SimulationPanelData[];
 }
 
 // ── Messages: main thread → worker ───────────────────────────────────────────
