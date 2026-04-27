@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { OrbitControls, Grid } from '@react-three/drei';
 import * as THREE from 'three';
 import { Site, PanelSetup, SunState, SimulationResult } from '../types';
@@ -8,6 +8,9 @@ import { ShadowedScene } from './ShadowedScene';
 import { Compass } from './Compass';
 import { Sun } from './Sun';
 import { SolarPanelComponent } from './SolarPanelComponent';
+import { useAnnualSimulation } from '../hooks/useAnnualSimulation';
+import { useAppStore } from '../store/useAppStore';
+import { PanelSetupFactory } from '../factory/PanelSetupFactory';
 
 interface SceneProps {
   site: Site;
@@ -20,11 +23,6 @@ interface SceneProps {
   onProductionUpdate: (result: SimulationResult) => void;
 }
 
-/**
- * Renders a single railing rail segment from its pre-computed render data.
- * Switches on the discriminated union kind so TypeScript ensures all shapes
- * are handled and no cast is needed.
- */
 function RailingRail({ data }: { data: RailingRailRenderData }) {
   switch (data.kind) {
     case 'square':
@@ -34,7 +32,6 @@ function RailingRail({ data }: { data: RailingRailRenderData }) {
           <meshStandardMaterial color={data.color} />
         </mesh>
       );
-
     case 'cylinder':
       return (
         <mesh position={data.localPosition} rotation={data.localRotation} castShadow>
@@ -42,7 +39,6 @@ function RailingRail({ data }: { data: RailingRailRenderData }) {
           <meshStandardMaterial color={data.color} />
         </mesh>
       );
-
     case 'half-cylinder':
       return (
         <mesh position={data.localPosition} rotation={data.localRotation} castShadow>
@@ -72,9 +68,77 @@ function RailingSupport({ data }: { data: RailingSupportRenderData }) {
   }
 }
 
+/**
+ * Root 3D scene component. Renders walls, railings, solar panels, sun and
+ * compass, and wires the annual simulation hook to the application store.
+ *
+ * `useAnnualSimulation` must be called from inside the `<Canvas>` tree
+ * because it uses `useThree` internally to access the Three.js scene for
+ * BVH serialisation. `Scene` is always rendered inside `<Canvas>` in App.tsx,
+ * making it the correct host for this hook.
+ *
+ * The annual simulation is triggered by watching `isRunning` in the store.
+ * When it transitions to true, all configured setups are built and dispatched
+ * to the worker pool in a single batch so comparative results are computed
+ * together.
+ *
+ * The `isRunning` effect deliberately lists only `isRunning` as a dependency.
+ * This is intentional: the simulation is a one-shot operation triggered by the
+ * transition false→true. Re-running it on every density or threshold change
+ * during an active run is not desired — those parameters are locked in the UI
+ * while the simulation is running.
+ */
 export function Scene({
   site, activeSetup, sun, date, showPoints, density, threshold, onProductionUpdate,
 }: SceneProps) {
+  const { run, stop } = useAnnualSimulation();
+
+  const config = useAppStore(s => s.config);
+  const isRunning = useAppStore(s => s.isRunning);
+  const simulationInterval = useAppStore(s => s.simulationInterval);
+  const simulationYear = useAppStore(s => s.simulationYear);
+  const irradianceSource = useAppStore(s => s.irradianceSource);
+  const updateProgress = useAppStore(s => s.updateProgress);
+  const markSetupComplete = useAppStore(s => s.markSetupComplete);
+  const setSetupResult = useAppStore(s => s.setSetupResult);
+  const setPendingSetups = useAppStore(s => s.setPendingSetups);
+  const simulationComplete = useAppStore(s => s.simulationComplete);
+
+  useEffect(() => {
+    if (!isRunning || !config || !site) return;
+
+    const allSetups = config.setups.map((setupConfig, i) =>
+      PanelSetupFactory.create(setupConfig, i, site, density),
+    );
+
+    run(
+      allSetups,
+      site,
+      density,
+      threshold,
+      simulationInterval,
+      simulationYear,
+      irradianceSource,
+      {
+        onProgress: updateProgress,
+        onSetupComplete: markSetupComplete,
+        onResult: setSetupResult,
+        onError: (setupId, message) => {
+          console.error(`Annual simulation error for setup ${setupId}:`, message);
+          markSetupComplete(setupId);
+        },
+        onPendingUpdate: setPendingSetups,
+        onAllComplete: () => {
+          simulationComplete();
+          setPendingSetups(0);
+        },
+      },
+    );
+
+    return () => { stop(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning]);
+
   const gridSize = site.boundingRadius * 3;
 
   const floorShape = useMemo(() => {
@@ -105,16 +169,12 @@ export function Scene({
       <Compass />
       <Sun date={date} />
 
-      {/* Site group: walls + floor, rotated to match real-world azimuth */}
       <group rotation-y={site.azimuthRad}>
-        {/* Floor */}
         <mesh receiveShadow position={[0, 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <extrudeGeometry args={[floorShape, { depth: 0.02, bevelEnabled: false }]} />
           <meshStandardMaterial color="#b45d16" side={THREE.DoubleSide} />
         </mesh>
 
-        {/* Wall intersection posts — all entries in the array are rendered.
-            Collinear vertices are excluded from the array during site construction. */}
         {site.wallIntersections.map(wi => (
           <mesh
             key={`post-${wi.index}`}
@@ -126,7 +186,6 @@ export function Scene({
           </mesh>
         ))}
 
-        {/* Wall segments: body + rail + supports */}
         {site.walls.map(wall => (
           <group
             key={`wall-${wall.index}`}
@@ -147,7 +206,6 @@ export function Scene({
         ))}
       </group>
 
-      {/* Panels — outside the site group: azimuth is absolute */}
       <ShadowedScene
         site={site}
         activeSetup={activeSetup}

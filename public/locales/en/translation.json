@@ -17,6 +17,9 @@
   "simulationControls": {
     "title": "Annual Simulation",
     "interval": "Interval",
+    "year": "Year",
+    "irradianceSource": "Irradiance",
+    "irradianceGeometric": "Geometric (no weather)",
     "pointsPerZone": "NxN points per zone",
     "showPoints": "Show sample points",
     "threshold": "Zone shadow threshold",
@@ -26,8 +29,11 @@
     "totalRays": "Total rays",
     "instantPower": "Estimated instant output",
     "theoreticalPeak": "Theoretical peak",
+    "annualResults": "Annual results",
     "run": "RUN CALCULATION",
-    "stop": "STOP"
+    "stop": "STOP",
+    "stopConfirm": "Stop the simulation? Progress will be lost for setups still running.",
+    "pending": "{{count}} setup(s) waiting in queue"
   },
   "angleWarning": {
     "title": "Configuration Warning",

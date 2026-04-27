@@ -161,6 +161,67 @@
   },
   "setups": [
     {
+      "label": "3 filas a 70cm alto (optimizada)",
+      "panelDefaults": {
+        "width": 1,
+        "height": 2,
+        "peakPower": 415,
+        "zones": 2,
+        "zonesDisposition": "horizontal",
+        "hasOptimizer": true,
+        "string": "S1"
+      },
+      "arrays": [
+        {
+          "position": [
+            0.3,
+            0.8
+          ],
+          "azimuth": 0,
+          "elevation": 0.5,
+          "inclination": 10,
+          "rows": 1,
+          "columns": 3,
+          "spacing": [
+            0.01,
+            0.01
+          ],
+          "orientation": "portrait"
+        },
+        {
+          "position": [
+            0.3,
+            3.5
+          ],
+          "azimuth": 0,
+          "elevation": 0.5,
+          "inclination": 10,
+          "rows": 1,
+          "columns": 3,
+          "spacing": [
+            0.01,
+            0.01
+          ],
+          "orientation": "portrait"
+        },
+        {
+          "position": [
+            0.3,
+            6.3
+          ],
+          "azimuth": 0,
+          "elevation": 0.5,
+          "inclination": 10,
+          "rows": 1,
+          "columns": 3,
+          "spacing": [
+            0.01,
+            0.01
+          ],
+          "orientation": "portrait"
+        }
+      ]
+    }, {
       "label": "3 filas a 70cm alto",
       "panelDefaults": {
         "width": 1,
@@ -221,8 +282,7 @@
           "orientation": "portrait"
         }
       ]
-    },
-    {
+    }, {
       "label": "Configuración Actual",
       "panelDefaults": {
         "width": 1,
