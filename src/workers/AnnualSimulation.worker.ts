@@ -1,46 +1,158 @@
 /**
  * Annual simulation worker.
  *
- * This worker runs the full year simulation loop off the main thread,
- * receiving serialised BVH geometry and panel data via postMessage and
- * returning progress updates and the final SetupAnnualResult.
+ * Receives a 'run' message with serialised BVH geometry and panel data,
+ * steps through every N-minute interval of a full year, casts shadow rays
+ * at each step, and returns a SetupAnnualResult. Progress updates are emitted
+ * every PROGRESS_INTERVAL steps to avoid flooding the main thread.
  *
- * Phase 0: responds to a 'ping' message with a 'pong' and logs environment
- * diagnostics (Three.js availability, SunCalc availability, worker count
- * heuristic). No simulation logic is implemented yet.
+ * Three.js math classes (Vector3, Matrix4, Raycaster) work correctly in a
+ * worker context — they have no DOM or WebGL dependencies. SunCalc is
+ * similarly DOM-free.
  *
- * Phase 1 will replace the ping/pong handler with the full simulation loop.
+ * Responds to 'ping' with diagnostic information (preserved from Phase 0).
  */
 
 import * as THREE from 'three';
 import SunCalc from 'suncalc';
+import { acceleratedRaycast } from 'three-mesh-bvh';
+import {
+  WorkerIncomingMessage,
+  WorkerOutgoingMessage,
+  WorkerSimulationPayload,
+  SimulationPanelData,
+  WorkerDiagnostics,
+} from '../types/simulation';
+import { SolarEngine, StringPanelEntry } from '../engine/SolarEngine';
+import { ThreeUtils } from '../utils/ThreeUtils';
+import { TimeUtils } from '../utils/TimeUtils';
+import { AnnualSimulationEngine } from '../engine/AnnualSimulationEngine';
 
-export type WorkerIncomingMessage =
-  | { type: 'ping' };
+// Patch THREE.Mesh.prototype.raycast once so every mesh in this worker uses BVH.
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-export type WorkerOutgoingMessage =
-  | { type: 'pong'; diagnostics: WorkerDiagnostics };
+const PROGRESS_INTERVAL = 100;
 
-export interface WorkerDiagnostics {
-  threeVersion: string;
-  sunCalcAvailable: boolean;
-  /** navigator.hardwareConcurrency as seen from the worker. */
-  hardwareConcurrency: number;
-  testRecommendations: {
-    for1: number;
-    for3: number;
-    for8: number;
-  };
-}
+// Scratch objects — allocated once, reused per ray to avoid GC pressure.
+const _sunDir = new THREE.Vector3();
+const _rayOrigin = new THREE.Vector3();
+
+/**
+ * Determines which zones are shaded for a single panel at one time step.
+ *
+ * Casts one ray per sample point toward the sun and counts hits per zone.
+ * A zone is considered shaded when its hit count reaches the threshold.
+ * The raycaster's direction must be set by the caller before invoking this.
+ */
+const computeShadedZones = (
+  panel: SimulationPanelData,
+  meshes: THREE.Mesh[],
+  raycaster: THREE.Raycaster,
+  threshold: number,
+): boolean[] => {
+  const shadedCountByZone = new Array<number>(panel.zones).fill(0);
+
+  for (const sp of panel.samplePoints) {
+    _rayOrigin.set(sp.x, sp.y, sp.z);
+    raycaster.ray.origin.copy(_rayOrigin);
+
+    const hits = raycaster.intersectObjects(meshes, false);
+    if (hits.some(h => h.distance > 0.01)) {
+      shadedCountByZone[sp.zoneIndex]++;
+    }
+  }
+
+  return shadedCountByZone.map(count => count >= threshold);
+};
+
+// ── Simulation loop ───────────────────────────────────────────────────────────
+
+const runSimulation = (payload: WorkerSimulationPayload) => {
+  const {
+    setupId, setupLabel, cacheKey, year, intervalMinutes,
+    latitude, longitude, irradianceSource,
+    threshold, meshes: serializedMeshes, panels,
+  } = payload;
+
+  const meshObjects = ThreeUtils.reconstructMeshes(serializedMeshes);
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.firstHitOnly = true;
+
+  const accumulators = AnnualSimulationEngine.initAccumulators(panels);
+  const hoursPerStep = intervalMinutes / 60;
+  const stepTotal = TimeUtils.totalTimeSteps(year, intervalMinutes);
+  let completedSteps = 0;
+
+  for (const { date, month, day, hour } of TimeUtils.timeSteps(year, intervalMinutes)) {
+    const sun = SolarEngine.calculateSunState(date, latitude, longitude);
+
+    if (sun.isDaylight) {
+      _sunDir.set(sun.direction.x, sun.direction.y, sun.direction.z);
+      raycaster.ray.direction.copy(_sunDir);
+
+      const stringGroups = new Map<string, StringPanelEntry[]>();
+      const shadedZonesByPanel: boolean[][] = [];
+
+      panels.forEach((panel, idx) => {
+        const basePower = (panel.peakPower / 1000) *
+          SolarEngine.calculateIncidenceFactor(sun.direction, panel.worldNormal);
+        const shadedZones = computeShadedZones(panel, meshObjects, raycaster, threshold);
+        const power = SolarEngine.calculatePanelOutput(basePower, shadedZones, panel.hasOptimizer);
+
+        const group = stringGroups.get(panel.string) ?? [];
+        group.push({ panelIdx: idx, basePower, power, hasOptimizer: panel.hasOptimizer });
+        stringGroups.set(panel.string, group);
+
+        shadedZonesByPanel[idx] = shadedZones;
+      });
+
+      const stepPowers = SolarEngine.applyStringMismatch(stringGroups, panels.length);
+
+      panels.forEach((_, idx) => {
+        AnnualSimulationEngine.accumulateStep(
+          accumulators[idx],
+          month, day, hour,
+          stepPowers[idx],
+          shadedZonesByPanel[idx],
+          hoursPerStep,
+        );
+      });
+    }
+
+    completedSteps++;
+
+    if (completedSteps % PROGRESS_INTERVAL === 0 || completedSteps === stepTotal) {
+      const msg: WorkerOutgoingMessage = {
+        type: 'progress',
+        setupId,
+        completed: completedSteps,
+        total: stepTotal,
+      };
+      self.postMessage(msg);
+    }
+  }
+
+  const finalPanels = panels.map((panel, idx) =>
+    AnnualSimulationEngine.finalizePanel(panel, accumulators[idx]),
+  );
+
+  meshObjects.forEach(m => m.geometry.dispose());
+
+  return AnnualSimulationEngine.buildSetupResult(
+    setupId, setupLabel, cacheKey, year, intervalMinutes, irradianceSource, finalPanels,
+  );
+};
+
+// ── Message handler ───────────────────────────────────────────────────────────
 
 self.onmessage = (event: MessageEvent<WorkerIncomingMessage>) => {
   const { type } = event.data;
 
   if (type === 'ping') {
     const hardwareConcurrency = navigator.hardwareConcurrency ?? 1;
-
-    const getRecommendation = (setupCount: number) => 
-      Math.max(1, Math.min(hardwareConcurrency - 1, setupCount));
+    const getRecommendation = (n: number) =>
+      Math.max(1, Math.min(hardwareConcurrency - 1, n));
 
     const diagnostics: WorkerDiagnostics = {
       threeVersion: THREE.REVISION,
@@ -50,10 +162,26 @@ self.onmessage = (event: MessageEvent<WorkerIncomingMessage>) => {
         for1: getRecommendation(1),
         for3: getRecommendation(3),
         for8: getRecommendation(8),
-      }
+      },
     };
 
-    const response: WorkerOutgoingMessage = { type: 'pong', diagnostics };
-    self.postMessage(response);
+    const pong: WorkerOutgoingMessage = { type: 'pong', diagnostics };
+    self.postMessage(pong);
+    return;
+  }
+
+  if (type === 'run') {
+    try {
+      const result = runSimulation(event.data.payload);
+      const msg: WorkerOutgoingMessage = { type: 'result', result };
+      self.postMessage(msg);
+    } catch (err) {
+      const msg: WorkerOutgoingMessage = {
+        type: 'error',
+        setupId: event.data.payload.setupId,
+        message: err instanceof Error ? err.message : String(err),
+      };
+      self.postMessage(msg);
+    }
   }
 };

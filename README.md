@@ -15,7 +15,7 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 7. [Configuration reference](#configuration-reference)
 8. [Solar production model](#solar-production-model)
 9. [Shadow detection — Raycasting + BVH](#shadow-detection--raycasting--bvh)
-10. [Annual simulation — infrastructure](#annual-simulation--infrastructure)
+10. [Annual simulation](#annual-simulation)
 11. [Timezone and DST](#timezone-and-dst)
 12. [Known limitations](#known-limitations)
 13. [Lessons learned](#lessons-learned)
@@ -29,6 +29,7 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Detects which panel zones are shaded using raycasting against all shadow-casting geometry (walls, railings, supports, and other panels).
 - Estimates instantaneous power output in kW, applying bypass-diode, string-mismatch and optimizer logic.
 - Supports multiple installation layouts ("setups") selectable via the UI.
+- Runs a full annual simulation for all configured setups in parallel Web Workers, accumulating energy (kWh) per panel broken down by month, day, and hour. Results are cached in IndexedDB so re-running the same configuration is instant.
 - Validates the wall configuration and displays a prominent warning listing the exact config-space coordinate triples that form non-90° or non-180° angles.
 
 ---
@@ -54,15 +55,25 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 ```
 src/
 ├── App.tsx                        # Root: loads config, wires canvas + UI
-├── solarEngine.ts                 # Pure functions: sun state, incidence, production
 ├── i18n.ts                        # i18next initialisation
 │
 ├── types/
 │   ├── config.ts                  # JSON config shapes (InstallationConfiguration, ...)
 │   ├── geometry.ts                # PointXZ, Vector3, Euler3, AngleWarning (renderer-agnostic)
 │   ├── installation.ts            # Domain models: Site, Wall, SolarPanel, ...
-│   ├── simulation.ts              # SunState, SimulationResult, annual simulation types
+│   ├── simulation.ts              # SunState, SimulationResult, annual simulation types,
+│   │                              #   worker message protocol (WorkerIncomingMessage,
+│   │                              #   WorkerOutgoingMessage, WorkerSimulationPayload, ...),
+│   │                              #   SimulationPanelData, SimulationSamplePoint
 │   └── index.ts                   # Re-exports
+│
+├── engine/
+│   ├── SolarEngine.ts             # Pure functions: sun state, incidence, panel output,
+│   │                              #   string mismatch (applyStringMismatch exported).
+│   │                              #   Used by both the interactive view and the worker.
+│   └── AnnualSimulationEngine.ts  # Pure accumulation functions for the annual loop:
+│                                  #   initAccumulators, accumulateStep, finalizePanel,
+│                                  #   buildSetupResult. No Three.js, no worker coupling.
 │
 ├── factory/
 │   ├── SiteFactory.ts             # Config → Site (walls, intersections, bounding radius, angle validation)
@@ -72,44 +83,56 @@ src/
 │   ├── SolarPanelArrayFactory.ts  # Computes array origin, creates panels
 │   ├── SolarPanelFactory.ts       # Single panel world position + render data
 │   ├── SamplePointFactory.ts      # Sample points for raycasting per panel
-│   └── PointXZFactory.ts          # Safe PointXZ constructor
+│   ├── PointXZFactory.ts          # Safe PointXZ constructor
+│   └── MeshFactory.ts             # Collects shadow-casting meshes from the scene and
+│                                  #   serialises them for worker transfer (one independent
+│                                  #   copy per worker via MeshFactory.fromScene().build()).
 │
 ├── converter/
-│   └── ThreeConverter.ts          # Domain Vector3/Euler3 → THREE.Vector3/Euler
+│   ├── ThreeConverter.ts          # Domain Vector3/Euler3 → THREE.Vector3/Euler
+│   └── SolarPanelConverter.ts     # SolarPanel → SimulationPanelData / SimulationSamplePoint
+│                                  #   / Vector3 (world normal). Pre-computes world-space
+│                                  #   transforms so the worker loop only does arithmetic.
 │
 ├── store/
 │   └── useAppStore.ts             # Zustand store — all app state + actions
 │
 ├── hooks/
 │   ├── useBVH.ts                  # Builds BVH over shadow-casting meshes
-│   └── useShadowSampler.ts        # Casts rays, returns ShadowMap
+│   ├── useShadowSampler.ts        # Casts rays, returns ShadowMap (interactive)
+│   └── useAnnualSimulation.ts     # Orchestrates worker pool for annual simulation
 │
 ├── db/
-│   └── simulationCache.ts         # IndexedDB wrapper for SetupAnnualResult persistence
+│   └── SimulationCache.ts         # IndexedDB wrapper for SetupAnnualResult persistence
 │
 ├── workers/
-│   └── annualSimulation.worker.ts # Annual simulation Web Worker (Phase 0: ping/pong scaffold)
+│   └── AnnualSimulation.worker.ts # Full annual simulation loop. Imports from SolarEngine,
+│                                  #   AnnualSimulationEngine, ThreeUtils, and TimeUtils.
+│                                  #   Contains only worker orchestration and the raycasting
+│                                  #   call (computeShadedZones), which requires THREE.Raycaster
+│                                  #   and cannot be shared with the main-thread path.
 │
-├── utils/
-│   ├── hash.ts                    # FNV-1a 32-bit hash — deterministic cache key generation
-│   ├── simulationCacheKey.ts      # buildCacheKey() and hashCacheKey() for simulation results
-│   ├── PointXZUtils.ts            # computeLeftHandNormal, convexity, right-angle check, prev/next helpers
-│   ├── RailingUtils.ts            # Shared railing rail render data builder
-│   └── TimezoneUtils.ts           # getAllTimezones(), getBrowserTimezone(), resolveInitialTimezone()
-│
-├── components/
-│   ├── Scene.tsx                  # Root 3D scene (walls + panels + helpers)
-│   ├── ShadowedScene.tsx          # Dirty-flag raycasting loop, feeds ShadowMap
-│   ├── SolarPanelComponent.tsx    # Single panel render (purely presentational)
-│   ├── Sun.tsx                    # Sun sphere + directional light
-│   ├── Compass.tsx                # N/S/E/W labels in 3D
-│   ├── MainControls.tsx           # Date/time/play UI panel
-│   ├── SimulationControls.tsx     # Simulation settings UI panel
-│   ├── AngleWarningBanner.tsx     # Warning banner listing non-90° angle coordinate triples
-│   └── DeveloperFooter.tsx        # Ko-fi link + personal site
-│
-└── _phase0_validation/            # TEMPORARY — delete when Phase 1 begins
-    └── phase0Validations.ts       # Exercises BVH round-trip, IndexedDB, worker, SunCalc
+└── utils/
+    ├── HashUtils.ts               # FNV-1a 32-bit hash — deterministic cache key generation
+    ├── SimulationCacheUtils.ts    # buildCacheKey() and hashCacheKey() for simulation results
+    ├── PointXZUtils.ts            # computeLeftHandNormal, convexity, right-angle check, prev/next helpers
+    ├── RailingUtils.ts            # Shared railing rail render data builder
+    ├── ThreeUtils.ts              # serializeMesh / reconstructMesh / reconstructMeshes —
+    │                              #   Three.js mesh ↔ typed-array conversion for worker transfer
+    └── TimeUtils.ts               # getAllTimezones, getBrowserTimezone, resolveInitialTimezone,
+                                   #   timeSteps generator, totalTimeSteps, formatEta
+
+└── components/
+    ├── Scene.tsx                  # Root 3D scene (walls + panels + helpers); wires annual simulation
+    ├── ShadowedScene.tsx          # Dirty-flag raycasting loop, feeds ShadowMap
+    ├── SolarPanelComponent.tsx    # Single panel render (purely presentational)
+    ├── Sun.tsx                    # Sun sphere + directional light
+    ├── Compass.tsx                # N/S/E/W labels in 3D
+    ├── MainControls.tsx           # Date/time/play UI panel
+    ├── SimulationControls.tsx     # Simulation settings, annual run button, results
+    ├── AnnualSimulationProgress.tsx  # Per-setup progress bars with ETA and pending count
+    ├── AngleWarningBanner.tsx     # Warning banner listing non-90° angle coordinate triples
+    └── DeveloperFooter.tsx        # Ko-fi link + personal site
 ```
  
 ---
@@ -187,10 +210,8 @@ If the configuration contains non-90° angles, `SiteFactory` populates `angleWar
 
 Support positions are computed by `computeSupportPositions` inside `WallFactory`. Two modes:
 
-- **Homogeneous** (no `edgeDistance`): all `count` supports are spaced evenly across the full adjusted wall length using `count + 1` equal intervals. This matches the classic "divide the wall into equal segments" mental model.
-- **Edge-anchored** (`edgeDistance` provided): the two outermost supports are placed at exactly `edgeDistance` from each wall end. Any additional supports are distributed evenly in the remaining span between them. A minimum of 2 supports is enforced — a single support cannot hold a railing.
-
-The mode is selected by the presence of `edgeDistance` in the config. Both modes operate on `currentDist` (the adjusted wall length), never on the extended rail length.
+- **Homogeneous** (no `edgeDistance`): all `count` supports are spaced evenly across the full adjusted wall length using `count + 1` equal intervals.
+- **Edge-anchored** (`edgeDistance` provided): the two outermost supports are placed at exactly `edgeDistance` from each wall end. Any additional supports are distributed evenly in the remaining span between them. A minimum of 2 supports is enforced.
 
 ### Railing rail extensions
 
@@ -202,14 +223,6 @@ extensionLength = wallThickness / 2 − extensionGap / 2
 
 With `extensionGap = 0` (the default), each rail extends by exactly `wallThickness / 2`, so the tips of two meeting rails at a corner meet flush at the post centre. A positive `extensionGap` leaves a visible gap between the rail tips.
 
-The extension is implemented by computing a longer `railLength` and a `railZOffset` to keep the mesh centred within the wall group. `RailingUtils.buildRailRenderData` accepts the optional `zOffset` parameter for this purpose. Supports are always placed along `currentDist`, not along the extended portion.
-
-Extensions use a straight 90° cut at the tip. A 45° mitre cut was evaluated but requires a custom `BufferGeometry` for all three rail shapes (square, cylinder, half-cylinder) and was deemed disproportionate to the visual benefit.
-
-### `extensionGap` inheritance — defaults and overrides
-
-`extensionGap`, `extendAtStart`, and `extendAtEnd` follow the same defaults-then-override pattern as all other railing fields: set once in `railingDefaults` to apply to every wall, then override per wall in `wallsSettings`. This is consistent with how `heightOffset`, `shape`, and `support` work, and requires no special handling in the factory.
-
 ### Wall vertex classification — isConvex and the Three.js Z inversion
 
 Each vertex is classified by the 2D cross product of the incoming and outgoing edge direction vectors, computed in Three.js scene coordinates (where Z is negated relative to config space). This negation flips every CCW walk in config space into a CW walk in Three.js space, which inverts the sign of the cross product and therefore inverts the meaning of `isConvex`:
@@ -220,15 +233,13 @@ Each vertex is classified by the 2D cross product of the incoming and outgoing e
 | `true`                       | Interior recess        |           270° | `wallThickness` at both adjacent wall ends |
 | — (isStraight)               | Collinear              |           180° | None                                       |
 
-The post position is computed as `(normalPrev + normalNext) × thickness/2`, where `normalPrev` and `normalNext` are the unit outward normals of the two adjacent wall segments. For 90° angles this equals `thickness/2` in each of the two perpendicular directions, placing the post centre exactly at the intersection of the two displaced wall centre-lines.
-
 ### Wall longitudinal adjustment at interior recess vertices
 
-Walls are displaced `thickness/2` outward along their perpendicular normal. At interior recess vertices (`isConvex = true` in Three.js coordinates) the displaced wall bodies would overlap the intersection post volume. Each wall is shortened by `wallThickness` at the end touching the recess vertex. The adjustment is stored as `adjustStart` and `adjustEnd` on the `Wall` object. Both are always non-negative (shortening only).
+Walls are displaced `thickness/2` outward along their perpendicular normal. At interior recess vertices (`isConvex = true` in Three.js coordinates) the displaced wall bodies would overlap the intersection post volume. Each wall is shortened by `wallThickness` at the end touching the recess vertex. The adjustment is stored as `adjustStart` and `adjustEnd` on the `Wall` object.
 
 ### `computeLeftHandNormal` — single implementation, shared across factories
 
-The unit outward normal of a directed segment is computed once in `PointXZUtils.computeLeftHandNormal` and imported by all factories that need it. The name encodes the geometric contract: the result is the left-hand perpendicular of the direction of travel, which is the outward direction for a CCW-walked polygon.
+The unit outward normal of a directed segment is computed once in `PointXZUtils.computeLeftHandNormal` and imported by all factories that need it.
 
 ### Vertex classification and angle validation in a single pass
 
@@ -236,7 +247,7 @@ The unit outward normal of a directed segment is computed once in `PointXZUtils.
 
 ### No inline styles in components
 
-All visual styling is defined in `App.css` using class names. React components use `className` references only. The Phase 0 validation button in `SimulationControls` is a temporary exception — the button and its inline style are removed when `_phase0_validation` is deleted.
+All visual styling is defined in `App.css` using class names. React components use `className` references only.
 
 ### i18n key structure
 
@@ -246,19 +257,43 @@ Translation keys are grouped by the component that owns them:
 - `angleWarning.*` — keys used by `AngleWarningBanner`
 - Top-level keys (`title`, `loading`, `coordinates.*`, `footer.*`) are shared or belong to no specific component
 
-The `angleWarning.tripletLabel` key uses i18next interpolation (`{{prev}}`, `{{point}}`, `{{next}}`) to format the three coordinate pairs. The format string can be adjusted per language without changing any component code.
-
 ### `Intl.supportedValuesOf` — TypeScript lib target
 
-`Intl.supportedValuesOf('timeZone')` is part of the ES2022 Intl spec. The project's `tsconfig.app.json` sets `"lib": ["ES2022", "DOM", "DOM.Iterable"]`, making this API available without any workarounds. The `target` remains `ES2020` — `lib` and `target` are independent: `target` controls emitted JavaScript syntax, `lib` tells the TypeScript compiler which runtime APIs to expect.
+`Intl.supportedValuesOf('timeZone')` is part of the ES2022 Intl spec. The project's `tsconfig.app.json` sets `"lib": ["ES2022", "DOM", "DOM.Iterable"]`, making this API available without any workarounds.
 
 ### `SiteFactory` return type
 
-`SiteFactory.create` returns a `SiteFactoryResult` object containing both the `Site` geometry and the `angleWarnings` array. This avoids side effects and keeps all output in one place. The store's `loadConfig` action destructures the result.
+`SiteFactory.create` returns a `SiteFactoryResult` object containing both the `Site` geometry and the `angleWarnings` array. This avoids side effects and keeps all output in one place.
 
 ### `three-mesh-bvh` declaration file
 
-`src/types/three-mesh-bvh.d.ts` extends `THREE.BufferGeometry` with the three methods that `three-mesh-bvh` patches onto the prototype: `computeBoundsTree`, `disposeBoundsTree`, and `boundsTree`. The `boundsTree` property is typed as `MeshBVH` (imported from `three-mesh-bvh`), not as `unknown`. This allows `MeshBVH.serialize(geometry.boundsTree)` to be called in the BVH serialisation code without a cast — the compiler knows the type and can check the call site. Declaration files (`.d.ts`) contain only type information and produce no JavaScript output; they exist solely to tell the TypeScript compiler about runtime APIs that are not part of the library's own type definitions.
+`src/types/three-mesh-bvh.d.ts` extends `THREE.BufferGeometry` with the three methods that `three-mesh-bvh` patches onto the prototype. The `boundsTree` property is typed as `MeshBVH` so that `MeshBVH.serialize(geometry.boundsTree)` compiles without a cast.
+
+### `engine/` — separation of physics from orchestration
+
+Solar physics functions (`calculateSunState`, `calculateIncidenceFactor`, `calculatePanelOutput`, `applyStringMismatch`) live in `engine/SolarEngine.ts` and are imported by both the interactive `ShadowedScene` and the annual simulation worker. There is no duplication: the worker calls the same functions as the main thread.
+
+Annual-specific accumulation logic (`initAccumulators`, `accumulateStep`, `finalizePanel`, `buildSetupResult`) lives in `engine/AnnualSimulationEngine.ts`. These are pure functions with no Three.js or worker dependencies — they can be tested independently and are kept separate from the physics to maintain a clear boundary between "what physics produces at one instant" and "how we aggregate across a year".
+
+### `ThreeUtils` — mesh serialisation and reconstruction
+
+`serializeMesh` (main thread) and `reconstructMesh` / `reconstructMeshes` (worker) are consolidated in `utils/ThreeUtils.ts`. Both directions of the serialisation round-trip live in the same module, making it the single place to update if the BVH serialisation API changes. Both functions are DOM-free and importable in either context.
+
+### `MeshFactory` — independent copies per worker
+
+`MeshFactory.fromScene(scene)` traverses the scene once and returns a `{ build }` object. Each call to `build()` produces a fresh `MeshBatch` (meshes + transferables). This is the only safe pattern when multiple workers each need a zero-copy transfer: typed array buffers are detached after the first `postMessage` with the `transfer` option, so each worker must receive its own independently allocated copy. `MeshFactory` encapsulates this requirement so callers cannot accidentally reuse a transferred buffer.
+
+### `SolarPanelConverter` — world-space pre-computation
+
+`toSimulationPanelData` and `toSimulationPanelDataArray` in `converter/SolarPanelConverter.ts` convert `SolarPanel` domain objects into `SimulationPanelData` — the shape the annual worker consumes. World-space sample point positions and the panel normal are computed once here on the main thread, avoiding repeated matrix multiplications inside the worker at every time step. The converter uses `Vector3` (from `types/geometry.ts`) as the return type of `toWorldNormal`, keeping the result decoupled from any rendering library.
+
+### `TimeUtils` — all time utilities in one place
+
+`utils/TimeUtils.ts` consolidates timezone resolution (`getAllTimezones`, `getBrowserTimezone`, `resolveInitialTimezone`), the `timeSteps` generator and `totalTimeSteps` helper used by the annual simulation, and `formatEta` for the progress UI. Grouping them avoids a proliferation of single-purpose utility modules and reflects that they all operate on the same domain — time.
+
+### Simulation type naming — `SimulationPanelData` and `SimulationSamplePoint`
+
+Types representing data sent to the annual simulation worker are named after their semantic role (`SimulationPanelData`, `SimulationSamplePoint`) rather than their transport mechanism (`WorkerPanelData`, `WorkerSamplePoint`). This makes the types reusable if the simulation strategy changes (e.g. running in the main thread for debugging) without renaming.
 
 ---
  
@@ -296,14 +331,6 @@ Three.js has no built-in concept of North, but the convention used throughout th
 ### Wall segment numbering
  
 Segments are numbered by the index of the point that **starts** them: segment `i` runs from `wallPoints[i]` to `wallPoints[(i+1) % n]`.
- 
-Walk the perimeter **counter-clockwise** when viewed from above (i.e. South-West corner first):
- 
-```
-SW (0) → S (1) → SE (2) → E (3) → NE (4) → N (5) → NW (6) → W (7) → back to SW
-```
- 
-Use segment indices in `wallsSettings` to override height, railing, or apply trim to specific walls.
 
 ### Floor outline
 
@@ -317,126 +344,27 @@ These three operations are the building blocks for all wall geometry in this pro
 
 ### Unit normal to a segment
 
-A **normal** to a line segment is a vector perpendicular to it. A **unit** normal has length exactly 1.
-
-Given a directed segment from A to B:
+Given a directed segment from A to B, the **unit outward normal** for a CCW-walked polygon is always to the **left** of the direction of travel:
 
 ```
-A ──────────────► B
-direction d = (dx, dz) = B - A
+n = (-dz, dx) / |d|    (left-hand perpendicular)
 ```
-
-There are always two perpendicular directions: left and right of the direction of travel. For a polygon walked **counter-clockwise** (CCW), the **outward** normal — pointing away from the interior — is always to the **left**:
-
-```
-         outward normal
-              ↑
-A ──────────────► B
-```
-
-**Formula** (rotate direction vector 90° counter-clockwise):
-```
-d = (dx, dz) / |d|          unit direction
-n = (-dz, dx)                left-hand perpendicular (already unit length if d is unit)
-```
-
-**Example**: a wall going East, `d = (1, 0)`:
-- Unit direction: `(1, 0)`
-- Left-hand normal: `(0, 1)` → pointing South in Three.js (+Z = South)
-- For a wall on the south side of a CCW floor, South is indeed outward ✓
 
 `PointXZUtils.computeLeftHandNormal(pA, pB)` computes this for any segment.
 
 ### Dot product
 
-```
-dot(a, b) = a.x·b.x + a.z·b.z = |a|·|b|·cos(θ)
-```
-
-For **unit vectors**: `dot(a, b) = cos(θ)` where θ is the angle between them.
-
-| dot value | angle θ | meaning             |
-|----------:|--------:|---------------------|
-|        +1 |      0° | same direction      |
-|         0 |     90° | perpendicular       |
-|        −1 |    180° | opposite directions |
-
-**Used for collinearity detection**: if two adjacent wall segments are collinear, their outward normals point in the same direction → `dot(normalPrev, normalNext) ≈ +1`.
+For unit vectors: `dot(a, b) = cos(θ)`. Used for collinearity detection: collinear normals have dot ≈ +1.
 
 ### Cross product (2D)
-
-The 2D cross product is the Z component of the 3D cross product:
 
 ```
 cross(a, b) = a.x·b.z − a.z·b.x
 ```
 
-Its **sign** encodes the rotation direction from `a` to `b`:
-- `cross > 0` → `b` is to the LEFT of `a` (CCW rotation, left turn)
-- `cross < 0` → `b` is to the RIGHT of `a` (CW rotation, right turn)
-- `cross = 0` → parallel vectors
+Sign encodes turn direction: `> 0` = left turn (convex in CCW polygon), `< 0` = right turn (concave).
 
-**Applied to a polygon vertex**: compute the cross product of the incoming and outgoing edge directions:
-
-```
-         pPrev
-           │
-           │  incoming edge direction
-           ↓
-           p ──────────► pNext
-                outgoing edge direction
-
-cross(incoming, outgoing) > 0  →  left turn  →  convex vertex (CCW polygon)
-cross(incoming, outgoing) < 0  →  right turn →  concave vertex (CCW polygon)
-```
-
-### The Three.js Z inversion effect on cross product sign
-
-Config space uses `+Z = North`. Three.js uses `+Z = South`, so the Z axis is negated when converting. This negation **flips every CCW walk in config space into a CW walk** in Three.js coordinates:
-
-```
-Config space (CCW walk):    Three.js space (CW walk after Z flip):
-     ┌───────────►                 ◄───────────┐
-     │           │                 │           │
-     │           │       →         │           │
-     │           │                 │           │
-     └───────────┘                 └───────────┘
-```
-
-A CW walk inverts the sign of every cross product, and therefore inverts `isConvex`:
-
-| `isConvex` in Three.js | Real-world meaning | Interior angle |
-|---|---|---|
-| `false` | Exterior corner | 90° outward |
-| `true` | Interior recess | 270° inward |
-
-This is why `SiteFactory.computeAdjust` applies wall shortening when `isConvex = true`, not when `isConvex = false`.
-
-### Worked example: L-shaped floor
-
-```
-Config space wallPoints (CCW walk, +Z = North):
-
- (0,8)  ───────────────  (3,8)
-       │               │
-       │               │
- (0,5)  ───── (1,5)    | (3,5)
-             │         |
-             │         |
- (0,2)  ───── (1,2)    |
-       |               |
- (0,0) ────────────────  (3,0)
-
-Segment walk: (0,0) → (3,0) → (3,5) → (3,8) → (0,8) → (0,5) → (1,5) → (1,2) → (0,2) → (0,0)
-```
-
-At the interior recess vertex `(0,5)`:
-- Incoming direction: `(0,−1)` (going South in config = going North in Three.js after Z flip)
-- Outgoing direction: `(1,0)` (going East)
-- Config cross product: `0·0 − (−1)·1 = +1` → left turn → convex in CCW
-- Three.js cross product (Z negated): sign flipped → `isConvex = true` → interior recess ✓
-
-The wall shortening is applied at the ends of the two walls meeting at `(0,5)` to prevent the displaced wall bodies from overlapping the intersection post.
+Because Three.js negates Z relative to config space, every CCW walk in config space becomes CW in Three.js coordinates, inverting the cross product sign. `isConvex = true` in Three.js coordinates therefore means an interior recess (270° interior angle) in real-world terms.
 
 ---
  
@@ -446,88 +374,36 @@ The wall shortening is applied at the ends of the two walls meeting at `(0,5)` t
 {
   "site": {
     "location": { "latitude": 40.62, "longitude": -4.01 },
-    "azimuth": 0,           // degrees, South=0, positive=West
+    "azimuth": 0,
     "timezone": "Europe/Madrid",
-    "wallPoints": [[0,0], [3.7,0], ...],  // metres, +X=East, +Z=North
+    "wallPoints": [[0,0], [3.7,0], ...],
     "wallDefaults": { "height": 0.7, "thickness": 0.2 },
     "railingDefaults": {
       "active": true,
       "heightOffset": 0.18,
-      "extendAtStart": false,    // extend rail over start-end intersection post
-      "extendAtEnd": false,      // extend rail over end intersection post
-      "extensionGap": 0,         // metres gap between two meeting extensions (default 0 = flush)
+      "extendAtStart": false,
+      "extendAtEnd": false,
+      "extensionGap": 0,
       "shape": { "kind": "cylinder", "radius": 0.025 },
       "support": {
         "shape": { "kind": "cylinder", "radius": 0.012 },
         "count": 3,
-        "edgeDistance": 0.15    // optional: metres from wall end to nearest support
+        "edgeDistance": 0.15
       }
     },
-    "wallsSettings": [
-      {
-        "wall": 2,
-        "override": {
-          "height": 1.8,
-          "railing": {
-            "active": false
-          }
-        }
-      },
-      {
-        "wall": 5,
-        "override": {
-          "railing": {
-            "extendAtStart": true,
-            "extendAtEnd": true,
-            "extensionGap": 0.01,
-            "support": {
-              "count": 4,
-              "edgeDistance": 0.1
-            }
-          }
-        }
-      }
-    ]
+    "wallsSettings": [...]
   },
   "setups": [...]
 }
 ```
 
-#### Support distribution modes
-
-Two modes are available depending on whether `edgeDistance` is set:
-
-| `edgeDistance` | Behaviour                                                                                                                                |
-|----------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| omitted        | Supports distributed homogeneously: `count` supports at intervals of `wallLength / (count + 1)`                                          |
-| provided       | Two outermost supports at `edgeDistance` from each end; remaining supports distributed evenly between them. Minimum 2 supports enforced. |
-
-#### Rail extensions
-
-When `extendAtStart` or `extendAtEnd` is `true`, the rail overhangs the intersection post at that corner. Extension length per end:
-
-```
-extensionLength = wallThickness / 2 − extensionGap / 2
-```
-
-With `extensionGap = 0` (default), two meeting rails at the same corner post meet flush at the post centre. Setting `extensionGap` to a small positive value (e.g. `0.01`) leaves a visible gap between them.
-
-Extensions end in a 90° cut. Supports are placed along the non-extended wall length only.
- 
 ### Railing shapes
  
-| kind            | Parameters                            | Three.js geometry                                        |
-|-----------------|---------------------------------------|----------------------------------------------------------|
-| `square`        | `width`, `height`                     | `BoxGeometry(width, height, wallLength)`                 |
-| `cylinder`      | `radius`                              | `CylinderGeometry(r, r, wallLength, 8)`                  |
-| `half-cylinder` | `radius`, `orientation: 'up'\|'down'` | `CylinderGeometry(r, r, len, 8, 1, true, thetaStart, π)` |
- 
-### Railing support shapes
- 
-| kind       | Parameters                                           |
-|------------|------------------------------------------------------|
-| `square`   | `width`, `depth` (height derived from wall geometry) |
-| `cylinder` | `radius`                                             |
+| kind            | Parameters                            |
+|-----------------|---------------------------------------|
+| `square`        | `width`, `height`                     |
+| `cylinder`      | `radius`                              |
+| `half-cylinder` | `radius`, `orientation: 'up'\|'down'` |
  
 ### `zonesDisposition`
  
@@ -542,81 +418,42 @@ Extensions end in a 90° cut. Supports are placed along the non-extended wall le
 
 ### Bypass diodes and zone shading
 
-A solar panel is not a single electrical component. It is an array of cells connected in series, divided into zones each protected by a bypass diode.
-
-- **No shade**: current flows through all cells at full power.
-- **Shade on one zone**: the diode for that zone activates, bypassing it electrically so the rest of the panel continues producing. If 1 of 2 zones is shaded the panel produces 50% of its potential output; with 1 of 3 zones shaded it produces 66.6%.
-- A zone is considered shaded as soon as the number of shaded sample points within it reaches the configured `threshold`. The threshold allows partial shadow to be ignored (e.g. dappled light from a tree) without treating the zone as fully bypassed.
+A solar panel is divided into zones each protected by a bypass diode. When a zone is shaded, its diode activates, bypassing it so the rest of the panel continues producing. A zone is considered shaded when the number of shaded sample points within it reaches the configured `threshold`.
  
 ### 1. Sun position
  
-`suncalc.getPosition(date, lat, lon)` returns altitude (elevation above horizon in radians) and azimuth (clockwise from South in radians). These are converted to a Three.js direction vector:
+`suncalc.getPosition(date, lat, lon)` returns altitude and azimuth. Converted to a Three.js direction vector:
  
 ```ts
-x =  cos(altitude) * sin(-azimuth)   // East (+) / West (−)
-y =  sin(altitude)                    // Up
-z =  cos(altitude) * cos(azimuth)    // South (+) / North (−) in Three.js
+x =  cos(altitude) * sin(-azimuth)
+y =  sin(altitude)
+z =  cos(altitude) * cos(azimuth)
 ```
  
-Calculations always receive `date.toDate()` (UTC). Timezone is display-only.
- 
 ### 2. Incidence factor
- 
-Panel output scales with the cosine of the angle between the sun direction and the panel normal (Lambert's cosine law):
  
 ```
 incidenceFactor = max(0, dot(sunDirection, panelNormal))
 basePower (kW)  = peakPower (Wp) / 1000 × incidenceFactor
 ```
  
-If the sun is behind the panel the dot product is negative, clamped to 0.
- 
-### 3. Zone shading
- 
-Each panel is divided into `zones` diode zones. A NxN grid of sample points is cast toward the sun via raycasting. A zone is considered **shaded** if the number of shaded sample points reaches the configured `threshold`. Raycasting tests against all shadow-casting geometry in the scene, including other solar panels.
- 
-### 4. Panel output with bypass diodes
+### 3. Panel output with bypass diodes
 
-| Shaded zones | Without optimizer                                   | With optimizer        |
-|--------------|-----------------------------------------------------|-----------------------|
-| 0            | `basePower`                                         | `basePower`           |
-| k out of n   | `basePower × (n−k)/n × 0.9` (−10% mismatch penalty) | `basePower × (n−k)/n` |
-| all          | 0                                                   | 0                     |
-
-The 10% mismatch penalty for non-optimized panels models the voltage mismatch loss that occurs when some bypass diodes are active and the remaining cells must operate at a sub-optimal voltage to match the inverter's operating point.
+| Shaded zones | Without optimizer                                    | With optimizer        |
+|--------------|------------------------------------------------------|-----------------------|
+| 0            | `basePower`                                          | `basePower`           |
+| k out of n   | `basePower × (n−k)/n × 0.9` (10% mismatch penalty)  | `basePower × (n−k)/n` |
+| all          | 0                                                    | 0                     |
  
-### 5. String mismatch
+### 4. String mismatch
 
-Panels in the same string without optimizers are connected in series. Current flows like water in a pipe — the flow rate is set by the narrowest point. The string efficiency is limited by the least-efficient panel:
-
+Without optimizers, string efficiency is limited by the least-efficient panel:
 ```
 stringEfficiency = min(power/peakKw) across all panels in the string
-each panel output = peakKw × stringEfficiency
 ```
+Strings where any panel has an optimizer treat every panel independently.
 
-Strings where every panel has an optimizer are treated as independent — each panel produces at its own efficiency. The optimizer performs DC/DC conversion per panel, isolating each one from the string's current constraint.
-
-**Example without optimizer (3 panels, one panel loses 1 of 2 zones):**
-```
-Panel A: 100% efficient
-Panel B:  50% efficient (1 zone shaded, no optimizer → 50% × 0.9 mismatch = 45%)
-Panel C: 100% efficient
-
-String efficiency = min(100%, 45%, 100%) = 45%
-→ All three panels produce at 45% of basePower
-```
-
-**Example with optimizer (same scenario):**
-```
-Panel A: 100% → produces basePower
-Panel B:  50% → produces 0.5 × basePower  (no mismatch penalty)
-Panel C: 100% → produces basePower
-Total = 2.5 × basePower  (vs 1.35 × basePower without optimizer)
-```
-
-### 6. String grouping with mixed optimizers
-
-A string where at least one panel has an optimizer is treated as a fully independent string — each panel produces at its individual efficiency regardless of the others. This models the typical real-world deployment where optimizers are installed selectively on the most shadow-prone panels, and the inverter can accommodate the resulting voltage range.
+`applyStringMismatch` is exported from `engine/SolarEngine.ts` and shared between the interactive production calculation and the annual simulation worker.
  
 ---
  
@@ -624,98 +461,109 @@ A string where at least one panel has an optimizer is treated as a fully indepen
  
 ### Why BVH?
  
-Without acceleration, `raycaster.intersectObjects` tests every ray against every triangle in the scene — O(rays × triangles). For a scene with hundreds of wall and panel faces, and thousands of sample points, this is too slow for interactive use.
- 
-`three-mesh-bvh` pre-organises each geometry into a **Bounding Volume Hierarchy**: a tree of axis-aligned bounding boxes where each leaf contains a small subset of triangles. A ray only needs to test O(log n) nodes instead of O(n) triangles.
-
-```
-Scene triangles without BVH:          Scene triangles with BVH:
-                                              [root AABB]
-  △△△△△△△△△△△△△△△△△△△△                     /           \
-  (test all O(n) triangles)          [left AABB]       [right AABB]
-                                     /      \           /       \
-                                  [AABBs] [AABBs]  [AABBs]   [AABBs]
-                                  △△△      △△△       △△        △△△△
-                                  (test only O(log n) leaf triangles)
-```
+`three-mesh-bvh` pre-organises each geometry into a Bounding Volume Hierarchy. A ray tests O(log n) nodes instead of O(n) triangles, making it practical to cast thousands of rays per frame.
  
 ### How it is set up
  
-1. **Patch Three.js once** (`useBVH.ts`):
-   ```ts
-   THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
-   THREE.Mesh.prototype.raycast = acceleratedRaycast;
-   ```
-   After this, every `Mesh.raycast` call automatically uses BVH if a bounds tree exists.
-2. **Build the BVH** (`useBVH` hook): walks the scene, calls `geometry.computeBoundsTree()` on every shadow-casting mesh. Rebuilt only when `rebuildKey` changes (site or setup change).
-3. **Cast rays** (`useShadowSampler` hook): for each sample point, transforms its local position to world space using the panel's pre-computed world matrix, sets the ray origin, and calls `intersectObjects`. `firstHitOnly = true` stops BVH traversal after the first hit.
-4. **Avoid GC pressure**: all `THREE.Vector3`, `THREE.Matrix4`, `THREE.Quaternion` scratch objects are allocated **once at module scope** and reused for every ray.
+1. **Patch Three.js once** (`useBVH.ts`): `THREE.BufferGeometry.prototype.computeBoundsTree` and `THREE.Mesh.prototype.raycast`.
+2. **Build the BVH** (`useBVH` hook): walks the scene, calls `geometry.computeBoundsTree()` on every shadow-casting mesh. Rebuilt only when `rebuildKey` changes.
+3. **Cast rays** (`useShadowSampler` hook): for each sample point, transforms local → world space, sets the ray origin, calls `intersectObjects`. `firstHitOnly = true` stops BVH traversal after the first hit.
+4. **Avoid GC pressure**: all `THREE.Vector3`, `THREE.Matrix4`, `THREE.Quaternion` scratch objects are allocated once at module scope and reused.
 
 ### Dirty flag
  
-`ShadowedScene` only runs the full raycasting pass when a `needsUpdate` ref is `true`. The flag is set by a `useEffect` that watches `[sun, activeSetup, density, threshold]`. Between frames where nothing changes, `useFrame` is a no-op.
- 
-### What is included in shadow casting
- 
-Every mesh with `castShadow={true}` is included in the raycasting:
-- Wall bodies
-- Railing rails (all shapes)
-- Railing supports (balusters)
-- Solar panel bodies
+`ShadowedScene` only runs the raycasting pass when a `needsUpdate` ref is `true`. The flag is set by a `useEffect` watching `[sun, activeSetup, density, threshold]`.
 
-Inter-panel shading (one panel casting a shadow on another) is naturally modelled without any special handling.
+### `three-mesh-bvh` override
  
-### BVH and three-mesh-bvh override
- 
-`package.json` contains:
-```json
-  "overrides": { "three-mesh-bvh": "^0.9.9" }
-```
- 
-**Must be kept.** `@react-three/drei` pulls in `three-mesh-bvh` as a transitive dependency without pinning a version. The BVH integration patches `THREE.BufferGeometry.prototype` and `THREE.Mesh.prototype` — if two versions coexist, only one is patched and the other falls back to brute-force intersection silently.
+`package.json` contains `"overrides": { "three-mesh-bvh": "^0.9.9" }`. This must be kept: `@react-three/drei` pulls in `three-mesh-bvh` as a transitive dependency. Two coexisting versions would mean only one prototype is patched, silently falling back to brute-force intersection.
 
 ---
 
-## Annual simulation — infrastructure
+## Annual simulation
 
-The annual simulation runs in a Web Worker to keep the main thread and 3D viewport fully responsive during a potentially multi-minute computation. The infrastructure is in place; the simulation loop itself is implemented in Phase 1.
+### Overview
+
+The annual simulation steps through every N-minute interval of a full year for all configured setups simultaneously. At each time step it casts shadow rays from every sample point, applies the same bypass-diode and string-mismatch logic as the interactive view, and accumulates energy (kWh) and shade fractions per panel broken down by month, day-of-month, and hour-of-day.
+
+### Year selector
+
+The UI offers the current year plus up to 5 past years. The number of past years is controlled by the `PAST_YEARS_AVAILABLE` constant in `useAppStore.ts` — changing it to expose more or fewer historical years requires no other code changes. Past years are meaningful when irradiance sources with historical data (PVGIS, Open-Meteo) are implemented.
+
+### Irradiance source
+
+The selector currently offers three options: geometric (no weather data), PVGIS, and Open-Meteo. At present only the geometric model is implemented — the other options are selectable in the UI and stored in the cache key so that results computed under different irradiance models are kept separate in IndexedDB. PVGIS and Open-Meteo integration are planned for a future phase.
+
+### Worker architecture
+
+The annual simulation runs in Web Workers to keep the main thread and 3D viewport fully responsive during a multi-minute computation.
+
+**Why workers can run the simulation:**
+Three.js math classes (`Vector3`, `Matrix4`, `Raycaster`, `Euler`) and SunCalc have no DOM or WebGL dependencies and work correctly inside a worker. Only `THREE.Scene` and rendering-related classes require the main thread. `engine/SolarEngine.ts` is importable in both contexts for this reason.
+
+**BVH serialisation and per-worker geometry copies:**
+
+`MeshFactory.fromScene(scene)` collects all shadow-casting meshes from the Three.js scene. Each call to `build()` produces a fresh `MeshBatch` — independent typed-array copies (positions, indices, serialised BVH, world matrix) for one worker. This ensures each worker's buffers can be zero-copy transferred via `postMessage` with the `transfer` option without detaching the data for other workers. Peak memory usage is approximately 2× the geometry size regardless of the number of workers.
+
+The serialisation and reconstruction logic is centralised in `utils/ThreeUtils.ts` (`serializeMesh`, `reconstructMesh`, `reconstructMeshes`), making it the single place to update if the BVH API changes.
+
+The worker reconstructs the BVH with `MeshBVH.deserialize()` and runs raycasting entirely off the main thread.
+
+**Sample points and normals pre-computed on the main thread:**
+
+`SolarPanelConverter.toSimulationPanelDataArray` transforms each panel's local-space sample points to world space and computes the world-space normal before transfer. This avoids repeating the matrix multiplication inside the worker at every time step. The converter produces `SimulationPanelData` objects, whose type names reflect their semantic role rather than their transport mechanism.
+
+**Worker pool:**
+
+```
+workerCount = max(1, hardwareConcurrency − 1)
+```
+
+One core is kept free for the main thread. Each worker handles one setup. If there are more setups than available worker slots, the remaining setups wait in a queue and are dispatched as workers complete. The UI shows the number of queued setups and a per-setup progress bar with a smoothed ETA for each active worker.
+
+**Progress reporting:**
+
+Workers emit a `progress` message every 100 time steps. The main thread applies an exponential moving average (EMA, α = 0.2) to smooth the remaining-time estimate:
+
+```
+smoothedRemaining = 0.2 × rawRemaining + 0.8 × previousSmoothed
+```
+
+The ETA is shown only after 5% of steps are complete, to avoid wildly inaccurate early estimates. `formatEta` in `utils/TimeUtils.ts` converts seconds to a human-readable string shared by the worker orchestration and the progress UI.
+
+### Accumulation and finalisation
+
+`engine/AnnualSimulationEngine.ts` provides the pure functions that manage per-panel data across the year:
+
+- `initAccumulators` — allocates zeroed 3D arrays (month × day × hour) per panel.
+- `accumulateStep` — records one time step's energy and shade counts into the accumulator.
+- `finalizePanel` — converts raw counts to shade fractions and produces a `PanelAnnualData`.
+- `buildSetupResult` — assembles the final `SetupAnnualResult` with pre-rolled monthly totals.
+
+These functions have no Three.js or worker dependencies and can be tested in isolation. The worker is responsible only for driving the time-step loop and calling `computeShadedZones` (which requires `THREE.Raycaster` and cannot be shared with the main-thread interactive path).
 
 ### Cache key and hashing
 
-Every simulation result is keyed by a `SimulationCacheKey` object that captures every input that affects the output: setup geometry hash, density, threshold, interval, location, year, and irradiance source. Two runs with the same key are guaranteed to produce identical output.
-
-The geometry hash is computed with FNV-1a (`src/utils/hash.ts`) over a JSON serialisation of each panel's world position, rotation, zones, peak power, string, and optimizer flag. FNV-1a was chosen for its public-domain status, zero dependencies, and compact 8-character hex output.
-
-`buildCacheKey` and `hashCacheKey` in `src/utils/simulationCacheKey.ts` are the only correct way to construct and hash cache keys.
+Every result is keyed by a `SimulationCacheKey` capturing all inputs that affect output: setup geometry hash, density, threshold, interval, location, year, and irradiance source. The geometry hash is an FNV-1a 32-bit hash over panel world positions, rotations, zones, peak power, string, and optimizer flag. `SimulationCacheUtils.buildCacheKey` and `hashCacheKey` are the only correct entry points for constructing and hashing keys.
 
 ### IndexedDB persistence
 
-`src/db/simulationCache.ts` provides a Promise-based wrapper over the native IndexedDB API. The database has a single object store keyed by `cacheKey`. All operations (`saveResult`, `getResult`, `listResults`, `deleteResult`, `clearAllResults`) open the database on demand and close it automatically — there is no persistent connection to manage.
+`SimulationCache` provides a Promise-based wrapper over IndexedDB. Results are stored under their hash key and survive page reloads. On the next run with the same parameters, the cached result is loaded immediately and the worker is not spawned. Storage failures (quota exceeded, private browsing) surface as rejected Promises; the caller logs a warning and continues without persistence.
 
-Storage failures (quota exceeded, private-browsing restrictions) surface as rejected Promises. Callers that only need best-effort caching can catch and discard the error.
+### Output data model
 
-### Web Worker
+```
+PanelAnnualData.energyKwh         [month][dayOfMonth][hourOfDay]  kWh
+PanelAnnualData.shadeFraction     [month][dayOfMonth][hourOfDay]  0–1
+PanelAnnualData.zoneShadeFraction [zone][month][dayOfMonth][hourOfDay]  0–1
+```
 
-`src/workers/annualSimulation.worker.ts` is imported with Vite's `?worker` suffix, which bundles the worker as a separate chunk. Three.js and SunCalc are imported directly inside the worker — neither has DOM or WebGL dependencies, so both work correctly in a worker context.
+`SetupAnnualResult` also carries pre-rolled `monthlyTotalKwh` (array of 12) and `annualTotalKwh` for fast chart rendering without re-summing the full array.
 
-The worker currently implements a ping/pong protocol for Phase 0 validation. The response includes diagnostics: Three.js version, SunCalc availability, `navigator.hardwareConcurrency`, and the recommended worker count formula (`max(1, min(hardwareConcurrency − 1, setupCount))`).
+### Annual simulation and the Canvas tree
 
-### BVH serialisation (Phase 1 prerequisite)
+`useAnnualSimulation` calls `useThree()` internally to access the Three.js scene for mesh serialisation. `useThree` is only available inside a `<Canvas>` subtree. `Scene.tsx` is always rendered inside `<Canvas>` in `App.tsx`, making it the correct host for this hook. The simulation is triggered by watching `isRunning` in the store: when it transitions from false to true, `Scene` calls `run()` with all configured setups.
 
-The BVH for each shadow-casting mesh will be serialised on the main thread with `MeshBVH.serialize()` and transferred to the worker via `postMessage` with the `transfer` option (zero-copy typed array transfer). The worker will reconstruct the BVH with `MeshBVH.deserialize()` and run the raycast loop entirely off the main thread. The `boundsTree` property on `THREE.BufferGeometry` is typed as `MeshBVH` (not `unknown`) in `src/types/three-mesh-bvh.d.ts`, enabling this call without a cast.
-
-### Phase 0 validation
-
-`src/_phase0_validation/phase0Validations.ts` exercises all five technical assumptions before Phase 1 is built:
-
-1. BVH serialise → deserialise → raycast round-trip (main thread, checks hit distance matches).
-2. Three.js imports correctly inside a Vite `?worker` bundle.
-3. SunCalc is DOM-free and works in a worker.
-4. IndexedDB write/read round-trip with latency measurement.
-5. `navigator.hardwareConcurrency` heuristic produces sensible values.
-
-Run by clicking "Phase 0 — Run validations (console)" in the Simulation Controls panel and inspecting the browser console. **Delete `src/_phase0_validation/` when Phase 1 begins.**
- 
 ---
  
 ## Timezone and DST
@@ -728,26 +576,19 @@ Run by clicking "Phase 0 — Run validations (console)" in the Simulation Contro
 
 `makeDateInTimezone(year, month, day, hour, minute, timezone)` uses `dayjs.tz(isoString, timezone)`, which interprets the components as local time in the specified timezone. This function is the **only** correct way to construct dates from user inputs in this application.
 
-When the user changes timezones, `setTimezone` calls `date.tz(newTimezone)` on the current `Dayjs` object. This preserves the UTC instant (solar calculations unchanged) and updates the displayed local time.
-
-### geo-tz — discarded for browser
-
-`geo-tz` is the most accurate library for inferring timezones from GPS coordinates, but it reads geographic data from disk at runtime and is not compatible with browser bundlers. Its data (~10 MB of GeoJSON) cannot be included in a static GitHub Pages bundle.
-
-**Implemented solution**: `Intl.supportedValuesOf('timeZone')` (native ES2022, no dependencies) for the full IANA timezone list. The initial preset is the browser's detected timezone. The user confirms or changes it via the UI selector.
-
 ### UTC in calculations
 
-`date.toDate()` (native JS `Date`) always represents a UTC instant. SunCalc receives this value. Timezone never affects solar position or production calculations.
+`date.toDate()` (native JS `Date`) always represents a UTC instant. SunCalc receives this value. Timezone never affects solar position or production calculations. The annual simulation worker uses UTC timestamps directly via `Date.UTC()`.
 
 ---
  
 ## Known limitations
  
 - **90° wall angles only**: non-right angles produce incorrect post placement and wall overlaps. A warning lists the exact coordinate triples from config.json when violations are detected.
-- **Single year**: time controls are constrained to the current year.
-- **No diffuse irradiance**: only direct (beam) irradiance is modelled.
+- **Single year for interactive view**: the date controls are constrained to the current year. The annual simulation supports past years via the year selector.
+- **No diffuse irradiance**: only direct (beam) irradiance is modelled geometrically. PVGIS and Open-Meteo integration (which include diffuse and reflected components) are planned.
 - **Rail extensions end in a 90° cut**: a 45° mitre would be more aesthetic but requires custom `BufferGeometry` for all three rail shapes and was not implemented.
+- **`window.confirm` for stop confirmation**: the stop button uses the browser's native confirm dialog. A custom modal is straightforward to add in a future iteration.
 
 ---
  
@@ -755,82 +596,76 @@ When the user changes timezones, `setTimezone` calls `date.tz(newTimezone)` on t
  
 ### `useEffect` dependency arrays must reflect semantic intent
  
-A dependency should be included if its change logically invalidates the effect's output — not merely because it is read inside the effect. `showPoints` controls rendering of sample point spheres but does not affect shadow computation; it is absent from both `ShadowedScene`'s props and from the shadow dirty-flag effect. Always document intentional omissions with a comment.
+A dependency should be included if its change logically invalidates the effect's output. `showPoints` controls rendering of sample point spheres but does not affect shadow computation — it is absent from both `ShadowedScene`'s props and the shadow dirty-flag effect. The annual simulation effect in `Scene` lists only `isRunning` as a dependency: the simulation is a one-shot operation triggered by the false→true transition, and re-running it mid-flight on density or threshold changes is not desired since those controls are locked during a run.
 
 ### Memoising derived arrays that feed hooks
 
-`allPanels` inside `ShadowedScene` is the result of `flatMap` over `activeSetup.panelArrays`. Without `useMemo`, this array is a new object reference on every render, which invalidates the `panels` identity inside `useShadowSampler` and causes `computeShadows` to be recreated every frame. Wrapping it in `useMemo([activeSetup])` means the identity is stable between renders unless the setup actually changes.
+`allPanels` inside `ShadowedScene` is wrapped in `useMemo([activeSetup])`. Without memoisation, a new array reference is created on every render, invalidating `computeShadows` every frame.
  
 ### Separating factory methods by what changes
  
-`PanelSetupFactory.rebuildSamplePoints` vs `create`: sample point density is the only input that changes interactively. Panel geometry is stable between density changes. Separate entry points make the intent explicit at the call site and avoid redundant computation.
+`PanelSetupFactory.rebuildSamplePoints` vs `create`: sample point density is the only input that changes interactively. Separate entry points make the intent explicit at the call site and avoid redundant computation.
  
 ### Caching scene traversal in hooks
  
-`scene.traverse` is O(scene nodes). Cache the result in a `useRef` and invalidate with the same key used to rebuild the BVH — they share the same invalidation signal and must always be in sync.
+`scene.traverse` is O(scene nodes). Cache the result in a `useRef` and invalidate with the same key used to rebuild the BVH — they share the same invalidation signal.
+
+### Per-worker geometry copies, not shared transfer
+
+When multiple workers are spawned, each must receive its own copy of the serialised geometry data. Typed array buffers are detached after the first `postMessage` with the `transfer` option — subsequent workers would receive empty buffers. `MeshFactory.fromScene(scene).build()` produces a fresh `MeshBatch` on each call, one per worker. Peak memory cost is ~2× geometry size, which is acceptable given that geometry is small compared to the simulation workload.
+
+### Sample points pre-computed before worker transfer
+
+World-space sample point positions depend only on each panel's world matrix, which is already available on the main thread. `SolarPanelConverter.toSimulationPanelDataArray` pre-computes them once before transfer, avoiding the matrix multiplication inside the worker at every one of the ~8,760 time steps, at the cost of a one-time allocation that is immediately transferred and freed.
+
+### EMA for ETA smoothing
+
+Raw remaining-time estimates are noisy because steps at solar noon (many shadow hits, more raycasts to process) take longer than steps at dawn or dusk (sun below horizon, no rays cast). An EMA with α = 0.2 smooths these bursts without introducing too much lag.
  
 ### The three-mesh-bvh override
  
-npm `overrides` are appropriate when a package patches a shared global (a prototype) and two instances would mean only one gets patched — silently. This is the semantically correct declaration that this package must have exactly one instance in the dependency tree.
+npm `overrides` are appropriate when a package patches a shared global (a prototype) and two instances would mean only one gets patched — silently.
  
 ### Discriminated unions over string enums for geometry variants
  
-A `kind: 'square' | 'cylinder' | 'half-cylinder'` discriminated union carries its own shape-specific parameters with no casts needed. A switch on `kind` is exhaustively checked by TypeScript — adding a new shape without handling it in the renderer is a compile error, not a runtime surprise.
- 
-### Wall vertex classification via cross product
- 
-The 2D cross product of the incoming and outgoing edge directions at a vertex cleanly separates the three geometrically distinct cases in a single operation. Because Three.js negates Z relative to config space, the sign convention is inverted: `isConvex = true` in Three.js coordinates corresponds to an interior recess in real-world terms.
+A `kind: 'square' | 'cylinder' | 'half-cylinder'` discriminated union carries its own shape-specific parameters. A switch on `kind` is exhaustively checked by TypeScript — adding a new shape without handling it in the renderer is a compile error.
 
 ### Restricting to 90° simplifies geometry significantly
 
-Supporting arbitrary wall angles requires bisector offsets with trigonometric formulas that diverge at near-parallel angles. Restricting to 90° collapses this to: post offset = `(normalPrev + normalNext) × thickness/2` and wall shortening at interior recess corners = exactly `wallThickness`. Angle validation at load time with a visible UI warning is the correct trade-off.
+Supporting arbitrary wall angles requires bisector offsets with trigonometric formulas that diverge at near-parallel angles. Restricting to 90° collapses this to simple arithmetic. Angle validation at load time with a visible UI warning is the correct trade-off.
 
-### Wall adjustment naming: `adjust` not `trim`
+### FNV-1a for cache key hashing
 
-`trim` implies only shortening. `adjustStart`/`adjustEnd` better reflects that the field is a geometric correction (which happens to always be a positive shortening for 90° configurations, but the name should not encode that assumption).
+Cryptographic hashes require the Web Crypto API and return a Promise, adding async overhead. FNV-1a is synchronous, ~10 lines, public domain, and produces negligible collision probability for the small config objects hashed here.
 
-### Collinear vertices excluded from `wallIntersections`
+### `lib` vs `target` in tsconfig
 
-Collinear wall points (180°) are valid configuration — they allow adjacent segments to differ in height or railing. However, they add no geometric information to the floor outline and require no intersection post. Excluding them keeps `wallIntersections` semantically clean: every entry is a rendered post.
+`target` controls emitted JavaScript syntax. `lib` tells the TypeScript compiler which runtime APIs to expect. They are independent.
+
+### Typing `boundsTree` as `MeshBVH`, not `unknown`
+
+The `.d.ts` declaration for `boundsTree` must use the concrete `MeshBVH` type so that `MeshBVH.serialize(geometry.boundsTree)` compiles without a cast at the serialisation call site in `ThreeUtils.ts`.
+
+### Shared railing render data logic in `RailingUtils`
+
+Adding a new railing shape requires editing only `RailingUtils.buildRailRenderData`. Both `WallFactory` and `WallIntersectionFactory` get the change automatically.
 
 ### `SiteFactory` returns a result object, not just `Site`
 
-Returning `{ site, angleWarnings }` keeps the factory free of side effects. The caller (`loadConfig`) decides what to do with each part. This pattern generalises to any future metadata the factory needs to return.
+Returning `{ site, angleWarnings }` keeps the factory free of side effects. The caller decides what to do with each part.
 
 ### `AngleWarning` carries coordinates, not indices
 
 Showing raw 0-based indices forces the user to count positions in their config file. Storing the actual `[x, z]` pairs makes the warning immediately actionable.
 
-### Shared railing render data logic in `RailingUtils`
+### Solar engine shared between interactive view and worker
 
-Adding a new railing shape requires editing only `RailingUtils.buildRailRenderData`. Both `WallFactory` and `WallIntersectionFactory` get the change automatically. The `zOffset` parameter is optional (defaults to 0) so `WallIntersectionFactory` needs no changes when wall extensions are added.
+`engine/SolarEngine.ts` is imported by both `ShadowedScene` (main thread, interactive) and `AnnualSimulation.worker.ts`. This is safe because `SolarEngine` only uses Three.js math classes (`Vector3`, `Euler`, `Matrix4`) which are DOM-free. The functions that require `THREE.Scene` or `THREE.Raycaster` remain in their respective contexts (`useShadowSampler` for interactive, `computeShadedZones` in the worker) and are not shared.
 
-### Rail extensions versus mitre cuts
+### Naming types by role, not by transport
 
-A 45° mitre cut at rail extension tips would look more aesthetic where two rails meet at a corner post. However, computing the correct mitre geometry requires a custom `BufferGeometry` for each of the three rail shapes (box, cylinder, half-cylinder), each with different vertex layouts. The engineering cost is disproportionate to the visual benefit for an application focused on solar production analysis. A 90° cut is implemented and the limitation is documented.
+`SimulationPanelData` and `SimulationSamplePoint` describe what the data represents (simulation inputs for a panel / a sample point), not how it is transported (via a worker). This decouples the type contract from the implementation strategy and allows the same types to be used if the simulation is ever run in the main thread for debugging.
 
-A 45° mitre cut at rail extension tips would look more aesthetic where two rails meet at a corner post. However, computing the correct mitre geometry requires a custom `BufferGeometry` for each of the three rail shapes (box, cylinder, half-cylinder), each with different vertex layouts. The engineering cost is disproportionate to the visual benefit for an application focused on solar production analysis. A 90° cut is implemented and the limitation is documented.
+### `AnnualSimulationEngine` contains no I/O or orchestration
 
-### Support `edgeDistance` versus homogeneous distribution
-
-The original support distribution was purely homogeneous (equal intervals along the wall). Edge-anchored distribution with `edgeDistance` is more realistic for physical installations where supports must clear the corner posts. The two modes coexist: omitting `edgeDistance` preserves the original behaviour exactly.
-
-### FNV-1a for cache key hashing
-
-Cryptographic hashes (SHA-256) require the Web Crypto API and return a Promise, adding async overhead at a point in the code where synchronous execution is simpler. FNV-1a is synchronous, fits in ~10 lines, is public domain, and produces collisions only with astronomically low probability for the small config objects hashed here.
-
-### `lib` vs `target` in tsconfig
-
-`target` controls emitted JavaScript syntax. `lib` tells the TypeScript compiler which runtime APIs to expect. They are independent. Raising `lib` to ES2022 to unlock `Intl.supportedValuesOf` does not change the compiled output — it only adds type definitions.
-
-### `computeLeftHandNormal` — one implementation, used everywhere
-
-The outward normal of a wall segment is computed in exactly one place. When geometry behaviour needs to change, there is exactly one place to change it.
-
-### i18n keys grouped by owning component
-
-Grouping keys under the component that owns them avoids naming collisions and makes it immediately clear where each string is used as the translation file grows.
-
-### Typing `boundsTree` as `MeshBVH`, not `unknown`
-
-The `.d.ts` declaration for `boundsTree` must use the concrete `MeshBVH` type so that `MeshBVH.serialize(geometry.boundsTree)` compiles without a cast. `unknown` requires a type assertion at every call site, which defeats the purpose of having the declaration file in the first place. Importing `MeshBVH` from `three-mesh-bvh` inside a `.d.ts` file is valid — declaration files can import types from other modules.
+Every function in `engine/AnnualSimulationEngine.ts` is pure: given inputs, return outputs, no side effects. The worker drives the loop and emits progress messages; the engine only knows how to accumulate one step and how to finalise one panel. This separation makes the accumulation logic independently testable.

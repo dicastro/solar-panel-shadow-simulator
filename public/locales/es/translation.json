@@ -17,6 +17,9 @@
   "simulationControls": {
     "title": "Simulación anual",
     "interval": "Intervalo",
+    "year": "Año",
+    "irradianceSource": "Irradiancia",
+    "irradianceGeometric": "Geométrica (sin meteorología)",
     "pointsPerZone": "Puntos NxN por zona",
     "showPoints": "Visualizar puntos",
     "threshold": "Umbral sombra zona",
@@ -26,8 +29,11 @@
     "totalRays": "Total rayos",
     "instantPower": "Producción estimada instante",
     "theoreticalPeak": "Pico teórico",
+    "annualResults": "Resultados anuales",
     "run": "EJECUTAR CÁLCULO",
-    "stop": "PARAR"
+    "stop": "PARAR",
+    "stopConfirm": "¿Parar la simulación? Se perderá el progreso de los setups en curso.",
+    "pending": "{{count}} setup(s) esperando en cola"
   },
   "angleWarning": {
     "title": "Aviso de configuración",

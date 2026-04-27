@@ -260,3 +260,104 @@
     border-color: rgba(255, 255, 255, 0.5);
     background: rgba(255, 255, 255, 0.1);
 }
+
+/* ── Annual simulation progress ────────────────────────────────────────────── */
+
+.simulation-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid #444;
+}
+
+.simulation-progress__item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.simulation-progress__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 0.75rem;
+}
+
+.simulation-progress__label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #ccc;
+}
+
+.simulation-progress__pct {
+    flex-shrink: 0;
+    font-weight: bold;
+    color: #4caf50;
+}
+
+.simulation-progress__eta {
+    font-weight: normal;
+    color: #aaa;
+    font-size: 0.7rem;
+}
+
+.simulation-progress__bar-track {
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.simulation-progress__bar-fill {
+    height: 100%;
+    background: #4caf50;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.simulation-progress__pending {
+    font-size: 0.72rem;
+    color: #888;
+    margin: 0;
+    font-style: italic;
+}
+
+/* ── Annual results ─────────────────────────────────────────────────────────── */
+
+.annual-results {
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid #444;
+}
+
+.annual-results__title {
+    font-size: 0.75rem;
+    color: #aaa;
+    margin: 0 0 6px 0;
+}
+
+.annual-results__row {
+    margin: 2px 0;
+    font-size: 0.85rem;
+}
+
+.annual-results__value {
+    color: #4caf50;
+    font-weight: bold;
+}
+
+.annual-results__label {
+    font-size: 0.75rem;
+    color: #aaa;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 55%;
+    display: inline-block;
+    vertical-align: middle;
+}
