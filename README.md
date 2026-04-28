@@ -16,9 +16,10 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 8. [Solar production model](#solar-production-model)
 9. [Shadow detection — Raycasting + BVH](#shadow-detection--raycasting--bvh)
 10. [Annual simulation](#annual-simulation)
-11. [Timezone and DST](#timezone-and-dst)
-12. [Known limitations](#known-limitations)
-13. [Lessons learned](#lessons-learned)
+11. [Application layout](#application-layout)
+12. [Timezone and DST](#timezone-and-dst)
+13. [Known limitations](#known-limitations)
+14. [Lessons learned](#lessons-learned)
 
 ---
  
@@ -30,6 +31,7 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Estimates instantaneous power output in kW, applying bypass-diode, string-mismatch and optimizer logic.
 - Supports multiple installation layouts ("setups") selectable via the UI.
 - Runs a full annual simulation for all configured setups in parallel Web Workers, accumulating energy (kWh) per panel broken down by month, day, and hour. Results are cached in IndexedDB so re-running the same configuration is instant.
+- Displays annual results in a dedicated right-column panel alongside the 3D viewport, with a responsive stacked layout on narrow screens.
 - Validates the wall configuration and displays a prominent warning listing the exact config-space coordinate triples that form non-90° or non-180° angles.
 
 ---
@@ -54,7 +56,7 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
  
 ```
 src/
-├── App.tsx                        # Root: loads config, wires canvas + UI
+├── App.tsx                        # Root: loads config, wires two-column layout + canvas
 ├── i18n.ts                        # i18next initialisation
 │
 ├── types/
@@ -70,6 +72,8 @@ src/
 ├── engine/
 │   ├── SolarEngine.ts             # Pure functions: sun state, incidence, panel output,
 │   │                              #   string mismatch (applyStringMismatch exported).
+│   │                              #   calculateInstantProduction delegates panel normal
+│   │                              #   computation to SolarPanelConverter.toWorldNormal.
 │   │                              #   Used by both the interactive view and the worker.
 │   └── AnnualSimulationEngine.ts  # Pure accumulation functions for the annual loop:
 │                                  #   initAccumulators, accumulateStep, finalizePanel,
@@ -91,8 +95,10 @@ src/
 ├── converter/
 │   ├── ThreeConverter.ts          # Domain Vector3/Euler3 → THREE.Vector3/Euler
 │   └── SolarPanelConverter.ts     # SolarPanel → SimulationPanelData / SimulationSamplePoint
-│                                  #   / Vector3 (world normal). Pre-computes world-space
-│                                  #   transforms so the worker loop only does arithmetic.
+│                                  #   / Vector3 (world normal). toWorldNormal is the single
+│                                  #   source of truth for panel normal computation, used by
+│                                  #   both SolarEngine (interactive) and the pre-computation
+│                                  #   step before worker transfer.
 │
 ├── store/
 │   └── useAppStore.ts             # Zustand store — all app state + actions
@@ -100,7 +106,9 @@ src/
 ├── hooks/
 │   ├── useBVH.ts                  # Builds BVH over shadow-casting meshes
 │   ├── useShadowSampler.ts        # Casts rays, returns ShadowMap (interactive)
-│   └── useAnnualSimulation.ts     # Orchestrates worker pool for annual simulation
+│   └── useAnnualSimulation.ts     # Orchestrates worker pool for annual simulation.
+│                                  #   Cache key computed once per setup and passed to
+│                                  #   both the cache lookup and the worker payload.
 │
 ├── db/
 │   └── SimulationCache.ts         # IndexedDB wrapper for SetupAnnualResult persistence
@@ -129,7 +137,8 @@ src/
     ├── Sun.tsx                    # Sun sphere + directional light
     ├── Compass.tsx                # N/S/E/W labels in 3D
     ├── MainControls.tsx           # Date/time/play UI panel
-    ├── SimulationControls.tsx     # Simulation settings, annual run button, results
+    ├── SimulationControls.tsx     # Simulation settings, annual run button, inline results summary
+    ├── ResultsPanel.tsx           # Right-column annual results panel (placeholder → text → charts)
     ├── AnnualSimulationProgress.tsx  # Per-setup progress bars with ETA and pending count
     ├── AngleWarningBanner.tsx     # Warning banner listing non-90° angle coordinate triples
     └── DeveloperFooter.tsx        # Ko-fi link + personal site
@@ -254,6 +263,7 @@ All visual styling is defined in `App.css` using class names. React components u
 Translation keys are grouped by the component that owns them:
 - `mainControls.*` — keys used exclusively by `MainControls`
 - `simulationControls.*` — keys used exclusively by `SimulationControls`
+- `resultsPanel.*` — keys used exclusively by `ResultsPanel`
 - `angleWarning.*` — keys used by `AngleWarningBanner`
 - Top-level keys (`title`, `loading`, `coordinates.*`, `footer.*`) are shared or belong to no specific component
 
@@ -273,7 +283,18 @@ Translation keys are grouped by the component that owns them:
 
 Solar physics functions (`calculateSunState`, `calculateIncidenceFactor`, `calculatePanelOutput`, `applyStringMismatch`) live in `engine/SolarEngine.ts` and are imported by both the interactive `ShadowedScene` and the annual simulation worker. There is no duplication: the worker calls the same functions as the main thread.
 
+`calculateInstantProduction` delegates panel normal computation to `SolarPanelConverter.toWorldNormal`, which is the single source of truth for that operation. `SolarPanelConverter` is the correct layer for converting a `SolarPanel` domain object into derived values — `SolarEngine` consuming it follows the natural dependency direction (engine uses converter, not the other way around).
+
 Annual-specific accumulation logic (`initAccumulators`, `accumulateStep`, `finalizePanel`, `buildSetupResult`) lives in `engine/AnnualSimulationEngine.ts`. These are pure functions with no Three.js or worker dependencies — they can be tested independently and are kept separate from the physics to maintain a clear boundary between "what physics produces at one instant" and "how we aggregate across a year".
+
+### `SolarPanelConverter.toWorldNormal` — single source of truth for panel normals
+
+`toWorldNormal(panel: SolarPanel): Vector3` is the canonical way to derive a panel's world-space normal. It is used in two contexts:
+
+1. **Interactive production** (`SolarEngine.calculateInstantProduction`): called once per panel per dirty frame on the main thread.
+2. **Annual simulation pre-computation** (`SolarPanelConverter.toSimulationPanelData`): called once per panel before worker transfer, embedding the result in `SimulationPanelData.worldNormal` so the worker never needs to recompute it.
+
+Having one implementation in the converter layer (which owns the `SolarPanel → derived value` transformation) and zero implementations in the engine eliminates the duplication that previously existed between `SolarEngine.getPanelNormal` and `SolarPanelConverter.toWorldNormal`.
 
 ### `ThreeUtils` — mesh serialisation and reconstruction
 
@@ -282,6 +303,10 @@ Annual-specific accumulation logic (`initAccumulators`, `accumulateStep`, `final
 ### `MeshFactory` — independent copies per worker
 
 `MeshFactory.fromScene(scene)` traverses the scene once and returns a `{ build }` object. Each call to `build()` produces a fresh `MeshBatch` (meshes + transferables). This is the only safe pattern when multiple workers each need a zero-copy transfer: typed array buffers are detached after the first `postMessage` with the `transfer` option, so each worker must receive its own independently allocated copy. `MeshFactory` encapsulates this requirement so callers cannot accidentally reuse a transferred buffer.
+
+### Cache key computed once per setup in `useAnnualSimulation`
+
+The simulation cache key for each setup is computed once at the start of `run()` and stored alongside the setup reference. The same key is then passed directly to both the IndexedDB lookup and the worker payload constructor. This eliminates the double hash that would otherwise occur if the payload builder recomputed the key from scratch, and makes it impossible for the two uses to drift apart.
 
 ### `SolarPanelConverter` — world-space pre-computation
 
@@ -511,7 +536,7 @@ The worker reconstructs the BVH with `MeshBVH.deserialize()` and runs raycasting
 
 **Sample points and normals pre-computed on the main thread:**
 
-`SolarPanelConverter.toSimulationPanelDataArray` transforms each panel's local-space sample points to world space and computes the world-space normal before transfer. This avoids repeating the matrix multiplication inside the worker at every time step. The converter produces `SimulationPanelData` objects, whose type names reflect their semantic role rather than their transport mechanism.
+`SolarPanelConverter.toSimulationPanelDataArray` transforms each panel's local-space sample points to world space and computes the world-space normal (via `toWorldNormal`) before transfer. This avoids repeating the matrix multiplication inside the worker at every time step. The converter produces `SimulationPanelData` objects, whose type names reflect their semantic role rather than their transport mechanism.
 
 **Worker pool:**
 
@@ -544,7 +569,7 @@ These functions have no Three.js or worker dependencies and can be tested in iso
 
 ### Cache key and hashing
 
-Every result is keyed by a `SimulationCacheKey` capturing all inputs that affect output: setup geometry hash, density, threshold, interval, location, year, and irradiance source. The geometry hash is an FNV-1a 32-bit hash over panel world positions, rotations, zones, peak power, string, and optimizer flag. `SimulationCacheUtils.buildCacheKey` and `hashCacheKey` are the only correct entry points for constructing and hashing keys.
+Every result is keyed by a `SimulationCacheKey` capturing all inputs that affect output: setup geometry hash, density, threshold, interval, location, year, and irradiance source. The geometry hash is an FNV-1a 32-bit hash over panel world positions, rotations, zones, peak power, string, and optimizer flag. `SimulationCacheUtils.buildCacheKey` and `hashCacheKey` are the only correct entry points for constructing and hashing keys. The key is computed once per setup at the start of the simulation run and reused for both the IndexedDB lookup and the worker payload.
 
 ### IndexedDB persistence
 
@@ -563,6 +588,42 @@ PanelAnnualData.zoneShadeFraction [zone][month][dayOfMonth][hourOfDay]  0–1
 ### Annual simulation and the Canvas tree
 
 `useAnnualSimulation` calls `useThree()` internally to access the Three.js scene for mesh serialisation. `useThree` is only available inside a `<Canvas>` subtree. `Scene.tsx` is always rendered inside `<Canvas>` in `App.tsx`, making it the correct host for this hook. The simulation is triggered by watching `isRunning` in the store: when it transitions from false to true, `Scene` calls `run()` with all configured setups.
+
+---
+
+## Application layout
+
+### Two-column split
+
+```
+Desktop (≥ 1024px):
+┌─────────────────────┬──────────────────────┐
+│                     │                      │
+│   3D Canvas         │   Results Panel      │
+│   + 3D controls     │                      │
+│                     │                      │
+└─────────────────────┴──────────────────────┘
+
+Mobile / narrow (< 1024px):
+┌──────────────────────┐
+│   3D Canvas          │
+│   + 3D controls      │
+├──────────────────────┤
+│   Results Panel      │
+└──────────────────────┘
+```
+
+The layout is implemented with CSS flexbox at `app-viewport` level. The canvas column is `flex: 1` and takes all available width when the results column is not shown. The results column is a fixed `380px` wide on desktop and expands to full width with a capped height on mobile.
+
+### Results Panel (`ResultsPanel.tsx`)
+
+`ResultsPanel` occupies the right column and progresses through three states:
+
+1. **Empty + idle**: a prompt encouraging the user to run the calculation.
+2. **Empty + running**: a "simulation in progress" indicator.
+3. **Results available**: a ranked list of setups sorted by annual energy production (highest first), showing label and `annualTotalKwh`. Results update as each setup completes.
+
+The panel is designed to be replaced by charts (phase 3) without structural changes — the list of text results is the placeholder content that charts will supersede.
 
 ---
  
@@ -662,6 +723,14 @@ Showing raw 0-based indices forces the user to count positions in their config f
 
 `engine/SolarEngine.ts` is imported by both `ShadowedScene` (main thread, interactive) and `AnnualSimulation.worker.ts`. This is safe because `SolarEngine` only uses Three.js math classes (`Vector3`, `Euler`, `Matrix4`) which are DOM-free. The functions that require `THREE.Scene` or `THREE.Raycaster` remain in their respective contexts (`useShadowSampler` for interactive, `computeShadedZones` in the worker) and are not shared.
 
+### `SolarPanelConverter` is the right layer for panel normal computation
+
+The panel world-space normal is a property derived from a `SolarPanel` domain object. The converter layer owns this derivation. `SolarEngine` consuming `SolarPanelConverter.toWorldNormal` follows the correct dependency direction: the engine calls the converter, not the other way around. This eliminated the previous duplication between `SolarEngine.getPanelNormal` and `SolarPanelConverter.toWorldNormal`.
+
+### Cache key computed once, used twice
+
+Computing a hash is cheap, but computing it twice from the same inputs for two different purposes (cache lookup + payload construction) is a code smell: any divergence between the two computations would produce a silent bug where the worker runs with a different key than what was checked in the cache. Structuring `run()` to compute each key once and pass it explicitly to both consumers eliminates this risk entirely.
+
 ### Naming types by role, not by transport
 
 `SimulationPanelData` and `SimulationSamplePoint` describe what the data represents (simulation inputs for a panel / a sample point), not how it is transported (via a worker). This decouples the type contract from the implementation strategy and allows the same types to be used if the simulation is ever run in the main thread for debugging.
@@ -669,3 +738,7 @@ Showing raw 0-based indices forces the user to count positions in their config f
 ### `AnnualSimulationEngine` contains no I/O or orchestration
 
 Every function in `engine/AnnualSimulationEngine.ts` is pure: given inputs, return outputs, no side effects. The worker drives the loop and emits progress messages; the engine only knows how to accumulate one step and how to finalise one panel. This separation makes the accumulation logic independently testable.
+
+### Two-column layout with flex, no library needed
+
+The split between the 3D canvas and the results panel is implemented with two CSS flex rules and one media query. No layout library is needed. The canvas column is `flex: 1` so it naturally expands to fill the available space when no results column is present (or when the viewport is narrow and the columns stack).

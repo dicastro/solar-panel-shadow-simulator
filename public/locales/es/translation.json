@@ -35,6 +35,11 @@
     "stopConfirm": "¿Parar la simulación? Se perderá el progreso de los setups en curso.",
     "pending": "{{count}} setup(s) esperando en cola"
   },
+  "resultsPanel": {
+    "title": "Resultados anuales",
+    "placeholder": "Ejecuta la simulación anual para ver los resultados aquí. Usa los controles de la izquierda para configurar el intervalo, el año y la fuente de irradiancia, y pulsa EJECUTAR CÁLCULO.",
+    "computing": "Simulación en curso…"
+  },
   "angleWarning": {
     "title": "Aviso de configuración",
     "message": "Esta aplicación solo soporta ángulos de 90°/180° entre muros. Los siguientes conjuntos de puntos forman ángulos que no cumplen este requisito y el renderizado puede no ser preciso:",

@@ -35,6 +35,11 @@
     "stopConfirm": "Stop the simulation? Progress will be lost for setups still running.",
     "pending": "{{count}} setup(s) waiting in queue"
   },
+  "resultsPanel": {
+    "title": "Annual Results",
+    "placeholder": "Run the annual simulation to see results here. Use the controls on the left to configure the interval, year, and irradiance source, then press RUN CALCULATION.",
+    "computing": "Simulation in progress…"
+  },
   "angleWarning": {
     "title": "Configuration Warning",
     "message": "This application only supports 90°/180° wall angles. The following sets of points form angles that do not meet this requirement and rendering may be inaccurate:",

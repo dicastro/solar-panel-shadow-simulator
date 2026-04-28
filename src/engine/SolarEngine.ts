@@ -4,6 +4,7 @@ import { SunState, SimulationResult, PanelSimulationResult } from '../types/simu
 import { Vector3 } from '../types/geometry';
 import { SolarPanel } from '../types/installation';
 import { ShadowMap } from '../hooks/useShadowSampler';
+import { SolarPanelConverter } from '../converter/SolarPanelConverter';
 
 /**
  * Represents a panel's contribution within a string for mismatch calculation.
@@ -87,8 +88,6 @@ export const SolarEngine = {
    * For strings without any optimizer, all panels are limited to the efficiency
    * of the least-efficient panel (series current constraint). Strings where at
    * least one panel has an optimizer treat every panel as independent.
-   *
-   * Mutates `out` in place, writing the final power for each panel index.
    */
   applyStringMismatch: (
     stringGroups: Map<string, StringPanelEntry[]>,
@@ -136,18 +135,6 @@ export const SolarEngine = {
   },
 
   /**
-   * Derives the panel's world-space normal vector from its world rotation.
-   * A flat panel (zero rotation) has its normal pointing straight up (0, 1, 0).
-   * The normal rotates with the panel as inclination and azimuth are applied.
-   */
-  getPanelNormal: (worldRotation: { x: number, y: number, z: number }): Vector3 => {
-    const normal = new THREE.Vector3(0, 1, 0);
-    const euler = new THREE.Euler(worldRotation.x, worldRotation.y, worldRotation.z);
-    normal.applyEuler(euler);
-    return { x: normal.x, y: normal.y, z: normal.z };
-  },
-
-  /**
    * Calculates instantaneous production across all panels for a given sun state
    * and shadow map.
    *
@@ -155,6 +142,9 @@ export const SolarEngine = {
    * a bottleneck effect: all panels in the string are limited to the efficiency
    * of the least-efficient panel (series current constraint). Strings where at
    * least one panel has an optimizer treat every panel as independent.
+   *
+   * The panel normal is derived via SolarPanelConverter.toWorldNormal, which is
+   * the single canonical source for that transformation.
    */
   calculateInstantProduction: (
     panels: readonly SolarPanel[],
@@ -171,7 +161,7 @@ export const SolarEngine = {
     }
 
     const panelResults = panels.map(panel => {
-      const normal = SolarEngine.getPanelNormal(panel.worldRotation);
+      const normal = SolarPanelConverter.toWorldNormal(panel);
       const incidenceFactor = SolarEngine.calculateIncidenceFactor(sun.direction, normal);
       const basePower = (panel.peakPower / 1000) * incidenceFactor;
 
@@ -209,4 +199,4 @@ export const SolarEngine = {
 
     return { instantPower: totalPower, panels: finalPanels };
   },
-}
+};

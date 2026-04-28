@@ -20,7 +20,11 @@ import { MeshFactory } from '../factory/MeshFactory';
 const maxWorkers = (): number =>
   Math.max(1, (navigator.hardwareConcurrency ?? 2) - 1);
 
-/** Builds the worker payload for a single setup, using a fresh mesh serialisation. */
+/**
+ * Builds the worker payload for a single setup using a fresh mesh serialisation.
+ * The `cacheKey` is computed once by the caller and passed in here to avoid
+ * hashing the same inputs twice (once for the cache lookup, once for the payload).
+ */
 const buildPayload = (
   setup: PanelSetup,
   site: Site,
@@ -29,16 +33,9 @@ const buildPayload = (
   intervalMinutes: number,
   year: number,
   irradianceSource: IrradianceSource,
+  cacheKey: string,
   getMeshes: ReturnType<typeof MeshFactory.fromScene>['build'],
 ): { payload: WorkerSimulationPayload; transferables: ArrayBuffer[] } => {
-  const cacheKey = SimulationCacheUtils.hashCacheKey(
-    SimulationCacheUtils.buildCacheKey(
-      setup, density, threshold, intervalMinutes,
-      site.location.latitude, site.location.longitude,
-      year, irradianceSource,
-    ),
-  );
-
   const allPanels = setup.panelArrays.flatMap(pa => pa.panels);
   const panels = SolarPanelConverter.toSimulationPanelDataArray(allPanels);
   const { meshes, transferables } = getMeshes();
@@ -105,23 +102,23 @@ export function useAnnualSimulation() {
   ) => {
     stop();
 
-    // Check cache for each setup. Cached setups are reported immediately;
-    // only uncached ones proceed to worker dispatch.
-    const uncachedSetups: PanelSetup[] = [];
+    // The cache key is computed once per setup and reused for both the cache
+    // lookup and the worker payload, avoiding redundant hashing of the same inputs.
+    const uncachedSetups: Array<{ setup: PanelSetup; cacheKey: string }> = [];
     for (const setup of setups) {
-      const key = SimulationCacheUtils.hashCacheKey(
+      const cacheKey = SimulationCacheUtils.hashCacheKey(
         SimulationCacheUtils.buildCacheKey(
           setup, density, threshold, intervalMinutes,
           site.location.latitude, site.location.longitude,
           year, irradianceSource,
         ),
       );
-      const cached = await SimulationCache.getResult(key);
+      const cached = await SimulationCache.getResult(cacheKey);
       if (cached) {
         callbacks.onResult(setup.id, setup.label, cached.annualTotalKwh);
         callbacks.onSetupComplete(setup.id);
       } else {
-        uncachedSetups.push(setup);
+        uncachedSetups.push({ setup, cacheKey });
       }
     }
 
@@ -156,7 +153,7 @@ export function useAnnualSimulation() {
 
     const launchNext = () => {
       while (activeWorkerCount < maxWorkers() && queue.length > 0) {
-        const setup = queue.shift()!;
+        const { setup, cacheKey } = queue.shift()!;
         activeWorkerCount++;
 
         progressState.set(setup.id, {
@@ -227,7 +224,7 @@ export function useAnnualSimulation() {
 
         const { payload, transferables } = buildPayload(
           setup, site, density, threshold, intervalMinutes,
-          year, irradianceSource, getMeshes,
+          year, irradianceSource, cacheKey, getMeshes,
         );
         worker.postMessage({ type: 'run', payload }, transferables);
       }

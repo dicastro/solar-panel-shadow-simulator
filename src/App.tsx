@@ -12,6 +12,7 @@ import { MainControls } from './components/MainControls';
 import { SimulationControls } from './components/SimulationControls';
 import { DeveloperFooter } from './components/DeveloperFooter';
 import { AngleWarningBanner } from './components/AngleWarningBanner';
+import { ResultsPanel } from './components/ResultsPanel';
 import { Scene } from './components/Scene';
 
 export default function App() {
@@ -60,23 +61,34 @@ export default function App() {
 
   return (
     <div className="app-container">
-      <MainControls />
-      <SimulationControls />
-      <DeveloperFooter />
       <AngleWarningBanner />
 
-      <Canvas shadows camera={{ position: [0, cameraHeight, cameraDistance], fov: 40 }}>
-        <Scene
-          site={site}
-          activeSetup={activeSetup}
-          sun={sun}
-          date={date.toDate()}
-          showPoints={showPoints}
-          density={density}
-          threshold={threshold}
-          onProductionUpdate={setSimulationResult}
-        />
-      </Canvas>
+      <div className="app-layout">
+        {/* Left column: 3D canvas with overlaid controls */}
+        <div className="app-layout__canvas-column">
+          <MainControls />
+          <SimulationControls />
+          <DeveloperFooter />
+
+          <Canvas shadows camera={{ position: [0, cameraHeight, cameraDistance], fov: 40 }}>
+            <Scene
+              site={site}
+              activeSetup={activeSetup}
+              sun={sun}
+              date={date.toDate()}
+              showPoints={showPoints}
+              density={density}
+              threshold={threshold}
+              onProductionUpdate={setSimulationResult}
+            />
+          </Canvas>
+        </div>
+
+        {/* Right column: simulation results */}
+        <div className="app-layout__results-column">
+          <ResultsPanel />
+        </div>
+      </div>
     </div>
   );
 }
