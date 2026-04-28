@@ -94,3 +94,34 @@ Type '(state: any) => { annualResults: Map<unknown, unknown>; }' has no properti
 ```
 
 Es un cambio correcto?
+
+* Debido al cambio del punto anterior, en `AppStore.ts` he tenido que cambiar este codigo
+
+```
+// Cast to allow partial updates of the unified store from within each slice.
+  // Zustand's set() accepts Partial<T> so this is safe — slices only write
+  // keys they own and never overlap with each other.
+  const typedSet = set as (partial: Partial<AppStore>) => void;
+  const typedGet = get as () => AppStore;
+
+  const configSlice = createConfigSlice(typedSet);
+  const renderSlice = createRenderSlice(typedSet, typedGet);
+  const simulationSlice = createSimulationSlice(typedSet);
+```
+
+Por este
+
+```
+// Cast to allow partial updates of the unified store from within each slice.
+  // Zustand's set() accepts Partial<T> so this is safe — slices only write
+  // keys they own and never overlap with each other.
+  const typedSet = set as (nextState: Partial<AppStore>) => void;
+  const typedSet2 = set as (nextStateOrUpdater: | Partial<AppStore> | ((state: AppStore) => Partial<AppStore>)) => void;
+  const typedGet = get as () => AppStore;
+
+  const configSlice = createConfigSlice(typedSet);
+  const renderSlice = createRenderSlice(typedSet, typedGet);
+  const simulationSlice = createSimulationSlice(typedSet2);
+```
+
+Es esto correcto? No me gusta el nombre `typedSet2`. Revisa el comentario que hay en el código por si ya no aplica tal cual y hay que corregirlo
