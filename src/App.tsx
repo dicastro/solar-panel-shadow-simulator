@@ -7,12 +7,12 @@ import { useTranslation } from 'react-i18next';
 
 import './i18n';
 import './App.css';
-import { useAppStore } from './store/useAppStore';
-import { MainControls } from './components/MainControls';
+import { useAppStore } from './store/AppStore';
+import { RenderControls } from './components/RenderControls';
 import { SimulationControls } from './components/SimulationControls';
 import { DeveloperFooter } from './components/DeveloperFooter';
 import { AngleWarningBanner } from './components/AngleWarningBanner';
-import { ResultsPanel } from './components/ResultsPanel';
+import { SimulationResultsPanel } from './components/SimulationResultsPanel';
 import { Scene } from './components/Scene';
 
 export default function App() {
@@ -24,8 +24,8 @@ export default function App() {
   const date = useAppStore(s => s.date);
   const isPlaying = useAppStore(s => s.isPlaying);
   const showPoints = useAppStore(s => s.showPoints);
-  const density = useAppStore(s => s.density);
-  const threshold = useAppStore(s => s.threshold);
+  const renderDensity = useAppStore(s => s.renderDensity);
+  const renderThreshold = useAppStore(s => s.renderThreshold);
   const setSimulationResult = useAppStore(s => s.setSimulationResult);
   const tickHour = useAppStore(s => s.tickHour);
   const loadConfig = useAppStore(s => s.loadConfig);
@@ -66,7 +66,7 @@ export default function App() {
       <div className="app-layout">
         {/* Left column: 3D canvas with overlaid controls */}
         <div className="app-layout__canvas-column">
-          <MainControls />
+          <RenderControls />
           <SimulationControls />
           <DeveloperFooter />
 
@@ -77,16 +77,16 @@ export default function App() {
               sun={sun}
               date={date.toDate()}
               showPoints={showPoints}
-              density={density}
-              threshold={threshold}
+              renderDensity={renderDensity}
+              renderThreshold={renderThreshold}
               onProductionUpdate={setSimulationResult}
             />
           </Canvas>
         </div>
 
-        {/* Right column: simulation results */}
+        {/* Right column: annual simulation results */}
         <div className="app-layout__results-column">
-          <ResultsPanel />
+          <SimulationResultsPanel />
         </div>
       </div>
     </div>

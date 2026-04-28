@@ -1,6 +1,6 @@
 import { Sphere } from '@react-three/drei';
 import SunCalc from 'suncalc';
-import { useAppStore } from '../store/useAppStore';
+import { useAppStore } from '../store/AppStore';
 
 interface SunProps {
   date: Date;

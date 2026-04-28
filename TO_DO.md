@@ -1,24 +1,96 @@
-* Analiza todo el fichero `ANNUAL_SIMULATION_ANALYSIS.md`. Puedes complementar esta información con el contenido del `README.md` para tener una visión global de la aplicación hasta el momento.
+* Analiza todo el fichero `TO_DO_PREVIOUS.md`. Esos son mis comentarios previos. Con respecto a eso tengo los siguientes comentarios o cosas que no me terminan de convencer que quiero hacer antes de dar por finalizada la "fase 2" y continuar con la "fase 3"
 
-* Se acaban de realizar los cambios para la "fase 2" especificados en `ANNUAL_SIMULATION_ANALYSIS.md`. Hay un defecto que me gustaría corregir, que es la altura de cada sección cuando el ancho de la pantalla no es suficiente y la sección de resultados queda por debajo de la de renderizado. En este caso, ambas secciones quedan con poca altura y la de la sección de renderizado es enana y no se ve casi nada, y la de resultados pasa un poco lo mismo. Me gustaría que la de renderizado ocupase por lo menos un 50% de la pantalla en altura (que esto se pueda modificar fácilmente en el css para poder probar con otros valores como 60%) y que la sección de resultados quede por debajo ocupando lo que sea necesario, se podría extender hacia abajo de la pantalla, excediendo más del 100% de la altura y habiendo scroll. Por el momento como son resultados en texto no creo que haga falta, pero más adelante al incluir gráficos sí se extenderá más en altura. Otro defecto es el fondo de pantalla, para el renderizado (y toda la aplicación es negro), y ahora mismo en la sección de resultados, al ser texto no se ve ninguna letra. Esta sección de resultados tendría que tener un fondo clarito, algún blanco roto
+* Antes de nada, en la anterior conversación ha habido errores con un fichero que habías modificado y yo no lo podía ver. Tú mismo te has dado cuenta de ello y al final me has acabado poniendo el contenido en plano del fichero. Había errores en comandos (como `rm`). No entiendo por qué ejecutas esos comandos de `rm` y otros. No tienes acceso a modificar el código. Tienes el código disponible en el contexto y como output final quiero los ficheros con su contenido final. No sé si cuando intentas ejecutar ciertos scripts son internos o es que estás intentando modificar el código directamente.
 
-* Tengo algunos comentarios con respecto a esta "fase 2" antes de continuar con la "fase 3"
+* En `RenderControls.tsx` sí que se visualiza la producción estimada del instante seleccionado tal y como se había pedido. Se utiliza `simulationResult`. Esto está cruzando `RenderSlice.ts` con `SimulationSlice.ts`. Me gustaría tenerlo separado, que en `RenderSlice` esté la parte del `RenderControls.tsx` (incluyendo la producción instantánea) y para `SimulationControls.tsx` se utiliza `SimulationSlice` (incluyendo entre otros resultados de la simulación de producción anual). Creo que lo que pasa es que el nombre es confuso, `simulationResult` no contiene el resultado de la simulación anual, sino el consumo instantáneo, porque diría que el resultado de las simulación anual se guarda en `anualResults`. Investiga/Analiza esto y si estoy en lo cierto, `simulationResult` debería renombrarse a `instantProductionResult` y debería pasar a `RenderSlice.ts`. Y puestos a revisar nombres `annualResults` creo que debería renombrarse a `annualProductionResult`. Además `simulationResult` es de tipo `SimulationResult` y tiene un atributo `panels` de tipo `PanelSimulationResult[]`. Ese tipo `SimulationResult` debería renombrarse a `InstantProductionResult` y debería tener únicamente el atributo `instantPower` (mejor `power` directamente). Por lo que `PanelSimulationResult` se podría quitar.
 
-* Se ha creado `ResultsPanel.tsx`. No me gusta el nombre, preferiría `SimulationResultsPanel.tsx` o directamente `SimulationPanel.tsx`
+* Sí que se ve ahora bien la sección de los resultados con fondo más claro y se ha incluido un selector de las simulaciones. El label del selector y los detalles que aparecen de la simulación seleccionada no son suficientes, debería incluirse también la densidad de puntos y el threshold. Podría utilizarse una determinada nomenclatura para incluirlo en el label del combo y que no sea demasiado largo (como por ejemplo 16p1t, donde 16 se obtiene de la density siendo density*density y 1 sería el threshold, se interpretaría como 16p(oints per zone)1t(hreshold)). En el detalle sí que se incluirían como el resto de parámetros que se incluyen ahora (Año, Intervalo, Irradiancia, Configuraciones, Calculado)
 
-* Quiero renombrar `MainControls.tsx` a algo como `RenderControls.tsx`. Ahora que hay 2 secciones principales en la aplicación lo veo más claro: por un lado está el renderizado con cálculo instantáneo de producción, por otro lado está la simulación de la producción anual de los diferentes setups con una serie de criterios. La parte de renderizado la veo como una forma de "debug", de analizar en un instante dado qué sombras hay y poder afinar la posición de los maneles o la ubicación de optimizadores o la división de los paneles en varios strings. La parte de simulación, la veo para comparar en términos de producción solar para decidir qué setup es el más eficiente.
+* Veo que cuando se ejecutan las simulaciones, mientras se están ejecutando, aparecen correctamente las barras de progreso en `SimulationControls.tsx`, sin embargo a medida que van acabando, antes de que hayan terminado todas, las que ya han terminado, aparecen en la parte final de `SimulationResultsPanel.tsx`. No quiero ese comportamiento. En los resultados anuales debe aparecer únicamente lo ya finalizado y que se ha seleccionado en el combo de simulaciones.
 
-* Relacionado también con el punto anterior (5º punto): ahora hay controles "showPoints", "density", "threshold" que forman parte de `SimulationControls`, pero que afectan al renderizado. Estos controles los quiero separar, podría parecer duplicado pero no lo son. En lo que ahora es `MainControls.tsx` (que en el punto anterior sugiero renombrar a `RenderControls.tsx`) añadiría también estos controles para poder decidir si mostrar o no los puntos de muestreo, definir la densidad de estos puntos por zona de panel y definir un threshold para el cálculo de la producción instantánea en base a estos parámetros del renderizado. Pero no quiero quitar estos controles de `SimulationControls.tsx`, en simulation controls sigue aplicando `density` y `threshold` (`showPoints` no aplicaría más en `SimulationControls.tsx`), estos valores no afectarían al renderizado y se utilizarían exclusivamente para las simulaciones
+* Cuando una simulación termina, la simulación actual seleccionada en el panel de resultados debería cambiarse a la última simulación ejecutada
 
-* Relacionado con los 2 puntos anteriores (5º y 6º punto), veo que ahora hay un único `useAppStore.ts`. No me gusta ni el nombre `useAppStore.ts`... vería mejor `AppStore.ts` a secas. Pero tampoco me gusta que ahí esté todo. Creo que se están empezando a mezclar varios aspectos de diferentes controles de diferentes secciones y con unos nombres poco apropiados. Veo distintas alternativas
+* En `SimulationSlice.ts` (sí lo he renombrado de `simulationSlice.ts` a `SimulationSlice.ts`):
 
-A) O se crean varios store, como por ejemplo uno general de aspectos comunes, otro para el renderizado instantáneo y otro para la simulación anual y en cada sitio se utiliza el/los que corresponda/n
-B) Se crean igualmente varios store, pero se tiene uno que los aglutina todos y hace de "Facade", de tal forma que al usarlo no hay que saber qué store contiene los datos sino que siempre se utiliza el store facade
+He cambiado este código:
 
-> Diría que me gusta más la opción B, si no es mucho más complicado que la A, optaría por esta
+```
+export const createSimulationSlice = (
+  set: (partial: Partial<SimulationSlice>) => void,
+): SimulationSlice => ({ 
+```
 
-* En la sección de `ResultsPanel.tsx` (que anteriormente he propuesto renombrar), debería de haber un selector de la simulación que se quiere mostrar y al seleccionar una simulación se mostrarán los parámetros de la simulación (density, threshold, si usa PVGIS u otro) a modo de resumen y se refrescarán los gráficos en consonancia. Yo creo que esto es viable ya que la caché de resultados de simulaciones tiene estos argumentos como clave y si se varían estos parámetros no se machacan los resultados
+Por este:
 
-* Estos renombrados de `MainControls.tsx` y `ResultsPanel.tsx` tienen que ser consistentes con el código actual. Habría que renombrar CSS por coherencia, y el resto del código que se vea afectado.
+```
+export const createSimulationSlice = (
+  set: (
+    nextStateOrUpdater:
+      | Partial<SimulationSlice>
+      | ((state: SimulationSlice) => Partial<SimulationSlice>)
+  ) => void,
+): SimulationSlice => ({
+```
 
-* Para que tengas más contexto: A la hora de exportar/importar (que esto es para más adelante) se exportará tanto la configuración como todas los resultados de todas las simulaciones. De tal forma que al importar de nuevo se podría ir ya directamente a la zona de resultados y ver los gráficos de simulaciones previamente hechas
+Porque si no lo cambiaba tenía en el IDE los siguientes errores:
+
+Para el snippet
+
+```
+updateProgress: (progress) =>
+    set(state => ({
+      activeProgress: new Map(state.activeProgress).set(progress.setupId, progress),
+    })),
+```
+
+el error:
+
+```
+Parameter 'state' implicitly has an 'any' type.ts(7006)
+
+Type '(state: any) => { activeProgress: Map<unknown, unknown>; }' has no properties in common with type 'Partial<SimulationSlice>'.
+
+(parameter) state: any
+```
+
+Para el snippet:
+
+```
+markSetupComplete: (setupId) =>
+    set(state => {
+      const next = new Map(state.activeProgress);
+      next.delete(setupId);
+      return { activeProgress: next };
+    }),
+```
+
+el error:
+
+```
+Parameter 'state' implicitly has an 'any' type.ts(7006)
+
+Type '(state: any) => { activeProgress: Map<unknown, unknown>; }' has no properties in common with type 'Partial<SimulationSlice>'.
+
+(parameter) state: any
+```
+
+Para el snippet:
+
+```
+setSetupResult: (setupId, label, annualTotalKwh) =>
+    set(state => ({
+      annualResults: new Map(state.annualResults).set(setupId, { label, annualTotalKwh }),
+    })),
+```
+
+el error:
+
+```
+Parameter 'state' implicitly has an 'any' type.ts(7006)
+
+Type '(state: any) => { annualResults: Map<unknown, unknown>; }' has no properties in common with type 'Partial<SimulationSlice>'.ts(2559)
+
+(parameter) state: any
+```
+
+Es un cambio correcto?

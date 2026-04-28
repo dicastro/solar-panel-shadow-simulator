@@ -1,12 +1,18 @@
 {
   "title": "Solar Simulator",
   "loading": "Loading configuration...",
-  "mainControls": {
+  "renderControls": {
     "dateLabel": "Date",
     "timeLabel": "Time",
     "timezoneLabel": "Timezone",
     "setupLabel": "Setup",
-    "langLabel": "Language"
+    "langLabel": "Language",
+    "pointsPerZone": "NxN points per zone",
+    "showPoints": "Show sample points",
+    "threshold": "Zone shadow threshold",
+    "thresholdTooltip": "Minimum number of shaded points to consider a zone as shaded",
+    "instantPower": "Estimated instant output",
+    "theoreticalPeak": "Theoretical peak"
   },
   "coordinates": {
     "north": "N",
@@ -21,24 +27,31 @@
     "irradianceSource": "Irradiance",
     "irradianceGeometric": "Geometric (no weather)",
     "pointsPerZone": "NxN points per zone",
-    "showPoints": "Show sample points",
     "threshold": "Zone shadow threshold",
     "thresholdTooltip": "Minimum number of shaded points to consider a zone as shaded",
     "totalSamplePoints": "Total sample points",
     "timeSteps": "Time steps",
     "totalRays": "Total rays",
-    "instantPower": "Estimated instant output",
-    "theoreticalPeak": "Theoretical peak",
-    "annualResults": "Annual results",
     "run": "RUN CALCULATION",
     "stop": "STOP",
     "stopConfirm": "Stop the simulation? Progress will be lost for setups still running.",
     "pending": "{{count}} setup(s) waiting in queue"
   },
-  "resultsPanel": {
+  "simulationResultsPanel": {
     "title": "Annual Results",
     "placeholder": "Run the annual simulation to see results here. Use the controls on the left to configure the interval, year, and irradiance source, then press RUN CALCULATION.",
-    "computing": "Simulation in progress…"
+    "computing": "Simulation in progress…",
+    "selectorLabel": "Simulation run",
+    "groupLabel": "{{year}} · {{interval}} min · {{irradiance}} · {{setups}} setup(s)",
+    "irradiance_geometric": "Geometric",
+    "irradiance_pvgis": "PVGIS",
+    "irradiance_open-meteo": "Open-Meteo",
+    "paramYear": "Year",
+    "paramInterval": "Interval",
+    "paramIrradiance": "Irradiance",
+    "paramSetups": "Setups",
+    "paramComputedAt": "Computed",
+    "liveResults": "In progress"
   },
   "angleWarning": {
     "title": "Configuration Warning",

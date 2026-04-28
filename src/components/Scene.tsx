@@ -9,7 +9,7 @@ import { Compass } from './Compass';
 import { Sun } from './Sun';
 import { SolarPanelComponent } from './SolarPanelComponent';
 import { useAnnualSimulation } from '../hooks/useAnnualSimulation';
-import { useAppStore } from '../store/useAppStore';
+import { useAppStore } from '../store/AppStore';
 import { PanelSetupFactory } from '../factory/PanelSetupFactory';
 
 interface SceneProps {
@@ -18,8 +18,8 @@ interface SceneProps {
   sun: SunState;
   date: Date;
   showPoints: boolean;
-  density: number;
-  threshold: number;
+  renderDensity: number;
+  renderThreshold: number;
   onProductionUpdate: (result: SimulationResult) => void;
 }
 
@@ -78,23 +78,26 @@ function RailingSupport({ data }: { data: RailingSupportRenderData }) {
  * making it the correct host for this hook.
  *
  * The annual simulation is triggered by watching `isRunning` in the store.
- * When it transitions to true, all configured setups are built and dispatched
- * to the worker pool in a single batch so comparative results are computed
- * together.
+ * When it transitions to true, all configured setups are built using the
+ * simulation-specific density (simulationDensity) and dispatched to the
+ * worker pool. The render view is unaffected because it uses renderDensity.
  *
  * The `isRunning` effect deliberately lists only `isRunning` as a dependency.
  * This is intentional: the simulation is a one-shot operation triggered by the
- * transition false→true. Re-running it on every density or threshold change
- * during an active run is not desired — those parameters are locked in the UI
- * while the simulation is running.
+ * transition false→true. Re-running it on every parameter change during an
+ * active run is not desired — those parameters are locked in the UI while
+ * the simulation is running.
  */
 export function Scene({
-  site, activeSetup, sun, date, showPoints, density, threshold, onProductionUpdate,
+  site, activeSetup, sun, date, showPoints,
+  renderDensity, renderThreshold, onProductionUpdate,
 }: SceneProps) {
   const { run, stop } = useAnnualSimulation();
 
   const config = useAppStore(s => s.config);
   const isRunning = useAppStore(s => s.isRunning);
+  const simulationDensity = useAppStore(s => s.simulationDensity);
+  const simulationThreshold = useAppStore(s => s.simulationThreshold);
   const simulationInterval = useAppStore(s => s.simulationInterval);
   const simulationYear = useAppStore(s => s.simulationYear);
   const irradianceSource = useAppStore(s => s.irradianceSource);
@@ -107,15 +110,17 @@ export function Scene({
   useEffect(() => {
     if (!isRunning || !config || !site) return;
 
+    // Build all setups using the simulation-specific density, independent of
+    // the render density used in the 3D view.
     const allSetups = config.setups.map((setupConfig, i) =>
-      PanelSetupFactory.create(setupConfig, i, site, density),
+      PanelSetupFactory.create(setupConfig, i, site, simulationDensity),
     );
 
     run(
       allSetups,
       site,
-      density,
-      threshold,
+      simulationDensity,
+      simulationThreshold,
       simulationInterval,
       simulationYear,
       irradianceSource,
@@ -210,8 +215,8 @@ export function Scene({
         site={site}
         activeSetup={activeSetup}
         sun={sun}
-        density={density}
-        threshold={threshold}
+        density={renderDensity}
+        threshold={renderThreshold}
         onProductionUpdate={onProductionUpdate}
       >
         {(shadowMap: ShadowMap) =>

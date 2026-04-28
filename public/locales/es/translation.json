@@ -1,12 +1,18 @@
 {
   "title": "Simulador Solar",
   "loading": "Cargando configuración...",
-  "mainControls": {
+  "renderControls": {
     "dateLabel": "Día del año",
     "timeLabel": "Hora",
     "timezoneLabel": "Zona horaria",
     "setupLabel": "Configuración",
-    "langLabel": "Idioma"
+    "langLabel": "Idioma",
+    "pointsPerZone": "Puntos NxN por zona",
+    "showPoints": "Visualizar puntos",
+    "threshold": "Umbral sombra zona",
+    "thresholdTooltip": "Número mínimo de puntos en sombra para anular una zona",
+    "instantPower": "Producción estimada instante",
+    "theoreticalPeak": "Pico teórico"
   },
   "coordinates": {
     "north": "N",
@@ -21,24 +27,31 @@
     "irradianceSource": "Irradiancia",
     "irradianceGeometric": "Geométrica (sin meteorología)",
     "pointsPerZone": "Puntos NxN por zona",
-    "showPoints": "Visualizar puntos",
     "threshold": "Umbral sombra zona",
     "thresholdTooltip": "Número mínimo de puntos en sombra para anular una zona",
     "totalSamplePoints": "Total puntos de muestreo",
     "timeSteps": "Pasos de tiempo",
     "totalRays": "Total rayos",
-    "instantPower": "Producción estimada instante",
-    "theoreticalPeak": "Pico teórico",
-    "annualResults": "Resultados anuales",
     "run": "EJECUTAR CÁLCULO",
     "stop": "PARAR",
     "stopConfirm": "¿Parar la simulación? Se perderá el progreso de los setups en curso.",
     "pending": "{{count}} setup(s) esperando en cola"
   },
-  "resultsPanel": {
+  "simulationResultsPanel": {
     "title": "Resultados anuales",
     "placeholder": "Ejecuta la simulación anual para ver los resultados aquí. Usa los controles de la izquierda para configurar el intervalo, el año y la fuente de irradiancia, y pulsa EJECUTAR CÁLCULO.",
-    "computing": "Simulación en curso…"
+    "computing": "Simulación en curso…",
+    "selectorLabel": "Ejecución de simulación",
+    "groupLabel": "{{year}} · {{interval}} min · {{irradiance}} · {{setups}} config(s)",
+    "irradiance_geometric": "Geométrica",
+    "irradiance_pvgis": "PVGIS",
+    "irradiance_open-meteo": "Open-Meteo",
+    "paramYear": "Año",
+    "paramInterval": "Intervalo",
+    "paramIrradiance": "Irradiancia",
+    "paramSetups": "Configuraciones",
+    "paramComputedAt": "Calculado",
+    "liveResults": "En curso"
   },
   "angleWarning": {
     "title": "Aviso de configuración",

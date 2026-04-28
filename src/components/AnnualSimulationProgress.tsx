@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useAppStore } from '../store/useAppStore';
+import { useAppStore } from '../store/AppStore';
 import { TimeUtils } from '../utils/TimeUtils';
 
 /**

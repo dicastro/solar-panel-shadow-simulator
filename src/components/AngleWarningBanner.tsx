@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useAppStore } from '../store/useAppStore';
+import { useAppStore } from '../store/AppStore';
 
 /**
  * Displays a prominent warning banner when the loaded configuration contains

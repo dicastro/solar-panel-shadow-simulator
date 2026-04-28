@@ -1,15 +1,19 @@
 import { useTranslation } from 'react-i18next';
-import { useAppStore, SimulationInterval, availableSimulationYears } from '../store/useAppStore';
+import { useAppStore, availableSimulationYears, SimulationInterval } from '../store/AppStore';
 import { IrradianceSource } from '../types/simulation';
 import { AnnualSimulationProgress } from './AnnualSimulationProgress';
 
 /**
- * Bottom-left panel: simulation settings, instant production readout,
- * annual simulation controls, and per-setup progress bars.
+ * Bottom-left panel: annual simulation parameters, run/stop control,
+ * per-setup progress bars, and annual results summary.
+ *
+ * All sampling parameters here (simulationDensity, simulationThreshold) are
+ * independent of the render controls in RenderControls. Changing them only
+ * affects future simulation runs — the 3D view is unaffected.
  *
  * Ray count derivation:
  *   totalZones        = sum of zone counts across every panel in the active setup
- *   totalSamplePoints = totalZones × density²
+ *   totalSamplePoints = totalZones × simulationDensity²
  *   totalRays         = totalSamplePoints × timeSteps
  *
  * Using the actual total zone count (rather than max zones × panel count) gives
@@ -18,33 +22,25 @@ import { AnnualSimulationProgress } from './AnnualSimulationProgress';
 export function SimulationControls() {
   const { t } = useTranslation();
 
-  const showPoints = useAppStore(s => s.showPoints);
-  const setShowPoints = useAppStore(s => s.setShowPoints);
-  const density = useAppStore(s => s.density);
-  const setDensity = useAppStore(s => s.setDensity);
-  const threshold = useAppStore(s => s.threshold);
-  const setThreshold = useAppStore(s => s.setThreshold);
+  const simulationDensity = useAppStore(s => s.simulationDensity);
+  const setSimulationDensity = useAppStore(s => s.setSimulationDensity);
+  const simulationThreshold = useAppStore(s => s.simulationThreshold);
+  const setSimulationThreshold = useAppStore(s => s.setSimulationThreshold);
   const isRunning = useAppStore(s => s.isRunning);
   const simulationInterval = useAppStore(s => s.simulationInterval);
   const setSimulationInterval = useAppStore(s => s.setSimulationInterval);
   const activeSetup = useAppStore(s => s.activeSetup);
-  const simulationResult = useAppStore(s => s.simulationResult);
   const simulationYear = useAppStore(s => s.simulationYear);
   const setSimulationYear = useAppStore(s => s.setSimulationYear);
   const irradianceSource = useAppStore(s => s.irradianceSource);
   const setIrradianceSource = useAppStore(s => s.setIrradianceSource);
-  const annualResults = useAppStore(s => s.annualResults);
   const startSimulation = useAppStore(s => s.startSimulation);
   const stopSimulation = useAppStore(s => s.stopSimulation);
 
-  const instantPower = simulationResult?.instantPower ?? 0;
-  const maxPointsPerZone = density * density;
-
+  const maxPointsPerZone = simulationDensity * simulationDensity;
   const allPanels = activeSetup?.panelArrays.flatMap(pa => pa.panels) ?? [];
-  const theoreticalPeak = allPanels.reduce((sum, p) => sum + p.peakPower / 1000, 0);
-
   const totalZones = allPanels.reduce((sum, p) => sum + p.zones, 0);
-  const totalSamplePoints = totalZones * density * density;
+  const totalSamplePoints = totalZones * simulationDensity * simulationDensity;
   const timeSteps = Math.floor((365 * 24 * 60) / simulationInterval);
   const totalRays = totalSamplePoints * timeSteps;
 
@@ -107,20 +103,11 @@ export function SimulationControls() {
         <label>{t('simulationControls.pointsPerZone')}:</label>
         <input
           type="number"
-          value={density}
+          value={simulationDensity}
           min={2}
           max={16}
-          onChange={e => setDensity(Number(e.target.value))}
+          onChange={e => setSimulationDensity(Number(e.target.value))}
           disabled={isRunning}
-        />
-      </div>
-
-      <div className="control-row checkbox-row">
-        <label>{t('simulationControls.showPoints')}:</label>
-        <input
-          type="checkbox"
-          checked={showPoints}
-          onChange={e => setShowPoints(e.target.checked)}
         />
       </div>
 
@@ -130,11 +117,11 @@ export function SimulationControls() {
         </label>
         <input
           type="number"
-          value={threshold}
+          value={simulationThreshold}
           min={1}
           max={maxPointsPerZone}
           onChange={e =>
-            setThreshold(Math.max(1, Math.min(maxPointsPerZone, Number(e.target.value))))
+            setSimulationThreshold(Math.max(1, Math.min(maxPointsPerZone, Number(e.target.value))))
           }
           disabled={isRunning}
         />
@@ -146,30 +133,6 @@ export function SimulationControls() {
         <p>{t('simulationControls.timeSteps')}: {timeSteps.toLocaleString()}</p>
         <p><strong>{t('simulationControls.totalRays')}: {totalRays.toLocaleString()}</strong></p>
       </div>
-
-      <div className="instant-results">
-        <p>
-          {t('simulationControls.instantPower')}:{' '}
-          <strong className="instant-power-value">
-            {instantPower.toFixed(2)} kW
-          </strong>
-        </p>
-        <p className="theoretical-peak">
-          {t('simulationControls.theoreticalPeak')}: {theoreticalPeak.toFixed(2)} kW
-        </p>
-      </div>
-
-      {annualResults.size > 0 && (
-        <div className="annual-results">
-          <p className="annual-results__title">{t('simulationControls.annualResults')}</p>
-          {Array.from(annualResults.entries()).map(([setupId, { label, annualTotalKwh }]) => (
-            <p key={setupId} className="annual-results__row">
-              <span className="annual-results__label" title={label}>{label}:</span>{' '}
-              <span className="annual-results__value">{annualTotalKwh.toFixed(1)} kWh</span>
-            </p>
-          ))}
-        </div>
-      )}
 
       <AnnualSimulationProgress />
 

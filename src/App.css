@@ -1,3 +1,14 @@
+/* ── Canvas-column control panels ──────────────────────────────────────────── */
+
+/**
+ * Minimum canvas column height when the layout stacks vertically (narrow
+ * viewport). Adjust this value to change how much vertical space the 3D view
+ * occupies before the results panel begins below it.
+ */
+:root {
+  --canvas-min-height: 50vh;
+}
+
 .controls-panel {
     position: absolute;
     top: 20px;
@@ -188,18 +199,85 @@
     padding-left: 10px;
 }
 
-/* ── App container ─────────────────────────────────────────────────────────── */
+/* ── App container and two-column layout ───────────────────────────────────── */
 
 .app-container {
     width: 100vw;
     height: 100vh;
     background: #050505;
     position: relative;
+    overflow: hidden;
 }
 
 .app-loading {
     color: white;
     padding: 20px;
+}
+
+.app-layout {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    height: 100%;
+}
+
+/**
+ * Canvas column: takes all remaining width, always fills the full viewport
+ * height. The Three.js canvas renders inside this column with position:
+ * relative children (controls-panel) overlaid on top.
+ */
+.app-layout__canvas-column {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-width: 0;
+}
+
+/**
+ * Results column: fixed 380px wide on desktop. Contains the
+ * SimulationResultsPanel with a light background so text is readable against
+ * the bright surface. Scrolls vertically when content exceeds the viewport.
+ */
+.app-layout__results-column {
+    width: 380px;
+    flex-shrink: 0;
+    background: #f5f4f0;
+    overflow-y: auto;
+    height: 100%;
+    border-left: 1px solid #ddd;
+}
+
+/**
+ * Narrow viewport (< 1024px): stack columns vertically.
+ * The canvas column gets a minimum height defined by --canvas-min-height
+ * (default 50vh, easily changed via the custom property at the top of this
+ * file). The results column sits below it, expands to fit its content, and
+ * is independently scrollable.
+ */
+@media (max-width: 1024px) {
+    .app-container {
+        overflow-y: auto;
+    }
+
+    .app-layout {
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+    }
+
+    .app-layout__canvas-column {
+        height: var(--canvas-min-height);
+        flex: none;
+    }
+
+    .app-layout__results-column {
+        width: 100%;
+        height: auto;
+        min-height: 200px;
+        border-left: none;
+        border-top: 1px solid #ddd;
+        overflow-y: visible;
+    }
 }
 
 /* ── Main controls ─────────────────────────────────────────────────────────── */
@@ -327,37 +405,178 @@
     font-style: italic;
 }
 
-/* ── Annual results ─────────────────────────────────────────────────────────── */
+/* ── Simulation results panel ──────────────────────────────────────────────── */
 
-.annual-results {
-    margin-top: 8px;
-    padding-top: 10px;
-    border-top: 1px solid #444;
+.simulation-results-panel {
+    padding: 20px;
+    font-family: sans-serif;
+    color: #222;
+    min-height: 100%;
+    box-sizing: border-box;
 }
 
-.annual-results__title {
+.simulation-results-panel__title {
+    margin: 0 0 16px 0;
+    font-size: 1.1rem;
+    color: #111;
+    border-bottom: 2px solid #ddd;
+    padding-bottom: 10px;
+}
+
+.simulation-results-panel__placeholder {
+    font-size: 0.875rem;
+    color: #666;
+    line-height: 1.6;
+}
+
+.simulation-results-panel__placeholder--running {
+    color: #2e7d32;
+    font-style: italic;
+}
+
+.simulation-results-panel__selector-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+
+.simulation-results-panel__selector-label {
     font-size: 0.75rem;
-    color: #aaa;
-    margin: 0 0 6px 0;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
-.annual-results__row {
-    margin: 2px 0;
+.simulation-results-panel__selector {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 0.82rem;
+    color: #222;
+    cursor: pointer;
+}
+
+.simulation-results-panel__params {
+    background: #eee;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.simulation-results-panel__param-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+}
+
+.simulation-results-panel__param-key {
+    color: #666;
+}
+
+.simulation-results-panel__param-value {
+    font-weight: 600;
+    color: #222;
+}
+
+.simulation-results-panel__results {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.simulation-results-panel__result-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.simulation-results-panel__result-rank {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #bbb;
+    min-width: 28px;
+    text-align: center;
+}
+
+.simulation-results-panel__result-card:first-child .simulation-results-panel__result-rank {
+    color: #f9a825;
+}
+
+.simulation-results-panel__result-card:nth-child(2) .simulation-results-panel__result-rank {
+    color: #9e9e9e;
+}
+
+.simulation-results-panel__result-card:nth-child(3) .simulation-results-panel__result-rank {
+    color: #a1887f;
+}
+
+.simulation-results-panel__result-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.simulation-results-panel__result-label {
     font-size: 0.85rem;
-}
-
-.annual-results__value {
-    color: #4caf50;
-    font-weight: bold;
-}
-
-.annual-results__label {
-    font-size: 0.75rem;
-    color: #aaa;
+    color: #444;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 55%;
-    display: inline-block;
-    vertical-align: middle;
+}
+
+.simulation-results-panel__result-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #2e7d32;
+}
+
+.simulation-results-panel__result-unit {
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: #666;
+}
+
+.simulation-results-panel__live {
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid #ccc;
+}
+
+.simulation-results-panel__live-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 8px 0;
+}
+
+.simulation-results-panel__live-row {
+    margin: 4px 0;
+    font-size: 0.875rem;
+    color: #333;
+}
+
+.simulation-results-panel__live-label {
+    color: #666;
+}
+
+.simulation-results-panel__live-value {
+    font-weight: 700;
+    color: #2e7d32;
 }
