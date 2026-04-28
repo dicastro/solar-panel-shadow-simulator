@@ -1,4 +1,4 @@
-* Analiza todo el fichero `TO_DO_PREVIOUS.md`. Esos son mis comentarios previos. Con respecto a eso tengo los siguientes comentarios o cosas que no me terminan de convencer que quiero hacer antes de dar por finalizada la "fase 2" y continuar con la "fase 3"
+* Analiza todo el fichero `TO_DO_PREVIOUS.md`. Esos son mis comentarios previos con respecto a la "fase 2". Tengo comentarios adicionales o cosas que no me terminan de convencer que quiero hacer antes de dar por finalizada la "fase 2" y continuar con la "fase 3"
 
 * Antes de nada, en la anterior conversación ha habido errores con un fichero que habías modificado y yo no lo podía ver. Tú mismo te has dado cuenta de ello y al final me has acabado poniendo el contenido en plano del fichero. Había errores en comandos (como `rm`). No entiendo por qué ejecutas esos comandos de `rm` y otros. No tienes acceso a modificar el código. Tienes el código disponible en el contexto y como output final quiero los ficheros con su contenido final. No sé si cuando intentas ejecutar ciertos scripts son internos o es que estás intentando modificar el código directamente.
 
