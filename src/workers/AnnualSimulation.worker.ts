@@ -71,7 +71,7 @@ const runSimulation = (payload: WorkerSimulationPayload) => {
   const {
     setupId, setupLabel, cacheKey, year, intervalMinutes,
     latitude, longitude, irradianceSource,
-    threshold, meshes: serializedMeshes, panels,
+    density, threshold, meshes: serializedMeshes, panels,
   } = payload;
 
   const meshObjects = ThreeUtils.reconstructMeshes(serializedMeshes);
@@ -140,7 +140,8 @@ const runSimulation = (payload: WorkerSimulationPayload) => {
   meshObjects.forEach(m => m.geometry.dispose());
 
   return AnnualSimulationEngine.buildSetupResult(
-    setupId, setupLabel, cacheKey, year, intervalMinutes, irradianceSource, finalPanels,
+    setupId, setupLabel, cacheKey, year, intervalMinutes,
+    irradianceSource, density, threshold, finalPanels,
   );
 };
 

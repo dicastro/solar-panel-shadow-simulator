@@ -37,7 +37,7 @@ export function RenderControls() {
   const showPoints = useAppStore(s => s.showPoints);
   const renderDensity = useAppStore(s => s.renderDensity);
   const renderThreshold = useAppStore(s => s.renderThreshold);
-  const simulationResult = useAppStore(s => s.simulationResult);
+  const instantProductionResult = useAppStore(s => s.instantProductionResult);
   const activeSetup = useAppStore(s => s.activeSetup);
 
   const setDate = useAppStore(s => s.setDate);
@@ -65,7 +65,7 @@ export function RenderControls() {
 
   const hasMultipleSetups = (config?.setups.length ?? 0) > 1;
 
-  const instantPower = simulationResult?.instantPower ?? 0;
+  const instantPower = instantProductionResult?.power ?? 0;
   const allPanels = activeSetup?.panelArrays.flatMap(pa => pa.panels) ?? [];
   const theoreticalPeak = allPanels.reduce((sum, p) => sum + p.peakPower / 1000, 0);
   const maxPointsPerZone = renderDensity * renderDensity;

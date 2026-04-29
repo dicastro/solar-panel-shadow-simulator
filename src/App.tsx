@@ -26,7 +26,7 @@ export default function App() {
   const showPoints = useAppStore(s => s.showPoints);
   const renderDensity = useAppStore(s => s.renderDensity);
   const renderThreshold = useAppStore(s => s.renderThreshold);
-  const setSimulationResult = useAppStore(s => s.setSimulationResult);
+  const setInstantProductionResult = useAppStore(s => s.setInstantProductionResult);
   const tickHour = useAppStore(s => s.tickHour);
   const loadConfig = useAppStore(s => s.loadConfig);
 
@@ -79,7 +79,7 @@ export default function App() {
               showPoints={showPoints}
               renderDensity={renderDensity}
               renderThreshold={renderThreshold}
-              onProductionUpdate={setSimulationResult}
+              onProductionUpdate={setInstantProductionResult}
             />
           </Canvas>
         </div>

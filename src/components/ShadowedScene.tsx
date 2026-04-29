@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Site, PanelSetup, SunState } from '../types';
 import { ShadowMap, useShadowSampler } from '../hooks/useShadowSampler';
 import { useBVH } from '../hooks/useBVH';
-import { SimulationResult } from '../types/simulation';
+import { InstantProductionResult } from '../types/simulation';
 import { SolarEngine } from '../engine/SolarEngine';
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
   sun: SunState;
   density: number;
   threshold: number;
-  onProductionUpdate: (result: SimulationResult) => void;
+  onProductionUpdate: (result: InstantProductionResult) => void;
   children: (shadowMap: ShadowMap) => React.ReactNode;
 }
 
@@ -64,8 +64,6 @@ export function ShadowedScene({
   thresholdRef.current = threshold;
   onUpdateRef.current = onProductionUpdate;
 
-  // showPoints is deliberately absent: toggling point visibility must not
-  // trigger shadow recomputation.
   useEffect(() => {
     needsUpdate.current = true;
   }, [sun, activeSetup, density, threshold]);

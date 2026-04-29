@@ -1,7 +1,8 @@
 import { useMemo, useEffect } from 'react';
 import { OrbitControls, Grid } from '@react-three/drei';
 import * as THREE from 'three';
-import { Site, PanelSetup, SunState, SimulationResult } from '../types';
+import { Site, PanelSetup, SunState } from '../types';
+import { InstantProductionResult } from '../types/simulation';
 import { RailingRailRenderData, RailingSupportRenderData } from '../types/installation';
 import { ShadowMap } from '../hooks/useShadowSampler';
 import { ShadowedScene } from './ShadowedScene';
@@ -20,7 +21,7 @@ interface SceneProps {
   showPoints: boolean;
   renderDensity: number;
   renderThreshold: number;
-  onProductionUpdate: (result: SimulationResult) => void;
+  onProductionUpdate: (result: InstantProductionResult) => void;
 }
 
 function RailingRail({ data }: { data: RailingRailRenderData }) {
@@ -110,8 +111,6 @@ export function Scene({
   useEffect(() => {
     if (!isRunning || !config || !site) return;
 
-    // Build all setups using the simulation-specific density, independent of
-    // the render density used in the 3D view.
     const allSetups = config.setups.map((setupConfig, i) =>
       PanelSetupFactory.create(setupConfig, i, site, simulationDensity),
     );

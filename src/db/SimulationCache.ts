@@ -65,8 +65,14 @@ export const SimulationCache = {
    * Returns lightweight metadata for all stored results, sorted by `computedAt`
    * descending. Useful for rendering a cache management UI without loading full
    * result payloads.
+   *
+   * Includes `density` and `threshold` so the results panel can group and label
+   * simulation runs without re-deriving these values from the cache key hash.
    */
-  listResults: async (): Promise<Pick<SetupAnnualResult, 'cacheKey' | 'setupId' | 'setupLabel' | 'computedAt' | 'year' | 'intervalMinutes' | 'irradianceSource' | 'annualTotalKwh'>[]> => {
+  listResults: async (): Promise<Pick<SetupAnnualResult,
+    'cacheKey' | 'setupId' | 'setupLabel' | 'computedAt' | 'year' |
+    'intervalMinutes' | 'irradianceSource' | 'density' | 'threshold' | 'annualTotalKwh'
+  >[]> => {
     const db = await openDb();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
@@ -75,8 +81,8 @@ export const SimulationCache = {
       request.onsuccess = (event) => {
         const all = (event.target as IDBRequest<SetupAnnualResult[]>).result;
         const summaries = all
-          .map(({ cacheKey, setupId, setupLabel, computedAt, year, intervalMinutes, irradianceSource, annualTotalKwh }) => ({
-            cacheKey, setupId, setupLabel, computedAt, year, intervalMinutes, irradianceSource, annualTotalKwh,
+          .map(({ cacheKey, setupId, setupLabel, computedAt, year, intervalMinutes, irradianceSource, density, threshold, annualTotalKwh }) => ({
+            cacheKey, setupId, setupLabel, computedAt, year, intervalMinutes, irradianceSource, density, threshold, annualTotalKwh,
           }))
           .sort((a, b) => b.computedAt - a.computedAt);
         resolve(summaries);
@@ -113,4 +119,4 @@ export const SimulationCache = {
       request.onerror = (event) => reject((event.target as IDBRequest).error);
     });
   },
-}
+};

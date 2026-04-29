@@ -1,22 +1,22 @@
 import { create } from 'zustand';
 import { Config } from '../types/config';
 import { ConfigSlice, createConfigSlice } from './slices/ConfigSlice';
-import { RenderSlice, createRenderSlice } from './slices/RenderSlice.ts';
+import { RenderSlice, createRenderSlice } from './slices/RenderSlice';
 import { SimulationSlice, createSimulationSlice } from './slices/SimulationSlice';
 import { SiteFactory } from '../factory/SiteFactory';
 
 /**
  * Unified application store composed from three domain slices:
  *
- *  - configSlice  — raw configuration and derived site geometry (walls, intersections).
+ *  - ConfigSlice  — raw configuration and derived site geometry (walls, intersections).
  *                   Loaded once on startup; never changes during a session.
  *
- *  - renderSlice  — everything that drives the 3D interactive view: active setup,
- *                   date/time, timezone, playback, sun position, and the sampling
- *                   parameters (renderDensity, renderThreshold, showPoints) that affect
- *                   both point visualisation and instant production readout.
+ *  - RenderSlice  — everything that drives the 3D interactive view: active setup,
+ *                   date/time, timezone, playback, sun position, the sampling
+ *                   parameters (renderDensity, renderThreshold, showPoints) and
+ *                   the instant production result.
  *
- *  - simulationSlice — annual simulation parameters and lifecycle state. Density and
+ *  - SimulationSlice — annual simulation parameters and lifecycle state. Density and
  *                      threshold here are independent of the render controls and only
  *                      used when launching the worker-based annual simulation.
  *
@@ -32,16 +32,20 @@ import { SiteFactory } from '../factory/SiteFactory';
 type AppStore = ConfigSlice & RenderSlice & SimulationSlice;
 
 export const useAppStore = create<AppStore>((set, get) => {
-  // Cast to allow partial updates of the unified store from within each slice.
-  // Zustand's set() accepts Partial<T> so this is safe — slices only write
-  // keys they own and never overlap with each other.
-  const typedSet = set as (nextState: Partial<AppStore>) => void;
-  const typedSet2 = set as (nextStateOrUpdater: | Partial<AppStore> | ((state: AppStore) => Partial<AppStore>)) => void;
+  // Zustand's set() accepts both Partial<T> and (state: T) => Partial<T>.
+  // A single cast to the broader union satisfies all slice constructors,
+  // whether they use direct partial updates or functional updaters.
+  const typedSet = set as (
+    partialOrUpdater:
+      | Partial<AppStore>
+      | ((partial: AppStore) => Partial<AppStore>)
+  ) => void;
+
   const typedGet = get as () => AppStore;
 
   const configSlice = createConfigSlice(typedSet);
   const renderSlice = createRenderSlice(typedSet, typedGet);
-  const simulationSlice = createSimulationSlice(typedSet2);
+  const simulationSlice = createSimulationSlice(typedSet);
 
   return {
     ...configSlice,
@@ -49,18 +53,16 @@ export const useAppStore = create<AppStore>((set, get) => {
     ...simulationSlice,
 
     /**
-     * Overrides the base `loadConfig` from configSlice to also initialise the
+     * Overrides the base `loadConfig` from ConfigSlice to also initialise the
      * render slice in the same logical call:
      *
      * 1. Parse the JSON and build site geometry via SiteFactory (same logic as
-     *    configSlice.loadConfig, inlined here to avoid calling the slice version
-     *    and then calling initRender separately — two calls would produce two
-     *    store updates where one is enough).
-     * 2. Initialise the active setup and sun state (renderSlice.initRender).
+     *    ConfigSlice.loadConfig, inlined here to avoid two separate store commits).
+     * 2. Initialise the active setup and sun state (RenderSlice.initRender).
      *
      * Both steps commit to the store together, so any component that reads both
-     * `site` and `activeSetup` will never observe a state where site is set but
-     * activeSetup is not (or vice-versa).
+     * `site` and `activeSetup` will never observe a state where one is set but
+     * the other is not.
      */
     loadConfig: (config: Config) => {
       const { site, angleWarnings } = SiteFactory.create(config);

@@ -117,6 +117,8 @@ export const AnnualSimulationEngine = {
   /**
    * Builds the complete `SetupAnnualResult` from finalized panel data.
    * Pre-rolls monthly totals across all panels for fast chart rendering.
+   * Records density and threshold so the results panel can display and group
+   * by these parameters without re-deriving them from the cache key hash.
    */
   buildSetupResult: (
     setupId: string,
@@ -125,6 +127,8 @@ export const AnnualSimulationEngine = {
     year: number,
     intervalMinutes: number,
     irradianceSource: IrradianceSource,
+    density: number,
+    threshold: number,
     panels: PanelAnnualData[],
   ): SetupAnnualResult => {
     const monthlyTotalKwh = new Array<number>(12).fill(0);
@@ -147,9 +151,11 @@ export const AnnualSimulationEngine = {
       year,
       intervalMinutes,
       irradianceSource,
+      density,
+      threshold,
       panels,
       monthlyTotalKwh,
       annualTotalKwh,
     };
   },
-}
+};

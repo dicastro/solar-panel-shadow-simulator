@@ -1,6 +1,6 @@
 import SunCalc from 'suncalc';
 import * as THREE from 'three';
-import { SunState, SimulationResult, PanelSimulationResult } from '../types/simulation';
+import { InstantProductionResult, SunState } from '../types/simulation';
 import { Vector3 } from '../types/geometry';
 import { SolarPanel } from '../types/installation';
 import { ShadowMap } from '../hooks/useShadowSampler';
@@ -29,12 +29,7 @@ export const SolarEngine = {
 
     const direction: Vector3 = { x: threeDirection.x, y: threeDirection.y, z: threeDirection.z };
 
-    return {
-      altitude: sunPos.altitude,
-      azimuth: sunPos.azimuth,
-      isDaylight,
-      direction
-    };
+    return { altitude: sunPos.altitude, azimuth: sunPos.azimuth, isDaylight, direction };
   },
 
   /**
@@ -48,10 +43,6 @@ export const SolarEngine = {
 
   /**
    * Calculates the output power of a single panel based on its shaded zones.
-   *
-   * @param basePower   Peak power adjusted by the incidence factor (kW).
-   * @param shadedZones Boolean array where true means the zone is shaded.
-   * @param hasOptimizer Whether the panel has an independent DC/DC optimizer.
    *
    * Without an optimizer, bypass diodes activate for shaded zones and a 10%
    * mismatch penalty is applied to the remaining output, modelling the voltage
@@ -73,13 +64,7 @@ export const SolarEngine = {
     if (shadedCount === zonesCount) return 0;
 
     const efficiency = (zonesCount - shadedCount) / zonesCount;
-
-    if (hasOptimizer) {
-      return basePower * efficiency;
-    } else {
-      const mismatchLoss = 0.9;
-      return basePower * efficiency * mismatchLoss;
-    }
+    return hasOptimizer ? basePower * efficiency : basePower * efficiency * 0.9;
   },
 
   /**
@@ -123,14 +108,11 @@ export const SolarEngine = {
     threshold: number,
   ): boolean => {
     let shadedCount = 0;
-
     for (let row = 0; row < density; row++) {
       for (let col = 0; col < density; col++) {
-        const pointId = `${panelId}-z${zoneIndex}-r${row}-c${col}`;
-        if (shadowMap.get(pointId)) shadedCount++;
+        if (shadowMap.get(`${panelId}-z${zoneIndex}-r${row}-c${col}`)) shadedCount++;
       }
     }
-
     return shadedCount >= threshold;
   },
 
@@ -152,15 +134,12 @@ export const SolarEngine = {
     shadowMap: ShadowMap,
     density: number,
     threshold: number,
-  ): SimulationResult => {
+  ): InstantProductionResult => {
     if (!sun.isDaylight) {
-      return {
-        instantPower: 0,
-        panels: panels.map(p => ({ id: p.id, power: 0, isShaded: false })),
-      };
+      return { power: 0 };
     }
 
-    const panelResults = panels.map(panel => {
+    const panelResults = panels.map((panel, idx) => {
       const normal = SolarPanelConverter.toWorldNormal(panel);
       const incidenceFactor = SolarEngine.calculateIncidenceFactor(sun.direction, normal);
       const basePower = (panel.peakPower / 1000) * incidenceFactor;
@@ -169,34 +148,25 @@ export const SolarEngine = {
         SolarEngine.isZoneShaded(panel.id, zIdx, density, shadowMap, threshold)
       );
 
-      const power = SolarEngine.calculatePanelOutput(basePower, shadedZones, panel.hasOptimizer);
-      const isShaded = shadedZones.some(z => z);
-
       return {
-        id: panel.id,
+        panelIdx: idx,
         string: panel.string,
-        power,
+        power: SolarEngine.calculatePanelOutput(basePower, shadedZones, panel.hasOptimizer),
         peakKw: basePower,
         hasOptimizer: panel.hasOptimizer,
-        isShaded
       };
     });
 
     const stringGroups = new Map<string, StringPanelEntry[]>();
-    panelResults.forEach((p, idx) => {
+    panelResults.forEach(p => {
       const group = stringGroups.get(p.string) ?? [];
-      group.push({ panelIdx: idx, basePower: p.peakKw, power: p.power, hasOptimizer: p.hasOptimizer });
+      group.push({ panelIdx: p.panelIdx, basePower: p.peakKw, power: p.power, hasOptimizer: p.hasOptimizer });
       stringGroups.set(p.string, group);
     });
 
     const stepPowers = SolarEngine.applyStringMismatch(stringGroups, panels.length);
+    const totalPower = stepPowers.reduce((sum, p) => sum + p, 0);
 
-    let totalPower = 0;
-    const finalPanels: PanelSimulationResult[] = panelResults.map((p, idx) => {
-      totalPower += stepPowers[idx];
-      return { id: p.id, power: stepPowers[idx], isShaded: p.isShaded };
-    });
-
-    return { instantPower: totalPower, panels: finalPanels };
+    return { power: totalPower };
   },
 };

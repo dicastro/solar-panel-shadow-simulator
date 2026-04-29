@@ -388,7 +388,7 @@ The primary goal of Phase 0 is to validate every non-obvious technical assumptio
 - Install `echarts` + `echarts-for-react`.
 - Annual total bar chart comparing all setups.
 - Monthly radar chart comparing setups by month.
-- Charts load from IndexedDB on startup and update when a new simulation completes.
+- Charts load from IndexedDB when simulation selector changes.
 
 ### Phase 4 — Advanced charts
 

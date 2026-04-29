@@ -7,15 +7,13 @@ export interface SunState {
   readonly direction: Vector3;
 }
 
-export interface PanelSimulationResult {
-  readonly id: string;
-  readonly power: number;
-  readonly isShaded: boolean;
-}
-
-export interface SimulationResult {
-  readonly instantPower: number; // kW
-  readonly panels: readonly PanelSimulationResult[];
+/**
+ * Instantaneous production result for the current 3D view time step.
+ * Produced by SolarEngine.calculateInstantProduction and consumed only
+ * by RenderControls to display the instant power readout.
+ */
+export interface InstantProductionResult {
+  readonly power: number; // kW
 }
 
 export type IrradianceSource = 'geometric' | 'pvgis' | 'open-meteo';
@@ -70,6 +68,18 @@ export interface SetupAnnualResult {
   readonly year: number;
   readonly intervalMinutes: number;
   readonly irradianceSource: IrradianceSource;
+  /**
+   * Sample point density used for this simulation run (NxN points per zone).
+   * Stored alongside other parameters so the results panel can display and
+   * group by this value without re-deriving it from the cache key hash.
+   */
+  readonly density: number;
+  /**
+   * Zone shadow threshold used for this simulation run.
+   * Stored alongside other parameters so the results panel can display and
+   * group by this value without re-deriving it from the cache key hash.
+   */
+  readonly threshold: number;
   readonly panels: readonly PanelAnnualData[];
   /** Monthly totals (kWh) across all panels, pre-rolled for chart performance. */
   readonly monthlyTotalKwh: readonly number[];

@@ -1,13 +1,24 @@
 import dayjs, { Dayjs } from 'dayjs';
 import { PanelSetup, Site } from '../../types/installation';
 import { Config } from '../../types/config';
-import { SunState } from '../../types/simulation';
+import { SunState, InstantProductionResult } from '../../types/simulation';
 import { PanelSetupFactory } from '../../factory/PanelSetupFactory';
 import { SolarEngine } from '../../engine/SolarEngine';
 import { TimeUtils } from '../../utils/TimeUtils';
 
 const CURRENT_YEAR = dayjs().year();
 
+/**
+ * Constructs a dayjs object representing the given date/time components as
+ * local time in the specified IANA timezone.
+ *
+ * This is the only correct way to build dates from user-facing inputs. Using
+ * dayjs() or dayjs(string) without a timezone would interpret the components
+ * in the browser's local timezone, which may differ from the installation's
+ * timezone and cause the displayed time to diverge from what the user typed.
+ *
+ * month is 0-based (January = 0), matching dayjs convention.
+ */
 export const makeDateInTimezone = (
   year: number,
   month: number,
@@ -26,6 +37,11 @@ export const makeDateInTimezone = (
   return dayjs.tz(iso, timezone);
 };
 
+/**
+ * Minimum interface the render slice needs to read from other slices via
+ * get(). Using a structural interface avoids a circular dependency between
+ * the slice files and the AppStore facade.
+ */
 interface CrossSliceRead {
   config: Config | null;
   site: Site | null;
@@ -41,12 +57,18 @@ export interface RenderState {
   date: Dayjs;
   isPlaying: boolean;
   sun: SunState | null;
+  /** Controls point sphere visibility in the 3D view only. */
   showPoints: boolean;
+  /** Sample point density for the 3D view and instant production readout. */
   renderDensity: number;
+  /** Shadow zone threshold for the 3D view and instant production readout. */
   renderThreshold: number;
+  /** Result of the last instant production calculation for the current time step. */
+  instantProductionResult: InstantProductionResult | null;
 }
 
 export interface RenderActions {
+  /** Initialises the active setup, date, timezone, and sun from a loaded config. */
   initRender: (config: Config, site: Site, density: number) => void;
   setActiveSetupIndex: (index: number) => void;
   setTimezone: (timezone: string) => void;
@@ -57,6 +79,7 @@ export interface RenderActions {
   setShowPoints: (show: boolean) => void;
   setRenderDensity: (density: number) => void;
   setRenderThreshold: (threshold: number) => void;
+  setInstantProductionResult: (result: InstantProductionResult) => void;
 }
 
 export type RenderSlice = RenderState & RenderActions;
@@ -75,7 +98,7 @@ const clampToCurrentYear = (date: Dayjs): Dayjs => {
 };
 
 export const createRenderSlice = (
-  set: (nextState: Partial<RenderSlice>) => void,
+  set: (partial: Partial<RenderSlice>) => void,
   get: () => CrossSliceRead,
 ): RenderSlice => ({
   activeSetup: null,
@@ -87,6 +110,7 @@ export const createRenderSlice = (
   showPoints: false,
   renderDensity: 4,
   renderThreshold: 1,
+  instantProductionResult: null,
 
   initRender: (config, site, density) => {
     const timezone = config.site.timezone;
@@ -145,4 +169,6 @@ export const createRenderSlice = (
   },
 
   setRenderThreshold: (renderThreshold) => set({ renderThreshold }),
+
+  setInstantProductionResult: (instantProductionResult) => set({ instantProductionResult }),
 });

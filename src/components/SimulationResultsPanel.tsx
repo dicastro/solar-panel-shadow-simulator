@@ -1,17 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/AppStore';
 import { SimulationCache } from '../db/SimulationCache';
 
 /**
  * Describes a "simulation run" as a group of per-setup results that share
- * the same parameters (year, interval, irradiance source, density, threshold,
- * location). Because IndexedDB stores one entry per setup, results from the
- * same run must be grouped before display.
- *
- * The grouping key is the concatenation of the shared parameters — everything
- * except setupId and setupHash. Two entries with the same group key were
- * computed under identical conditions and belong to the same logical run.
+ * the same parameters (year, interval, irradiance source, density, threshold).
+ * Because IndexedDB stores one entry per setup, results from the same run
+ * must be grouped before display.
  */
 interface SimulationGroup {
   /** Stable identifier derived from shared parameters — used as React key. */
@@ -31,27 +27,31 @@ interface SimulationGroup {
 }
 
 /**
- * Builds a human-readable label for a simulation group.
- * Format is localised via the i18n key `simulationResultsPanel.groupLabel`.
- * All parameters that differentiate one run from another are included so
- * the user can identify which run they are looking at without opening details.
+ * Builds a compact, human-readable label for a simulation group shown in the
+ * selector dropdown. The density×density value and threshold are encoded as
+ * e.g. "16p1t" (16 points per zone, threshold 1) to keep the label short.
+ *
+ * Format: "2026 · 60 min · Geometric · 16p1t · 3 setup(s)"
  *
  * This function is the single place to change the label format.
  */
-const buildGroupLabel = (g: SimulationGroup, t: (key: string, opts?: Record<string, unknown>) => string): string =>
+const buildGroupLabel = (
+  g: SimulationGroup,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string =>
   t('simulationResultsPanel.groupLabel', {
     year: g.year,
     interval: g.intervalMinutes,
     irradiance: t(`simulationResultsPanel.irradiance_${g.irradianceSource}`),
+    samplingCode: `${g.density * g.density}p${g.threshold}t`,
     setups: g.setups.length,
   });
 
 /**
  * Groups flat per-setup cache entries into logical simulation runs.
- * Entries are grouped by (year, intervalMinutes, irradianceSource, density,
- * threshold) — the parameters shared across all setups of one run.
- * Within each group, setups are sorted by annualTotalKwh descending so the
- * best-performing setup appears first.
+ * Entries are grouped by all parameters that are shared across setups of
+ * one run: year, intervalMinutes, irradianceSource, density, threshold.
+ * Within each group, setups are sorted by annualTotalKwh descending.
  * Groups themselves are sorted by computedAt descending (most recent first).
  */
 const groupResults = (
@@ -60,19 +60,12 @@ const groupResults = (
   const map = new Map<string, SimulationGroup>();
 
   for (const entry of entries) {
-    // Extract density and threshold from the cache key structure.
-    // SimulationCacheKey fields: setupId, setupHash, density, threshold,
-    // intervalMinutes, latitude, longitude, year, irradianceSource.
-    // We use the fields available on the summary object directly.
     const groupKey = [
       entry.year,
       entry.intervalMinutes,
       entry.irradianceSource,
-      // density and threshold are not exposed on the summary type — we derive
-      // a proxy from the cacheKey hash by including all available shared fields.
-      // When density/threshold are added to the summary type in a future phase,
-      // this grouping will become exact. For now, entries with identical shared
-      // parameters will be grouped together correctly in the common case.
+      entry.density,
+      entry.threshold,
     ].join('|');
 
     const existing = map.get(groupKey);
@@ -83,7 +76,6 @@ const groupResults = (
         setupLabel: entry.setupLabel,
         annualTotalKwh: entry.annualTotalKwh,
       });
-      // Keep the most recent computedAt for the group
       if (entry.computedAt > existing.computedAt) {
         existing.computedAt = entry.computedAt;
       }
@@ -93,8 +85,8 @@ const groupResults = (
         year: entry.year,
         intervalMinutes: entry.intervalMinutes,
         irradianceSource: entry.irradianceSource,
-        density: 0,   // not yet in summary — placeholder
-        threshold: 0, // not yet in summary — placeholder
+        density: entry.density,
+        threshold: entry.threshold,
         computedAt: entry.computedAt,
         setups: [{
           cacheKey: entry.cacheKey,
@@ -117,41 +109,53 @@ const groupResults = (
  *
  * Displays a selector of past simulation runs loaded from IndexedDB. Selecting
  * a run shows a parameter summary and per-setup annual production ranked by
- * output. The panel also reflects results from the currently active simulation
- * run as they arrive, updating without requiring a page reload.
+ * output.
  *
  * The panel is always mounted so that the CSS flex layout reserves its column
  * width. Hiding it conditionally would collapse the 3D canvas to full width
  * and back, causing an unwanted resize event on the Three.js renderer.
  *
- * In a future phase the text results will be replaced by charts; the selector
- * and parameter summary will remain unchanged.
+ * When a simulation completes (`isRunning` transitions false), the panel
+ * reloads IndexedDB and auto-selects the most recently computed group.
+ * Partial results during an active run are not shown here — they are
+ * communicated via the progress bars in SimulationControls.
  */
 export function SimulationResultsPanel() {
   const { t } = useTranslation();
-  const annualResults = useAppStore(s => s.annualResults);
   const isRunning = useAppStore(s => s.isRunning);
 
   const [groups, setGroups] = useState<SimulationGroup[]>([]);
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
 
-  // Load cached simulation groups from IndexedDB on mount and whenever a new
-  // simulation completes (annualResults changes).
-  useEffect(() => {
+  // Track the previous isRunning value to detect the running→complete transition.
+  const prevIsRunning = useRef(isRunning);
+
+  const loadGroups = (autoSelect: boolean) => {
     SimulationCache.listResults()
       .then(entries => {
         const grouped = groupResults(entries);
         setGroups(grouped);
-        // Auto-select the most recent group if nothing is selected yet.
-        if (grouped.length > 0 && selectedGroupKey === null) {
+        if (grouped.length > 0 && (autoSelect || selectedGroupKey === null)) {
           setSelectedGroupKey(grouped[0].groupKey);
         }
       })
       .catch(err => console.warn('SimulationResultsPanel: failed to load cache', err));
-  // annualResults is intentionally included: a completed simulation must
-  // refresh the list even if the component was already mounted.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annualResults]);
+  };
+
+  // Load on mount.
+  useEffect(() => {
+    loadGroups(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reload and auto-select when a simulation run completes.
+  useEffect(() => {
+    if (prevIsRunning.current && !isRunning) {
+      loadGroups(true);
+    }
+    prevIsRunning.current = isRunning;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning]);
 
   const selectedGroup = groups.find(g => g.groupKey === selectedGroupKey) ?? null;
   const hasGroups = groups.length > 0;
@@ -228,6 +232,22 @@ export function SimulationResultsPanel() {
                 </div>
                 <div className="simulation-results-panel__param-row">
                   <span className="simulation-results-panel__param-key">
+                    {t('simulationResultsPanel.paramDensity')}
+                  </span>
+                  <span className="simulation-results-panel__param-value">
+                    {selectedGroup.density}×{selectedGroup.density}
+                  </span>
+                </div>
+                <div className="simulation-results-panel__param-row">
+                  <span className="simulation-results-panel__param-key">
+                    {t('simulationResultsPanel.paramThreshold')}
+                  </span>
+                  <span className="simulation-results-panel__param-value">
+                    {selectedGroup.threshold}
+                  </span>
+                </div>
+                <div className="simulation-results-panel__param-row">
+                  <span className="simulation-results-panel__param-key">
                     {t('simulationResultsPanel.paramSetups')}
                   </span>
                   <span className="simulation-results-panel__param-value">
@@ -270,26 +290,6 @@ export function SimulationResultsPanel() {
             </>
           )}
         </>
-      )}
-
-      {/* ── Live results from running simulation ─────────────────────────────── */}
-
-      {isRunning && annualResults.size > 0 && (
-        <div className="simulation-results-panel__live">
-          <p className="simulation-results-panel__live-title">
-            {t('simulationResultsPanel.liveResults')}
-          </p>
-          {Array.from(annualResults.entries()).map(([setupId, { label, annualTotalKwh }]) => (
-            <p key={setupId} className="simulation-results-panel__live-row">
-              <span className="simulation-results-panel__live-label" title={label}>
-                {label}:
-              </span>{' '}
-              <span className="simulation-results-panel__live-value">
-                {annualTotalKwh.toFixed(1)} kWh
-              </span>
-            </p>
-          ))}
-        </div>
       )}
     </div>
   );

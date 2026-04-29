@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { SimulationResult, IrradianceSource, SetupSimulationProgress } from '../../types/simulation';
+import { IrradianceSource, SetupSimulationProgress } from '../../types/simulation';
 
 const CURRENT_YEAR = dayjs().year();
 
@@ -18,9 +18,6 @@ export const availableSimulationYears = (): number[] =>
 export type SimulationInterval = 15 | 30 | 60;
 
 export interface SimulationState {
-  // Instant production result (current 3D view time step)
-  simulationResult: SimulationResult | null;
-
   // Annual simulation parameters — independent of render controls
   simulationDensity: number;
   simulationThreshold: number;
@@ -45,15 +42,14 @@ export interface SimulationState {
   pendingSetups: number;
 
   /**
-   * Annual results keyed by setupId. Each entry carries the setup label
-   * (for display) and the computed annual total in kWh.
-   * Populated as each setup completes, whether from cache or a fresh run.
+   * Annual production results keyed by setupId. Each entry carries the setup
+   * label (for display) and the computed annual total in kWh. Populated as
+   * each setup completes, whether from cache or a fresh run.
    */
-  annualResults: Map<string, { label: string; annualTotalKwh: number }>;
+  annualProductionResults: Map<string, { label: string; annualTotalKwh: number }>;
 }
 
 export interface SimulationActions {
-  setSimulationResult: (result: SimulationResult) => void;
   setSimulationDensity: (density: number) => void;
   setSimulationThreshold: (threshold: number) => void;
   setSimulationInterval: (interval: SimulationInterval) => void;
@@ -74,12 +70,11 @@ export type SimulationSlice = SimulationState & SimulationActions;
 
 export const createSimulationSlice = (
   set: (
-    nextStateOrUpdater:
+    partialOrUpdater:
       | Partial<SimulationSlice>
-      | ((state: SimulationSlice) => Partial<SimulationSlice>)
+      | ((partial: SimulationSlice) => Partial<SimulationSlice>)
   ) => void,
 ): SimulationSlice => ({
-  simulationResult: null,
   simulationDensity: 4,
   simulationThreshold: 1,
   simulationInterval: 60,
@@ -88,9 +83,7 @@ export const createSimulationSlice = (
   isRunning: false,
   activeProgress: new Map(),
   pendingSetups: 0,
-  annualResults: new Map(),
-
-  setSimulationResult: (simulationResult) => set({ simulationResult }),
+  annualProductionResults: new Map(),
 
   setSimulationDensity: (simulationDensity) => set({ simulationDensity }),
 
@@ -107,27 +100,27 @@ export const createSimulationSlice = (
       isRunning: true,
       activeProgress: new Map(),
       pendingSetups: 0,
-      annualResults: new Map<string, { label: string; annualTotalKwh: number }>(),
+      annualProductionResults: new Map<string, { label: string; annualTotalKwh: number }>(),
     }),
 
   stopSimulation: () =>
     set({ isRunning: false, activeProgress: new Map(), pendingSetups: 0 }),
 
   updateProgress: (progress) =>
-    set(state => ({
+    set((state) => ({
       activeProgress: new Map(state.activeProgress).set(progress.setupId, progress),
     })),
 
   markSetupComplete: (setupId) =>
-    set(state => {
+    set((state) => {
       const next = new Map(state.activeProgress);
       next.delete(setupId);
       return { activeProgress: next };
     }),
 
   setSetupResult: (setupId, label, annualTotalKwh) =>
-    set(state => ({
-      annualResults: new Map(state.annualResults).set(setupId, { label, annualTotalKwh }),
+    set((state) => ({
+      annualProductionResults: new Map(state.annualProductionResults).set(setupId, { label, annualTotalKwh }),
     })),
 
   setPendingSetups: (pendingSetups) => set({ pendingSetups }),

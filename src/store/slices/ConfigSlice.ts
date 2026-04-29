@@ -16,7 +16,7 @@ export interface ConfigActions {
 export type ConfigSlice = ConfigState & ConfigActions;
 
 export const createConfigSlice = (
-  set: (nextState: Partial<ConfigSlice>) => void,
+  set: (partial: Partial<ConfigSlice>) => void,
 ): ConfigSlice => ({
   config: null,
   site: null,
