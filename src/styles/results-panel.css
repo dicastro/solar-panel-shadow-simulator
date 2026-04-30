@@ -1,0 +1,453 @@
+/* ── Results panel — floating resizable overlay ────────────────────────────── */
+
+/*
+ * The results panel floats as a fixed overlay on the right side of the screen,
+ * on top of the 3D canvas. Width is controlled by JS (inline style). The drag
+ * handle on the left edge allows the user to resize it freely.
+ *
+ * States:
+ *  - Normal: right-anchored, user-defined width (default: 420px)
+ *  - Minimised: width 0, only the restore button is visible
+ *  - Fullscreen: width 100vw
+ */
+
+.results-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  z-index: 50;
+  display: flex;
+  flex-direction: row;
+  pointer-events: none; /* children re-enable as needed */
+}
+
+/* Drag handle — the grabbable left edge */
+.results-overlay__drag-handle {
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s ease;
+  pointer-events: all;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.results-overlay__drag-handle:hover,
+.results-overlay__drag-handle--dragging {
+  background: rgba(76, 175, 80, 0.5);
+}
+
+/* The actual panel body */
+.results-overlay__panel {
+  background: var(--color-bg-panel-light);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: all;
+  border-left: 1px solid var(--color-border-light);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.25);
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Restore button shown when panel is minimised ──────────────────────────── */
+
+.results-overlay__restore-btn {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 51;
+  background: var(--color-accent-green-dark);
+  color: white;
+  border: none;
+  border-radius: 6px 0 0 6px;
+  padding: 12px 6px;
+  cursor: pointer;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 0.75rem;
+  font-weight: bold;
+  font-family: sans-serif;
+  letter-spacing: 0.05em;
+  pointer-events: all;
+  transition: background 0.2s ease;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
+}
+
+.results-overlay__restore-btn:hover {
+  background: #388e3c;
+}
+
+/* ── Panel header ──────────────────────────────────────────────────────────── */
+
+.results-panel__header {
+  height: var(--results-panel-header-height);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: #fff;
+  border-bottom: 1px solid var(--color-border-light);
+  flex-shrink: 0;
+}
+
+.results-panel__header-title {
+  font-family: sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.results-panel__selector {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background: #f9f9f9;
+  font-size: 0.78rem;
+  color: #222;
+  cursor: pointer;
+}
+
+/* Panel control buttons (minimise, fullscreen, reset) */
+.results-panel__header-btns {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.results-panel__icon-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background: #f0f0f0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  color: #555;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.results-panel__icon-btn:hover {
+  background: #e0e0e0;
+  border-color: #bbb;
+  color: #222;
+}
+
+/* ── Setup legend ──────────────────────────────────────────────────────────── */
+
+.results-panel__legend {
+  height: var(--results-panel-legend-height);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  background: #fafafa;
+  border-bottom: 1px solid var(--color-border-light);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+
+.results-panel__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #444;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+
+.results-panel__legend-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.results-panel__legend-item--inactive {
+  opacity: 0.35;
+}
+
+.results-panel__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Tab bar ───────────────────────────────────────────────────────────────── */
+
+.results-panel__tabs {
+  height: var(--results-panel-tabs-height);
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 2px solid var(--color-border-light);
+  background: #fff;
+}
+
+.results-panel__tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #888;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.15s ease;
+  letter-spacing: 0.03em;
+}
+
+.results-panel__tab:hover {
+  color: #444;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.results-panel__tab--active {
+  color: var(--color-accent-green-dark);
+  border-bottom-color: var(--color-accent-green-dark);
+}
+
+/* ── Tab content area ──────────────────────────────────────────────────────── */
+
+.results-panel__content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Empty / loading states ────────────────────────────────────────────────── */
+
+.results-panel__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  font-family: sans-serif;
+  font-size: 0.875rem;
+  color: #777;
+  line-height: 1.6;
+}
+
+.results-panel__loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-family: sans-serif;
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.results-panel__spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #ddd;
+  border-top-color: var(--color-accent-green);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Section headings within tabs ──────────────────────────────────────────── */
+
+.results-section__title {
+  font-family: sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 10px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.results-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Chart containers ──────────────────────────────────────────────────────── */
+
+.results-chart {
+  width: 100%;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  overflow: hidden;
+}
+
+/* ── Time selectors (month / day pickers) ──────────────────────────────────── */
+
+.results-selector-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-family: sans-serif;
+  font-size: 0.8rem;
+  color: #555;
+  flex-wrap: wrap;
+}
+
+.results-selector-row label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.results-selector-row select {
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 0.8rem;
+  color: #222;
+  cursor: pointer;
+}
+
+/* ── Heat map panel grid ───────────────────────────────────────────────────── */
+
+.heatmap-container {
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.heatmap-array {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.heatmap-array__label {
+  font-family: sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #888;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.heatmap-array__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.heatmap-array__row {
+  display: flex;
+  gap: 3px;
+}
+
+.heatmap-panel-cell {
+  flex: 1;
+  aspect-ratio: 0.5; /* portrait panel proportions */
+  border-radius: 3px;
+  position: relative;
+  cursor: default;
+  transition: transform 0.1s ease;
+  min-width: 24px;
+  min-height: 40px;
+}
+
+.heatmap-panel-cell:hover {
+  transform: scale(1.05);
+  z-index: 2;
+}
+
+.heatmap-panel-cell__label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.5rem;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  pointer-events: none;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.heatmap-panel-cell__tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 20, 20, 0.92);
+  color: #fff;
+  font-family: sans-serif;
+  font-size: 0.7rem;
+  padding: 5px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.heatmap-panel-cell:hover .heatmap-panel-cell__tooltip {
+  display: block;
+}
+
+/* Scale bar shown below each heat map */
+.heatmap-scale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: sans-serif;
+  font-size: 0.7rem;
+  color: #777;
+  margin-top: 4px;
+}
+
+.heatmap-scale__bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #2ecc71, #f1c40f, #e74c3c);
+}

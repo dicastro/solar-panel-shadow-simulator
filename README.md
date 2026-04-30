@@ -16,10 +16,11 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 8. [Solar production model](#solar-production-model)
 9. [Shadow detection — Raycasting + BVH](#shadow-detection--raycasting--bvh)
 10. [Annual simulation](#annual-simulation)
-11. [Application layout](#application-layout)
-12. [Timezone and DST](#timezone-and-dst)
-13. [Known limitations](#known-limitations)
-14. [Lessons learned](#lessons-learned)
+11. [Results panel](#results-panel)
+12. [Application layout](#application-layout)
+13. [Timezone and DST](#timezone-and-dst)
+14. [Known limitations](#known-limitations)
+15. [Lessons learned](#lessons-learned)
 
 ---
 
@@ -31,7 +32,7 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Estimates instantaneous power output in kW, applying bypass-diode, string-mismatch and optimizer logic.
 - Supports multiple installation layouts ("setups") selectable via the UI.
 - Runs a full annual simulation for all configured setups in parallel Web Workers, accumulating energy (kWh) per panel broken down by month, day, and hour. Results are cached in IndexedDB so re-running the same configuration is instant.
-- Displays annual results in a dedicated right-column panel alongside the 3D viewport, with a responsive stacked layout on narrow screens. Past simulation runs can be selected and compared from a dropdown.
+- Displays annual results in a floating resizable overlay panel with three tabs (Annual, Monthly, Daily), each containing a Production section (ECharts charts) and a Shadows section (per-panel heat maps). A shared legend lets the user toggle setups on/off and all charts update accordingly.
 - Validates the wall configuration and displays a prominent warning listing the exact config-space coordinate triples that form non-90° or non-180° angles.
 
 ---
@@ -47,6 +48,7 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 | Sun position         | `suncalc`                       | Altitude + azimuth from lat/lon/date     |
 | Date handling        | `dayjs` + UTC/timezone plugins  | Timezone-aware date arithmetic           |
 | Global state         | `zustand`                       | Minimal, selector-based store            |
+| Charts               | `echarts` + `echarts-for-react` | Bar, radar, line charts; interactive tooltips |
 | i18n                 | `i18next` + `react-i18next`     | EN/ES support, lazy-loaded JSON          |
 | Build                | Vite                            | Fast HMR, static output for GitHub Pages |
 
@@ -56,23 +58,28 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 
 ```
 src/
-├── App.tsx                        # Root: loads config, wires two-column layout + canvas
+├── App.tsx                        # Root: loads config, full-viewport canvas + overlay panel
 ├── i18n.ts                        # i18next initialisation
 │
+├── styles/                        # CSS modules (imported via styles/index.css)
+│   ├── index.css                  # Barrel import
+│   ├── base.css                   # CSS custom properties and shared variables
+│   ├── layout.css                 # App container, angle-warning banner
+│   ├── controls.css               # Control panels, buttons, developer footer
+│   ├── simulation.css             # Annual simulation progress bars
+│   └── results-panel.css          # Floating resizable results panel, tabs, heat maps
+│
 ├── types/
-│   ├── config.ts                  # JSON config shapes (InstallationConfiguration, ...)
-│   ├── geometry.ts                # PointXZ, Vector3, Euler3, AngleWarning (renderer-agnostic)
+│   ├── config.ts                  # JSON config shapes
+│   ├── geometry.ts                # PointXZ, Vector3, Euler3, AngleWarning
 │   ├── installation.ts            # Domain models: Site, Wall, SolarPanel, ...
-│   ├── simulation.ts              # SunState, InstantProductionResult, annual simulation types,
-│   │                              #   worker message protocol, SimulationPanelData, ...
+│   ├── results.ts                 # SimulationGroup, SimulationGroupSetup, LoadedSetupResult
+│   ├── simulation.ts              # SunState, annual simulation types, worker protocol
 │   └── index.ts                   # Re-exports
 │
 ├── engine/
-│   ├── SolarEngine.ts             # Pure functions: sun state, incidence, panel output,
-│   │                              #   string mismatch. Used by both the interactive view
-│   │                              #   and the annual simulation worker.
-│   └── AnnualSimulationEngine.ts  # Pure accumulation functions: initAccumulators,
-│                                  #   accumulateStep, finalizePanel, buildSetupResult.
+│   ├── SolarEngine.ts             # Pure functions: sun state, incidence, panel output, string mismatch
+│   └── AnnualSimulationEngine.ts  # Pure accumulation: initAccumulators, accumulateStep, finalizePanel
 │
 ├── factory/
 │   ├── SiteFactory.ts             # Config → Site (walls, intersections, angle validation)
@@ -90,24 +97,23 @@ src/
 │   └── SolarPanelConverter.ts     # SolarPanel → SimulationPanelData / world normal
 │
 ├── store/
-│   ├── AppStore.ts                # Zustand facade: composes all slices into useAppStore.
-│   │                              #   Re-exports makeDateInTimezone, availableSimulationYears,
-│   │                              #   SimulationInterval for consumer convenience.
+│   ├── AppStore.ts                # Zustand facade composing all slices
 │   └── slices/
 │       ├── ConfigSlice.ts         # config, site, angleWarnings, loadConfig
 │       ├── RenderSlice.ts         # active setup, date/time, timezone, playback, sun,
 │       │                          #   showPoints, renderDensity, renderThreshold,
-│       │                          #   instantProductionResult.
-│       │                          #   Also exports makeDateInTimezone.
+│       │                          #   instantProductionResult. Exports makeDateInTimezone.
 │       └── SimulationSlice.ts     # simulationDensity, simulationThreshold, interval, year,
 │                                  #   irradianceSource, isRunning, progress,
 │                                  #   annualProductionResults.
-│                                  #   Also exports availableSimulationYears, SimulationInterval.
+│                                  #   Exports availableSimulationYears, SimulationInterval.
 │
 ├── hooks/
 │   ├── useBVH.ts                  # Builds BVH over shadow-casting meshes
 │   ├── useShadowSampler.ts        # Casts rays, returns ShadowMap (interactive)
-│   └── useAnnualSimulation.ts     # Orchestrates worker pool for annual simulation
+│   ├── useAnnualSimulation.ts     # Orchestrates worker pool for annual simulation
+│   ├── useResultsPanel.ts         # State for results panel: groups, selection, lazy loading
+│   └── useResizablePanel.ts       # Drag-to-resize, minimise, fullscreen for the overlay
 │
 ├── db/
 │   └── SimulationCache.ts         # IndexedDB wrapper for SetupAnnualResult persistence
@@ -117,6 +123,7 @@ src/
 │
 └── utils/
     ├── HashUtils.ts               # FNV-1a 32-bit hash
+    ├── SetupColours.ts            # Colour palette assigned by setup index (shared across charts)
     ├── SimulationCacheUtils.ts    # buildCacheKey() and hashCacheKey()
     ├── PointXZUtils.ts            # 2D geometry helpers
     ├── RailingUtils.ts            # Railing rail render data builder
@@ -129,19 +136,21 @@ src/
     ├── SolarPanelComponent.tsx    # Single panel render (purely presentational)
     ├── Sun.tsx                    # Sun sphere + directional light
     ├── Compass.tsx                # N/S/E/W labels in 3D
-    ├── RenderControls.tsx         # Top-left panel: setup selector, date/time/play controls,
-    │                              #   timezone/language, render sampling controls
-    │                              #   (showPoints, renderDensity, renderThreshold),
-    │                              #   and the instant production readout.
-    ├── SimulationControls.tsx     # Bottom-left panel: annual simulation parameters
-    │                              #   (simulationDensity, simulationThreshold, interval,
-    │                              #   year, irradiance source) and run/stop button.
-    ├── SimulationResultsPanel.tsx # Right-column panel: selector of past simulation runs
-    │                              #   loaded from IndexedDB, parameter summary, and
-    │                              #   per-setup results ranked by annual production.
+    ├── RenderControls.tsx         # Top-left panel: setup selector, date/time/play, sampling
+    ├── SimulationControls.tsx     # Bottom-left panel: annual simulation parameters + run/stop
+    ├── SimulationResultsPanel.tsx # Floating resizable overlay: header, legend, tabs
     ├── AnnualSimulationProgress.tsx  # Per-setup progress bars with ETA
     ├── AngleWarningBanner.tsx     # Warning banner for non-90° angles
-    └── DeveloperFooter.tsx        # Ko-fi link + personal site
+    ├── DeveloperFooter.tsx        # Ko-fi link + personal site
+    └── results/                   # Chart and tab components for the results panel
+        ├── AnnualTab.tsx          # Annual tab: bar chart + radar + annual heat map
+        ├── MonthlyTab.tsx         # Monthly tab: month selector + daily line + monthly heat map
+        ├── DailyTab.tsx           # Daily tab: month+day selector + hourly line + daily heat map
+        ├── AnnualBarChart.tsx     # Horizontal bar chart: annualTotalKwh per setup
+        ├── MonthlyRadarChart.tsx  # Radar chart: monthlyTotalKwh by month per setup
+        ├── MonthlyLineChart.tsx   # Line chart: daily production totals for a selected month
+        ├── DailyLineChart.tsx     # Line chart: hourly production for a selected day
+        └── PanelShadowHeatmap.tsx # Physical panel grid coloured by shade fraction
 ```
 
 ---
@@ -170,88 +179,62 @@ A half-cylinder uses `openEnded=true` and `thetaLength=Math.PI`. `thetaStart` se
 
 ### Two independent density/threshold parameters
 
-The application exposes two separate pairs of density and threshold controls:
-
-- `renderDensity` / `renderThreshold` — live in `RenderSlice`. Control the sample points visible in the 3D view and the instant production readout. Changing them rebuilds the active setup's sample points immediately and triggers a new shadow pass.
-- `simulationDensity` / `simulationThreshold` — live in `SimulationSlice`. Used exclusively when launching an annual simulation run. Changing them has no effect on the 3D view.
-
-`showPoints` belongs only to `RenderSlice` — it has no meaning in the annual simulation context.
-
-### Instant production vs annual production results
-
-`instantProductionResult` (`InstantProductionResult`) lives in `RenderSlice` and holds only the current time step's total power in kW. It is produced by `SolarEngine.calculateInstantProduction` and consumed exclusively by `RenderControls` for the live readout.
-
-`annualProductionResults` lives in `SimulationSlice` and is a `Map<setupId, { label, annualTotalKwh }>` populated as worker results arrive. These are distinct concerns: one is a live render artifact, the other is the output of a long-running background computation.
-
-The type `InstantProductionResult` has a single field `power: number`. There is no per-panel breakdown at the type level — string mismatch and optimizer logic are applied inside `SolarEngine.calculateInstantProduction` before the result is returned.
-
-### Setup selection by index, id derived from label
-
-`PanelSetupConfiguration` has no `id` field. `PanelSetupFactory.create` derives a stable internal id from the label plus the index suffix, guaranteeing uniqueness even if two setups share the same normalised label.
+- `renderDensity` / `renderThreshold` — live in `RenderSlice`. Control the 3D view and instant production readout.
+- `simulationDensity` / `simulationThreshold` — live in `SimulationSlice`. Used exclusively when launching an annual simulation run.
 
 ### Store architecture — slice pattern with facade
 
-The global store is structured as three domain slices composed behind a single `useAppStore` facade:
+Three domain slices composed behind a single `useAppStore` facade:
+- `ConfigSlice` — configuration and site geometry.
+- `RenderSlice` — interactive 3D view state.
+- `SimulationSlice` — annual simulation parameters and lifecycle state.
 
-- `ConfigSlice` — configuration and site geometry. Owns `config`, `site`, `angleWarnings`, and `loadConfig`.
-- `RenderSlice` — interactive 3D view state. Owns `activeSetup`, `activeSetupIndex`, `date`, `timezone`, `isPlaying`, `sun`, `showPoints`, `renderDensity`, `renderThreshold`, `instantProductionResult`, and all their actions.
-- `SimulationSlice` — annual simulation state. Owns `simulationDensity`, `simulationThreshold`, `simulationInterval`, `simulationYear`, `irradianceSource`, `isRunning`, `activeProgress`, `pendingSetups`, `annualProductionResults`, and all their actions.
+Each slice is a pure function. Slices never import each other. The facade is the only place where slices interact. A single `typedSet` cast satisfies all three slice constructors.
 
-Each slice is a pure function `createXxxSlice(set, get?) => SliceType`. Slices never import each other — cross-slice reads in `RenderSlice` go through a `CrossSliceRead` interface, avoiding circular imports.
+### Results panel — floating resizable overlay
 
-The facade (`AppStore.ts`) uses a single `typedSet` cast that accepts both `Partial<AppStore>` and `(state: AppStore) => Partial<AppStore>`. This satisfies all three slice constructors with one cast, avoiding the need for multiple differently-typed set variants. Slices that use functional updaters (e.g. `updateProgress`, `markSetupComplete`, `setSetupResult` in `SimulationSlice`) require the updater form because they read current Map state before writing.
+The results panel is a `position: fixed` overlay that sits on top of the 3D canvas on the right side of the screen. This avoids any resize event on the Three.js renderer when the panel is opened, closed, or resized, because the canvas always fills `100vw × 100vh`.
 
-The facade overrides `loadConfig` to coordinate config parsing and render initialisation in a single store commit.
+The drag handle on the left edge of the panel uses `mousedown` → `mousemove` on `document` → `mouseup` to track the cursor across the full viewport while dragging. Width state lives in `useResizablePanel`. Panel state is one of `normal | minimised | fullscreen`. When minimised, a vertical restore button appears on the right edge.
+
+### Results panel — state management
+
+All results panel state lives in `useResultsPanel` (a custom hook), not in Zustand. The state is purely UI-local to the panel: selected simulation group, active tab, which setups are visible in the legend, and the lazily loaded full result data. Zustand is not the right tool for component-scoped state.
+
+### Lazy loading of full result data
+
+`SimulationCache.listResults()` returns only lightweight metadata (no per-panel energy arrays). When the user selects a simulation group in the dropdown, `useResultsPanel` calls `SimulationCache.getResult(cacheKey)` for each setup in the group via `Promise.all`. A loading spinner is shown during this fetch. Full data is then held in `loadedResults` state and reused across tab switches until the selected group changes.
+
+### Setup colour palette — single source of truth
+
+`src/utils/SetupColours.ts` exports a fixed array of eight visually distinct colours and a `getSetupColour(index)` helper. Colour assignment is by position in the sorted group (best-producing setup is always colour 0). Every chart component and the legend use this same function, guaranteeing cross-chart colour consistency.
+
+### Shared legend with toggle
+
+The legend above the tabs renders one button per setup. Clicking a button toggles that setup's ID in the `activeSetupIds: Set<string>` state. Every chart filters its input data to only the active setups before building its ECharts option. At least one setup must remain active — toggling the last active setup is a no-op.
+
+### CSS fragmentation into modules
+
+`App.css` has been replaced by `src/styles/index.css`, which is a barrel import of five focused files:
+- `base.css` — CSS custom properties.
+- `layout.css` — app container, angle-warning banner.
+- `controls.css` — control panels, buttons, developer footer.
+- `simulation.css` — annual simulation progress bars.
+- `results-panel.css` — floating overlay, tabs, heat maps.
+
+### Panel shadow heat map — physical layout
+
+`PanelShadowHeatmap` groups panels by `arrayIndex`, then arranges them in a grid of `rows × cols` using each panel's `row` and `col` fields from `PanelAnnualData`. The shade colour interpolates green (0%) → yellow (50%) → red (100%) using RGB interpolation. A scale bar is shown below each heat map. Hovering a cell shows a tooltip with the panel ID and exact shade percentage.
+
+The orientation follows the Three.js coordinate convention used throughout the project: row 0 is the northernmost row, column 0 is the westernmost column. Arrays are separated by a visible gap and labelled.
 
 ### `SimulationResultsPanel` — auto-select on completion, no live results
 
-The results panel does not show partial results during an active run. Progress is communicated by the bars in `SimulationControls`. When `isRunning` transitions from `true` to `false`, the panel reloads IndexedDB and auto-selects the most recently computed group. This is tracked with a `useRef` holding the previous `isRunning` value — a `useEffect` that only fires on transition, not on every render.
+The panel does not show partial results during an active run. When `isRunning` transitions from `true` to `false`, `useResultsPanel` reloads IndexedDB and auto-selects the most recently computed group. This is tracked with a `useRef` holding the previous `isRunning` value — a `useEffect` that only fires on transition.
 
 ### Simulation results grouping
 
-IndexedDB stores one `SetupAnnualResult` per setup. `SimulationResultsPanel` groups entries by `(year, intervalMinutes, irradianceSource, density, threshold)` to present them as a single "simulation run". The group label encodes density and threshold compactly as `NNpMt` (e.g. `16p1t` = 16 points per zone, threshold 1). The format is defined in a single `buildGroupLabel` function driven by the i18n key `simulationResultsPanel.groupLabel`.
-
-`density` and `threshold` are stored directly on `SetupAnnualResult` and exposed by `SimulationCache.listResults()`, so grouping and labelling use real values rather than proxies.
-
-### Layout — minimum canvas height via CSS custom property
-
-The minimum height of the canvas column in the stacked (narrow) layout is controlled by the `--canvas-min-height` CSS custom property in `App.css` (default `50vh`).
-
-### Wall geometry — only 90° angles are supported
-
-`SiteFactory` emits `angleWarnings` for any non-right-angle vertices, which `AngleWarningBanner` renders.
-
-### `RailingUtils` — shared railing render data builder
-
-Adding a new shape requires editing only `RailingUtils.buildRailRenderData`.
-
-### `engine/` — separation of physics from orchestration
-
-`SolarEngine.ts` is importable in both the main thread and workers. `AnnualSimulationEngine.ts` provides pure accumulation functions with no Three.js or worker dependencies.
-
-### `SolarPanelConverter.toWorldNormal` — single source of truth for panel normals
-
-Used by `SolarEngine.calculateInstantProduction` (interactive) and `SolarPanelConverter.toSimulationPanelData` (pre-computation before worker transfer).
-
-### `MeshFactory` — independent copies per worker
-
-Each call to `MeshFactory.fromScene(scene).build()` produces a fresh `MeshBatch`. This is the only safe pattern when multiple workers each need a zero-copy transfer.
-
-### Cache key computed once per setup in `useAnnualSimulation`
-
-Computed once at the start of `run()`, reused for both the IndexedDB lookup and the worker payload.
-
-### No inline styles in components
-
-All visual styling is defined in `App.css` using class names.
-
-### i18n key structure
-
-- `renderControls.*` — keys for `RenderControls`
-- `simulationControls.*` — keys for `SimulationControls`
-- `simulationResultsPanel.*` — keys for `SimulationResultsPanel`
-- `angleWarning.*` — keys for `AngleWarningBanner`
-- Top-level keys (`title`, `loading`, `coordinates.*`, `footer.*`) are shared
+IndexedDB stores one `SetupAnnualResult` per setup. `useResultsPanel` groups entries by `(year, intervalMinutes, irradianceSource, density, threshold)`. The group label encodes density and threshold compactly as `NNpMt`. `density` and `threshold` are stored directly on `SetupAnnualResult` and exposed by `SimulationCache.listResults()`.
 
 ---
 
@@ -459,7 +442,7 @@ Keyed by `SimulationCacheKey` (setup geometry hash, density, threshold, interval
 
 ### IndexedDB persistence
 
-`SimulationCache` provides a Promise-based wrapper. `listResults()` exposes `density` and `threshold` alongside the other summary fields so `SimulationResultsPanel` can group and label runs without re-deriving these values from the cache key hash.
+`SimulationCache` provides a Promise-based wrapper. `listResults()` exposes `density` and `threshold` alongside the other summary fields so `useResultsPanel` can group and label runs without re-deriving these values from the cache key hash.
 
 ### Output data model
 
@@ -471,39 +454,49 @@ PanelAnnualData.zoneShadeFraction [zone][month][dayOfMonth][hourOfDay]
 
 `SetupAnnualResult` also carries `density`, `threshold`, pre-rolled `monthlyTotalKwh` and `annualTotalKwh`.
 
-### Annual simulation and the Canvas tree
+---
 
-`useAnnualSimulation` calls `useThree()` internally. `Scene.tsx` is always rendered inside `<Canvas>` in `App.tsx`, making it the correct host.
+## Results panel
+
+### Layout and interaction
+
+The results panel is a `position: fixed` overlay anchored to the right edge of the viewport. It sits above the 3D canvas and render/simulation controls, which remain fully functional beneath it.
+
+The left edge of the panel is a drag handle. Dragging it resizes the panel freely between a minimum of 280px and `100vw`. Four icon buttons in the header control panel state:
+
+| Button | Action |
+|--------|--------|
+| ⟳ | Reset to default width (420px) |
+| ⛶ / ⊠ | Toggle fullscreen (100vw) |
+| ✕ | Minimise (collapses to zero; a vertical restore button appears on the right edge) |
+
+### Content organisation
+
+Content is divided into three tabs:
+
+| Tab | Production section | Shadows section |
+|-----|--------------------|-----------------|
+| **Annual** | Horizontal bar chart (annual kWh per setup) + radar chart (monthly distribution) | Panel heat map — annual average shade fraction |
+| **Monthly** | Line chart — daily production totals for selected month | Panel heat map — monthly average shade fraction |
+| **Daily** | Line chart — hourly production for selected month + day | Panel heat map — daily average shade fraction |
+
+### Shared legend
+
+A strip of toggle buttons above the tab bar shows one coloured pill per setup. Clicking a pill toggles that setup's visibility across all charts simultaneously. The last active setup cannot be deactivated.
+
+### Setup colour consistency
+
+`src/utils/SetupColours.ts` defines a fixed eight-colour palette. Colour assignment is by the setup's rank within the simulation group (the highest-producing setup is always colour 0). Every chart and the legend use `getSetupColour(index)`, guaranteeing that a given setup has the same colour in every chart.
+
+### Panel shadow heat map
+
+Each setup gets its own heat map. Panels are arranged in their physical grid layout (North top, South bottom, West left, East right). Multiple arrays within a setup are shown as separate sub-grids with a label. The shade colour scale interpolates green (0%) → yellow (50%) → red (100%). Hovering a cell shows a tooltip with the panel ID and exact shade percentage.
 
 ---
 
 ## Application layout
 
-### Two-column split
-
-```
-Desktop (≥ 1024px):
-┌─────────────────────┬──────────────────────┐
-│                     │                      │
-│   3D Canvas         │   Results Panel      │
-│   + 3D controls     │   (light background) │
-│                     │                      │
-└─────────────────────┴──────────────────────┘
-
-Mobile / narrow (< 1024px):
-┌──────────────────────┐
-│   3D Canvas          │  ← min-height: --canvas-min-height (default 50vh)
-│   + 3D controls      │
-├──────────────────────┤
-│   Results Panel      │  ← expands to content height, scrollable
-└──────────────────────┘
-```
-
-The results column has a light off-white background (`#f5f4f0`).
-
-### SimulationResultsPanel
-
-Three content states: empty+idle, empty+running, results available. Partial results during a run are not shown — only completed runs loaded from IndexedDB. Auto-selects the most recent run on completion.
+The canvas fills the full viewport (`100vw × 100vh`). All UI elements — render controls, simulation controls, developer footer, and the results panel — are absolute or fixed overlays. This avoids any resize event on the Three.js renderer when the results panel is opened, closed, or resized.
 
 ---
 
@@ -522,6 +515,7 @@ Three content states: empty+idle, empty+running, results available. Partial resu
 - **No diffuse irradiance**: only direct (beam) irradiance modelled geometrically. PVGIS and Open-Meteo planned.
 - **Rail extensions end in a 90° cut**: a 45° mitre would require custom `BufferGeometry`.
 - **`window.confirm` for stop confirmation**: native dialog used. Custom modal straightforward to add.
+- **Drag-to-resize is mouse-only**: touch / trackpad pinch not supported.
 
 ---
 
@@ -569,36 +563,44 @@ Synchronous, ~10 lines, public domain, negligible collision probability for conf
 
 ### Slice pattern with facade for global store
 
-Each slice owns a clearly bounded domain. Cross-slice reads use a structural interface to avoid circular imports. The facade is the only place where slices interact. A single `typedSet` cast that accepts both `Partial<AppStore>` and `(state: AppStore) => Partial<AppStore>` satisfies all three slice constructors — slices that need functional updaters (to read current Map state before writing) work correctly without a separate cast variable.
+Each slice owns a clearly bounded domain. Cross-slice reads use a structural interface to avoid circular imports. A single `typedSet` cast satisfies all three slice constructors.
 
 ### Two independent sampling parameter pairs
 
-`renderDensity`/`renderThreshold` and `simulationDensity`/`simulationThreshold` are fully independent. Each control surface affects only what it is responsible for.
+`renderDensity`/`renderThreshold` and `simulationDensity`/`simulationThreshold` are fully independent.
 
 ### Instant production is a render artifact, not a simulation result
 
-`InstantProductionResult` with a single `power` field lives in `RenderSlice`. It has nothing to do with the annual simulation workers. Naming it clearly and placing it in the correct slice eliminates the false impression that the 3D view and the worker pipeline share result state.
+`InstantProductionResult` with a single `power` field lives in `RenderSlice`.
 
 ### Simulation results grouped at display time, not at storage time
 
-IndexedDB stores one entry per setup. Grouping at display time in `SimulationResultsPanel` keeps the storage model simple. `density` and `threshold` are stored on `SetupAnnualResult` and exposed by `listResults()` so grouping is exact.
+IndexedDB stores one entry per setup. Grouping at display time in `useResultsPanel` keeps the storage model simple.
 
 ### Compact sampling code in selector label
 
-`16p1t` encodes density² and threshold in the dropdown without making the label unreadably long. The format is defined in `buildGroupLabel` and driven by the i18n key `simulationResultsPanel.groupLabel`.
+`16p1t` encodes density² and threshold in the dropdown without making the label unreadably long.
 
 ### Auto-select on simulation completion via `useRef` transition detection
 
-Comparing `prevIsRunning.current !== isRunning` inside a `useEffect` fires exactly once on the running→complete transition, avoiding spurious reloads on unrelated re-renders.
+Comparing `prevIsRunning.current !== isRunning` inside a `useEffect` fires exactly once on the running→complete transition.
 
-### CSS custom property for canvas minimum height
+### Fixed overlay panel avoids canvas resize
 
-`--canvas-min-height` at `:root` is the single knob for adjusting the stacked layout.
+Making the results panel a `position: fixed` overlay means the Three.js `<Canvas>` always occupies `100vw × 100vh`. Opening, closing, or resizing the results panel has no effect on the renderer's viewport, avoiding the resize event that would otherwise trigger a Three.js camera and renderer recalculation.
 
-### Light background for results panel — no shared body background
+### Component-scoped state stays out of Zustand
 
-`background: #f5f4f0` on `.app-layout__results-column` only. The rest of the app remains dark.
+The results panel's selected group, active tab, legend toggles, and loaded data are all managed by `useResultsPanel`, a custom hook local to the panel. Zustand manages only state that is shared between multiple unrelated parts of the application.
 
-### Two-column layout with flex, no library needed
+### Single colour source for chart consistency
 
-Two CSS flex rules and one media query. The canvas column is `flex: 1`.
+Defining the setup colour palette once in `SetupColours.ts` and importing `getSetupColour` everywhere guarantees that no chart can accidentally assign a different colour to the same setup.
+
+### Lazy full-result loading with `Promise.all`
+
+The summary list (`listResults`) is always fast. Full per-panel data is fetched in parallel for all setups in the selected group when the user changes the dropdown, and a spinner is shown during the fetch. This keeps the initial panel load snappy regardless of how many cached runs exist.
+
+### CSS fragmentation by concern
+
+Splitting `App.css` into five focused files eliminates the "where do I put this?" question and makes each file independently scannable. The barrel import in `index.css` means consumers import a single path.

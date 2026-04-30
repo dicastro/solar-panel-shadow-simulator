@@ -1,0 +1,21 @@
+:root {
+  --canvas-min-height: 50vh;
+
+  /* Colour palette */
+  --color-bg-dark: #050505;
+  --color-bg-panel: rgba(30, 30, 30, 0.92);
+  --color-bg-panel-light: #f5f4f0;
+  --color-border-dark: #444;
+  --color-border-light: #ddd;
+  --color-text-primary: #fff;
+  --color-text-muted: rgba(255, 255, 255, 0.45);
+  --color-accent-green: #4caf50;
+  --color-accent-green-dark: #2e7d32;
+
+  /* Results panel */
+  --results-panel-default-width: 420px;
+  --results-panel-min-width: 280px;
+  --results-panel-header-height: 52px;
+  --results-panel-legend-height: 48px;
+  --results-panel-tabs-height: 40px;
+}

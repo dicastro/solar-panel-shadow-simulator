@@ -1,0 +1,65 @@
+/* ── Annual simulation progress bars ───────────────────────────────────────── */
+
+.simulation-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-dark);
+}
+
+.simulation-progress__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.simulation-progress__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+
+.simulation-progress__label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ccc;
+}
+
+.simulation-progress__pct {
+  flex-shrink: 0;
+  font-weight: bold;
+  color: var(--color-accent-green);
+}
+
+.simulation-progress__eta {
+  font-weight: normal;
+  color: #aaa;
+  font-size: 0.7rem;
+}
+
+.simulation-progress__bar-track {
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.simulation-progress__bar-fill {
+  height: 100%;
+  background: var(--color-accent-green);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.simulation-progress__pending {
+  font-size: 0.72rem;
+  color: #888;
+  margin: 0;
+  font-style: italic;
+}

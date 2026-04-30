@@ -55,6 +55,24 @@
     "paramComputedAt": "Computed",
     "liveResults": "In progress"
   },
+  "resultsPanel": {
+    "title": "Results",
+    "tabAnnual": "Annual",
+    "tabMonthly": "Monthly",
+    "tabDaily": "Daily",
+    "production": "Production",
+    "shadows": "Shadows",
+    "month": "Month",
+    "day": "Day",
+    "loading": "Loading chart data…",
+    "noActiveSetups": "No setups selected. Click a setup in the legend to show it.",
+    "minimise": "Hide results panel",
+    "restore": "Results",
+    "fullscreen": "Expand to full width",
+    "exitFullscreen": "Restore width",
+    "resetWidth": "Reset width",
+    "dragHint": "Drag to resize"
+  },
   "angleWarning": {
     "title": "Configuration Warning",
     "message": "This application only supports 90°/180° wall angles. The following sets of points form angles that do not meet this requirement and rendering may be inaccurate:",

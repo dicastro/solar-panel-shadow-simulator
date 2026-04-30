@@ -1,0 +1,203 @@
+/* ── Shared control panel shell ────────────────────────────────────────────── */
+
+.controls-panel {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 10;
+  background: var(--color-bg-panel);
+  color: var(--color-text-primary);
+  padding: 20px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  font-family: sans-serif;
+  width: 380px;
+  border: 1px solid var(--color-border-dark);
+}
+
+.simulation-panel {
+  top: auto;
+  bottom: 20px;
+}
+
+.control-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Button group ──────────────────────────────────────────────────────────── */
+
+.button-group {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.button-group button {
+  flex: 1;
+  padding: 8px 0;
+  cursor: pointer;
+  background: #444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  outline: 0px solid transparent;
+}
+
+.button-group button:hover {
+  background: #555;
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: -2px;
+  filter: brightness(1.1);
+}
+
+.button-group .play-btn {
+  background: var(--color-accent-green-dark);
+}
+
+.button-group .play-btn:hover {
+  background: #388e3c;
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: -2px;
+}
+
+.button-group .pause-btn {
+  background: #fbc02d;
+  color: #333;
+}
+
+.button-group .pause-btn:hover {
+  background: #fdd835;
+  outline: 2px solid rgba(0, 0, 0, 0.3);
+  outline-offset: -2px;
+}
+
+/* ── Date / time display ───────────────────────────────────────────────────── */
+
+.date-display {
+  text-align: center;
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--color-accent-green);
+  background: #111;
+  padding: 5px;
+  border-radius: 4px;
+}
+
+/* ── Misc control labels ───────────────────────────────────────────────────── */
+
+.setup-label {
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.timezone-select {
+  flex: 1;
+  font-size: 0.75rem;
+}
+
+.setup-select {
+  flex: 1;
+}
+
+.date-input-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.date-input-label {
+  font-size: 0.7rem;
+}
+
+.controls-title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+/* ── Instant production readout ────────────────────────────────────────────── */
+
+.instant-results {
+  margin-top: 10px;
+  border-top: 1px solid var(--color-border-dark);
+  padding-top: 10px;
+}
+
+.instant-power-value {
+  color: var(--color-accent-green);
+}
+
+.theoretical-peak {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+/* ── Simulation status ─────────────────────────────────────────────────────── */
+
+.simulation-status {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.simulation-threshold-max {
+  font-size: 0.7rem;
+}
+
+/* ── Developer footer ──────────────────────────────────────────────────────── */
+
+.developer-footer {
+  position: fixed;
+  bottom: 12px;
+  right: 16px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: sans-serif;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.developer-footer a,
+.developer-footer__kofi-link {
+  pointer-events: auto;
+}
+
+.developer-footer__separator {
+  opacity: 0.4;
+}
+
+.developer-footer__site-link {
+  color: rgba(255, 255, 255, 0.55);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.developer-footer__site-link:hover {
+  color: var(--color-accent-green);
+  text-decoration: underline;
+}
+
+.developer-footer__kofi-link {
+  color: rgba(255, 255, 255, 0.55);
+  text-decoration: none;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.developer-footer__kofi-link:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+}

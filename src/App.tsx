@@ -6,7 +6,7 @@ import 'dayjs/locale/en';
 import { useTranslation } from 'react-i18next';
 
 import './i18n';
-import './App.css';
+import './styles/index.css';
 import { useAppStore } from './store/AppStore';
 import { RenderControls } from './components/RenderControls';
 import { SimulationControls } from './components/SimulationControls';
@@ -32,17 +32,14 @@ export default function App() {
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Keep dayjs locale in sync with i18next
   useEffect(() => { dayjs.locale(i18n.language); }, [i18n.language]);
 
-  // Load configuration on mount
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}config.json`)
       .then(res => res.json())
       .then(data => loadConfig(data));
   }, [loadConfig]);
 
-  // Advance time by 1 hour every 100 ms while playing
   useEffect(() => {
     if (isPlaying) {
       timerRef.current = setInterval(() => tickHour(), 100);
@@ -63,8 +60,11 @@ export default function App() {
     <div className="app-container">
       <AngleWarningBanner />
 
+      {/*
+       * Single full-viewport canvas column. The results panel and render/
+       * simulation controls are all fixed/absolute overlays on top of it.
+       */}
       <div className="app-layout">
-        {/* Left column: 3D canvas with overlaid controls */}
         <div className="app-layout__canvas-column">
           <RenderControls />
           <SimulationControls />
@@ -83,12 +83,10 @@ export default function App() {
             />
           </Canvas>
         </div>
-
-        {/* Right column: annual simulation results */}
-        <div className="app-layout__results-column">
-          <SimulationResultsPanel />
-        </div>
       </div>
+
+      {/* Results panel — fixed overlay, independent of the canvas column */}
+      <SimulationResultsPanel />
     </div>
   );
 }

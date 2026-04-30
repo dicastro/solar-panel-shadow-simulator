@@ -55,6 +55,24 @@
     "paramComputedAt": "Calculado",
     "liveResults": "En curso"
   },
+  "resultsPanel": {
+    "title": "Resultados",
+    "tabAnnual": "Anual",
+    "tabMonthly": "Mensual",
+    "tabDaily": "Diario",
+    "production": "Producción",
+    "shadows": "Sombras",
+    "month": "Mes",
+    "day": "Día",
+    "loading": "Cargando datos de gráficos…",
+    "noActiveSetups": "Ninguna configuración seleccionada. Haz clic en una configuración de la leyenda para mostrarla.",
+    "minimise": "Ocultar panel de resultados",
+    "restore": "Resultados",
+    "fullscreen": "Expandir a pantalla completa",
+    "exitFullscreen": "Restaurar anchura",
+    "resetWidth": "Restablecer anchura",
+    "dragHint": "Arrastrar para redimensionar"
+  },
   "angleWarning": {
     "title": "Aviso de configuración",
     "message": "Esta aplicación solo soporta ángulos de 90°/180° entre muros. Los siguientes conjuntos de puntos forman ángulos que no cumplen este requisito y el renderizado puede no ser preciso:",
