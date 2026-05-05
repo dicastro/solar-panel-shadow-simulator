@@ -312,14 +312,6 @@
           ],
           "orientation": "portrait"
         }
-      ],
-      "arraysSettings": [
-        {
-          "array": 0,
-          "row": 0,
-          "col": 0,
-          "hasOptimizer": true
-        }
       ]
     }
   ]

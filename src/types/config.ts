@@ -1,5 +1,3 @@
-import { PointXZ } from './geometry';
-
 export type ZonesDisposition = 'vertical' | 'horizontal';
 export type PanelOrientation = 'portrait' | 'landscape';
 
