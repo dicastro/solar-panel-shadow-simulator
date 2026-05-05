@@ -221,7 +221,8 @@
           "orientation": "portrait"
         }
       ]
-    }, {
+    },
+    {
       "label": "3 filas a 70cm alto",
       "panelDefaults": {
         "width": 1,
@@ -282,7 +283,8 @@
           "orientation": "portrait"
         }
       ]
-    }, {
+    },
+    {
       "label": "Configuración Actual",
       "panelDefaults": {
         "width": 1,
@@ -311,14 +313,14 @@
           "orientation": "portrait"
         }
       ],
-      "arraysSettings": {
-        "array": 0,
-        "panel": {
-          "x": 0,
-          "z": 0
-        },
-        "hasOptimizer": true
-      }
+      "arraysSettings": [
+        {
+          "array": 0,
+          "row": 0,
+          "col": 0,
+          "hasOptimizer": true
+        }
+      ]
     }
   ]
 }

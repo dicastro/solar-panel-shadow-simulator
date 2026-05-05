@@ -190,8 +190,20 @@ export interface PanelArrayConfiguration {
 }
 
 export interface PanelArraySettings {
+  /**
+   * 0-based index of the array within the setup's `arrays` list.
+   */
   readonly array: number;
-  readonly panel: PointXZ;
+  /**
+   * 0-based row index of the target panel within the array.
+   * Row 0 is the northernmost row; the last row is the southernmost.
+   */
+  readonly row: number;
+  /**
+   * 0-based column index of the target panel within the array.
+   * Column 0 is the westernmost column.
+   */
+  readonly col: number;
   readonly hasOptimizer?: boolean;
   readonly string?: string;
 }
@@ -200,6 +212,11 @@ export interface PanelSetupConfiguration {
   readonly label: string;
   readonly panelDefaults: PanelDefinition;
   readonly arrays: PanelArrayConfiguration[];
+  /**
+   * Per-panel overrides applied after the array geometry is built.
+   * Each entry targets one specific panel by its array/row/col address.
+   * Multiple entries can target different panels within the same setup.
+   */
   readonly arraysSettings?: PanelArraySettings[];
 }
 

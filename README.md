@@ -371,6 +371,27 @@ Because Three.js negates Z relative to config space, `isConvex = true` in Three.
 | `horizontal` | Zones are horizontal bands | Z (height) |
 | `vertical`   | Zones are vertical columns | X (width)  |
 
+### `arraysSettings` — per-panel overrides
+
+Each entry in `arraysSettings` targets one specific panel by its `array` / `row` / `col` address and overrides `hasOptimizer` and/or `string`. All three address fields are **0-based**.
+
+Row and column conventions:
+
+| Index | Axis | 0 = … |
+|-------|------|--------|
+| `row` | North–South | northernmost row |
+| `col` | West–East   | westernmost column |
+
+Example: give an optimizer only to the south-west panel of array 0 in a 3×3 layout:
+
+```json
+"arraysSettings": [
+  { "array": 0, "row": 2, "col": 0, "hasOptimizer": true }
+]
+```
+
+The panel's 3D colour updates automatically to reflect the override (green frame = optimizer present). Multiple entries can target different panels within the same setup.
+
 ---
 
 ## Solar production model
@@ -651,3 +672,11 @@ Icon SVGs live in `src/assets/icons/` and are imported as URLs by Vite. This kee
 ### Zone ID scheme: 0-based throughout
 
 Zone IDs follow `a{arr}-r{row}-c{col}-z{zone}` using 0-based indices everywhere, matching the internal data model. The same IDs are rendered as `<Text>` labels in the 3D view and as tooltip content in the heat map, so the user can correlate a shaded zone in the 3D scene with its heat map cell without conversion.
+
+### `arraysSettings` applied after geometry, not during construction
+
+Per-panel overrides (`hasOptimizer`, `string`) are applied in `PanelSetupFactory.create` as a post-processing pass over the fully built arrays. This keeps `SolarPanelArrayFactory` and `SolarPanelFactory` free of override logic — they always produce a canonical panel from the array config and defaults alone. The override pass is a thin map that replaces only the affected fields (and re-derives `frameColor`/`emissiveColor` from the new `hasOptimizer` value), leaving all geometry unchanged.
+
+### `PanelArraySettings` uses `row`/`col`, not `PointXZ`
+
+The earlier `panel: PointXZ` type for addressing a panel within an array reused the geometry coordinate type in a completely different semantic context (`PointXZ` means a point in the XZ plane, not a row/column index). Renaming to explicit `row: number` and `col: number` fields makes the intent unambiguous and matches the `row`/`col` fields already present on `SolarPanel` and `PanelAnnualData`. The address convention is 0-based, with row 0 at the northernmost position and col 0 at the westernmost position.
