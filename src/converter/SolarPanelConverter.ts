@@ -53,7 +53,10 @@ export const SolarPanelConverter = {
    * by the annual simulation worker.
    *
    * World-space positions and normals are pre-computed so the worker only needs
-   * to perform raycasting and arithmetic during its inner loop.
+   * to perform raycasting and arithmetic during its inner loop. Physical geometry
+   * fields (orientation, actualWidth, actualHeight, zones, zonesDisposition) are
+   * included so the worker can propagate them into PanelAnnualData for use by
+   * the results panel heat maps.
    */
   toSimulationPanelData: (panel: SolarPanel): SimulationPanelData => ({
     id: panel.id,
@@ -62,6 +65,10 @@ export const SolarPanelConverter = {
     col: panel.col,
     peakPower: panel.peakPower,
     zones: panel.zones,
+    zonesDisposition: panel.zonesDisposition,
+    orientation: panel.orientation,
+    actualWidth: panel.renderData.actualWidth,
+    actualHeight: panel.renderData.actualHeight,
     hasOptimizer: panel.hasOptimizer,
     string: panel.string,
     worldNormal: SolarPanelConverter.toWorldNormal(panel),
@@ -74,4 +81,4 @@ export const SolarPanelConverter = {
    */
   toSimulationPanelDataArray: (panels: SolarPanel[]): SimulationPanelData[] =>
     panels.map(SolarPanelConverter.toSimulationPanelData),
-}
+};

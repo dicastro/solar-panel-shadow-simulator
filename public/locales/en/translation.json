@@ -20,6 +20,36 @@
     "west": "W",
     "east": "E"
   },
+  "months": {
+    "short": [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec"
+    ],
+    "long": [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ]
+  },
   "simulationControls": {
     "title": "Annual Simulation",
     "interval": "Interval",
@@ -71,7 +101,10 @@
     "fullscreen": "Expand to full width",
     "exitFullscreen": "Restore width",
     "resetWidth": "Reset width",
-    "dragHint": "Drag to resize"
+    "dragHint": "Drag to resize",
+    "monthlyTotal": "Monthly total",
+    "dailyTotal": "Daily total",
+    "array": "Array"
   },
   "angleWarning": {
     "title": "Configuration Warning",

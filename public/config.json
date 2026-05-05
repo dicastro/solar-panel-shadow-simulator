@@ -310,7 +310,15 @@
           ],
           "orientation": "portrait"
         }
-      ]
+      ],
+      "arraysSettings": {
+        "array": 0,
+        "panel": {
+          "x": 0,
+          "z": 0
+        },
+        "hasOptimizer": true
+      }
     }
   ]
 }

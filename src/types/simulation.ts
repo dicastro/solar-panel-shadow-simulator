@@ -1,4 +1,5 @@
 import { Vector3 } from './geometry';
+import { PanelOrientation, ZonesDisposition } from './config';
 
 export interface SunState {
   readonly altitude: number;
@@ -47,6 +48,11 @@ export interface SimulationCacheKey {
  *
  * `zoneShadeFraction` adds a leading zone dimension:
  * [zone][month][dayOfMonth][hourOfDay].
+ *
+ * Physical geometry fields (`orientation`, `actualWidth`, `actualHeight`,
+ * `zones`, `zonesDisposition`) are carried here so the results panel can
+ * render heat maps with correct proportions and zone layouts without
+ * needing access to the original config.
  */
 export interface PanelAnnualData {
   readonly panelId: string;
@@ -56,6 +62,16 @@ export interface PanelAnnualData {
   readonly energyKwh: number[][][];
   readonly shadeFraction: number[][][];
   readonly zoneShadeFraction: number[][][][];
+  /** Physical orientation of the panel as mounted. */
+  readonly orientation: PanelOrientation;
+  /** Rendered panel width in metres (accounts for orientation swap). */
+  readonly actualWidth: number;
+  /** Rendered panel height in metres (accounts for orientation swap). */
+  readonly actualHeight: number;
+  /** Number of bypass-diode zones. */
+  readonly zones: number;
+  /** How zones are split across the panel face. */
+  readonly zonesDisposition: ZonesDisposition;
 }
 
 export interface SetupAnnualResult {
@@ -123,6 +139,9 @@ export interface SimulationSamplePoint {
  * Per-panel data required to run the annual simulation.
  * World-space positions and normals are pre-computed on the main thread
  * to avoid repeating matrix multiplications inside the worker at every time step.
+ *
+ * Physical geometry fields are included so the worker can propagate them into
+ * PanelAnnualData without needing access to the original config.
  */
 export interface SimulationPanelData {
   readonly id: string;
@@ -131,6 +150,10 @@ export interface SimulationPanelData {
   readonly col: number;
   readonly peakPower: number;
   readonly zones: number;
+  readonly zonesDisposition: ZonesDisposition;
+  readonly orientation: PanelOrientation;
+  readonly actualWidth: number;
+  readonly actualHeight: number;
   readonly hasOptimizer: boolean;
   readonly string: string;
   /** Panel normal in world space, pre-computed from worldRotation. */

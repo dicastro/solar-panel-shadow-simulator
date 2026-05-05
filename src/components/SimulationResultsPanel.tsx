@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { TFunction } from 'i18next';
 import { useAppStore } from '../store/AppStore';
 import { useResultsPanel } from '../hooks/useResultsPanel';
 import { useResizablePanel } from '../hooks/useResizablePanel';
@@ -7,18 +8,32 @@ import { AnnualTab } from './results/AnnualTab';
 import { MonthlyTab } from './results/MonthlyTab';
 import { DailyTab } from './results/DailyTab';
 
+import iconResetWidth from '../assets/icons/panel-reset-width.svg';
+import iconExpand from '../assets/icons/panel-expand.svg';
+import iconCollapse from '../assets/icons/panel-collapse.svg';
+import iconMinimise from '../assets/icons/panel-minimise.svg';
+
+/**
+ * Formats a Unix timestamp (ms) as a short locale date+time string.
+ */
+const formatComputedAt = (ts: number): string =>
+  new Date(ts).toLocaleString(undefined, {
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+
 /**
  * Builds the compact label shown in the simulation run selector dropdown.
  * Format: "2026 · 60 min · Geometric · 16p1t · 3 setup(s)"
  */
 const buildGroupLabel = (
   g: { year: number; intervalMinutes: number; irradianceSource: string; density: number; threshold: number; setups: { setupId: string }[] },
-  t: (key: string, opts?: Record<string, unknown>) => string,
+  t: TFunction,
 ): string =>
   t('simulationResultsPanel.groupLabel', {
     year: g.year,
     interval: g.intervalMinutes,
-    irradiance: t(`simulationResultsPanel.irradiance_${g.irradianceSource}`),
+    irradiance: t(`simulationResultsPanel.irradiance_${g.irradianceSource}` as any),
     samplingCode: `${g.density * g.density}p${g.threshold}t`,
     setups: g.setups.length,
   });
@@ -26,15 +41,15 @@ const buildGroupLabel = (
 /**
  * The results panel floats as a fixed overlay on the right side of the screen,
  * on top of the 3D canvas. The drag handle on the left edge lets the user resize
- * it freely. Four buttons control its state: minimise, restore, fullscreen, reset.
+ * it freely. Three icon buttons in the header control panel state:
+ *  - Reset width (double arrow): restores default 420px width
+ *  - Expand/collapse (corner arrows): toggles fullscreen (100vw)
+ *  - Minimise (arrow-to-edge): collapses the panel; a vertical restore button appears
  *
- * Content is organised into three tabs (Annual, Monthly, Daily), each with a
- * Production section and a Shadows section. A shared legend above the tabs lets
- * the user toggle individual setups on/off; all charts update accordingly.
- *
- * Full result data (per-panel energy and shade fractions) is loaded lazily from
- * IndexedDB when the selected simulation group changes, so the summary list
- * remains fast even with many cached runs.
+ * Below the header a parameter summary row shows the key attributes of the
+ * selected simulation run (year, interval, irradiance, density, threshold).
+ * Below that, the shared setup legend lets the user toggle individual setups
+ * on/off across all charts simultaneously.
  */
 export function SimulationResultsPanel() {
   const { t } = useTranslation();
@@ -130,7 +145,7 @@ export function SimulationResultsPanel() {
                   onClick={resetWidth}
                   title={t('resultsPanel.resetWidth')}
                 >
-                  ⟳
+                  <img src={iconResetWidth} alt="" width={16} height={16} />
                 </button>
                 <button
                   className="results-panel__icon-btn"
@@ -139,14 +154,19 @@ export function SimulationResultsPanel() {
                     ? t('resultsPanel.exitFullscreen')
                     : t('resultsPanel.fullscreen')}
                 >
-                  {panelState === 'fullscreen' ? '⊠' : '⛶'}
+                  <img
+                    src={panelState === 'fullscreen' ? iconCollapse : iconExpand}
+                    alt=""
+                    width={16}
+                    height={16}
+                  />
                 </button>
                 <button
                   className="results-panel__icon-btn"
                   onClick={minimise}
                   title={t('resultsPanel.minimise')}
                 >
-                  ✕
+                  <img src={iconMinimise} alt="" width={16} height={16} />
                 </button>
               </div>
             </div>
@@ -163,6 +183,38 @@ export function SimulationResultsPanel() {
             {/* ── Content when groups exist ──────────────────────────────────── */}
             {hasGroups && selectedGroup && (
               <>
+                {/* Simulation parameter summary */}
+                <div className="results-panel__params">
+                  <div className="results-panel__param-row">
+                    <span className="results-panel__param-key">{t('simulationResultsPanel.paramYear')}</span>
+                    <span className="results-panel__param-value">{selectedGroup.year}</span>
+                  </div>
+                  <div className="results-panel__param-row">
+                    <span className="results-panel__param-key">{t('simulationResultsPanel.paramInterval')}</span>
+                    <span className="results-panel__param-value">{selectedGroup.intervalMinutes} min</span>
+                  </div>
+                  <div className="results-panel__param-row">
+                    <span className="results-panel__param-key">{t('simulationResultsPanel.paramIrradiance')}</span>
+                    <span className="results-panel__param-value">
+                      {t(`simulationResultsPanel.irradiance_${selectedGroup.irradianceSource}` as any)}
+                    </span>
+                  </div>
+                  <div className="results-panel__param-row">
+                    <span className="results-panel__param-key">{t('simulationResultsPanel.paramDensity')}</span>
+                    <span className="results-panel__param-value">
+                      {selectedGroup.density}×{selectedGroup.density} ({selectedGroup.density * selectedGroup.density} pts/zone)
+                    </span>
+                  </div>
+                  <div className="results-panel__param-row">
+                    <span className="results-panel__param-key">{t('simulationResultsPanel.paramThreshold')}</span>
+                    <span className="results-panel__param-value">{selectedGroup.threshold}</span>
+                  </div>
+                  <div className="results-panel__param-row">
+                    <span className="results-panel__param-key">{t('simulationResultsPanel.paramComputedAt')}</span>
+                    <span className="results-panel__param-value">{formatComputedAt(selectedGroup.computedAt)}</span>
+                  </div>
+                </div>
+
                 {/* Shared setup legend */}
                 <div className="results-panel__legend">
                   {selectedGroup.setups.map(setup => (
@@ -178,7 +230,7 @@ export function SimulationResultsPanel() {
                         className="results-panel__legend-dot"
                         style={{ background: SetupColoursUtils.getSetupColour(setup.colourIndex) }}
                       />
-                      {setup.setupLabel}
+                      <span className="results-panel__legend-label">{setup.setupLabel}</span>
                     </button>
                   ))}
                 </div>
@@ -210,22 +262,13 @@ export function SimulationResultsPanel() {
                   ) : (
                     <>
                       {activeTab === 'annual' && (
-                        <AnnualTab
-                          results={loadedResults}
-                          activeSetupIds={activeSetupIds}
-                        />
+                        <AnnualTab results={loadedResults} activeSetupIds={activeSetupIds} />
                       )}
                       {activeTab === 'monthly' && (
-                        <MonthlyTab
-                          results={loadedResults}
-                          activeSetupIds={activeSetupIds}
-                        />
+                        <MonthlyTab results={loadedResults} activeSetupIds={activeSetupIds} />
                       )}
                       {activeTab === 'daily' && (
-                        <DailyTab
-                          results={loadedResults}
-                          activeSetupIds={activeSetupIds}
-                        />
+                        <DailyTab results={loadedResults} activeSetupIds={activeSetupIds} />
                       )}
                     </>
                   )}

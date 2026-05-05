@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Top-left corner arrow -->
+  <polyline points="6,3 3,3 3,6"/>
+  <!-- Top-right corner arrow -->
+  <polyline points="10,3 13,3 13,6"/>
+  <!-- Bottom-left corner arrow -->
+  <polyline points="6,13 3,13 3,10"/>
+  <!-- Bottom-right corner arrow -->
+  <polyline points="10,13 13,13 13,10"/>
+</svg>

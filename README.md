@@ -29,10 +29,11 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Renders a rooftop installation in 3D (walls, railings with balusters, solar panels) using Three.js.
 - Animates the sun's trajectory across the sky for any date and time.
 - Detects which panel zones are shaded using raycasting against all shadow-casting geometry (walls, railings, supports, and other panels).
+- Displays zone ID labels in the 3D view (`a{array}-r{row}-c{col}-z{zone}`) so each zone can be correlated with the results panel heat maps without ambiguity.
 - Estimates instantaneous power output in kW, applying bypass-diode, string-mismatch and optimizer logic.
 - Supports multiple installation layouts ("setups") selectable via the UI.
 - Runs a full annual simulation for all configured setups in parallel Web Workers, accumulating energy (kWh) per panel broken down by month, day, and hour. Results are cached in IndexedDB so re-running the same configuration is instant.
-- Displays annual results in a floating resizable overlay panel with three tabs (Annual, Monthly, Daily), each containing a Production section (ECharts charts) and a Shadows section (per-panel heat maps). A shared legend lets the user toggle setups on/off and all charts update accordingly.
+- Displays annual results in a floating resizable overlay panel with three tabs (Annual, Monthly, Daily), each containing a Production section (ECharts charts) and a Shadows section (per-panel zone heat maps). A shared legend lets the user toggle setups on/off and all charts update accordingly.
 - Validates the wall configuration and displays a prominent warning listing the exact config-space coordinate triples that form non-90° or non-180° angles.
 
 ---
@@ -60,6 +61,12 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 src/
 ├── App.tsx                        # Root: loads config, full-viewport canvas + overlay panel
 ├── i18n.ts                        # i18next initialisation
+│
+├── assets/icons/                  # SVG icon files for the results panel header buttons
+│   ├── panel-reset-width.svg      # Double horizontal arrow — reset panel width
+│   ├── panel-expand.svg           # Corner arrows pointing outward — enter fullscreen
+│   ├── panel-collapse.svg         # Corner arrows pointing inward — exit fullscreen
+│   └── panel-minimise.svg         # Arrow toward right edge — hide panel
 │
 ├── styles/                        # CSS modules (imported via styles/index.css)
 │   ├── index.css                  # Barrel import
@@ -123,7 +130,7 @@ src/
 │
 └── utils/
     ├── HashUtils.ts               # FNV-1a 32-bit hash
-    ├── SetupColours.ts            # Colour palette assigned by setup index (shared across charts)
+    ├── SetupColoursUtils.ts       # Colour palette assigned by setup index (shared across charts)
     ├── SimulationCacheUtils.ts    # buildCacheKey() and hashCacheKey()
     ├── PointXZUtils.ts            # 2D geometry helpers
     ├── RailingUtils.ts            # Railing rail render data builder
@@ -133,24 +140,24 @@ src/
 └── components/
     ├── Scene.tsx                  # Root 3D scene; wires annual simulation hook
     ├── ShadowedScene.tsx          # Dirty-flag raycasting loop, feeds ShadowMap
-    ├── SolarPanelComponent.tsx    # Single panel render (purely presentational)
+    ├── SolarPanelComponent.tsx    # Single panel render; zone ID labels in 3D
     ├── Sun.tsx                    # Sun sphere + directional light
     ├── Compass.tsx                # N/S/E/W labels in 3D
     ├── RenderControls.tsx         # Top-left panel: setup selector, date/time/play, sampling
     ├── SimulationControls.tsx     # Bottom-left panel: annual simulation parameters + run/stop
-    ├── SimulationResultsPanel.tsx # Floating resizable overlay: header, legend, tabs
+    ├── SimulationResultsPanel.tsx # Floating resizable overlay: header, params, legend, tabs
     ├── AnnualSimulationProgress.tsx  # Per-setup progress bars with ETA
     ├── AngleWarningBanner.tsx     # Warning banner for non-90° angles
     ├── DeveloperFooter.tsx        # Ko-fi link + personal site
     └── results/                   # Chart and tab components for the results panel
         ├── AnnualTab.tsx          # Annual tab: bar chart + radar + annual heat map
-        ├── MonthlyTab.tsx         # Monthly tab: month selector + daily line + monthly heat map
-        ├── DailyTab.tsx           # Daily tab: month+day selector + hourly line + daily heat map
+        ├── MonthlyTab.tsx         # Monthly tab: nav + monthly total bar + daily line + heat map
+        ├── DailyTab.tsx           # Daily tab: nav + daily total bar + hourly line + heat map
         ├── AnnualBarChart.tsx     # Horizontal bar chart: annualTotalKwh per setup
-        ├── MonthlyRadarChart.tsx  # Radar chart: monthlyTotalKwh by month per setup
+        ├── MonthlyRadarChart.tsx  # Radar chart: monthlyTotalKwh by month per setup (localised)
         ├── MonthlyLineChart.tsx   # Line chart: daily production totals for a selected month
         ├── DailyLineChart.tsx     # Line chart: hourly production for a selected day
-        └── PanelShadowHeatmap.tsx # Physical panel grid coloured by shade fraction
+        └── PanelShadowHeatmap.tsx # Physical panel grid; zone-level cells with shade colour
 ```
 
 ---
@@ -197,6 +204,12 @@ The results panel is a `position: fixed` overlay that sits on top of the 3D canv
 
 The drag handle on the left edge of the panel uses `mousedown` → `mousemove` on `document` → `mouseup` to track the cursor across the full viewport while dragging. Width state lives in `useResizablePanel`. Panel state is one of `normal | minimised | fullscreen`. When minimised, a vertical restore button appears on the right edge.
 
+Icon buttons in the header use SVG files (`src/assets/icons/`) rather than Unicode characters, ensuring the intended meaning is unambiguous regardless of the user's font or operating system. Each icon is a 16×16 stroked SVG with no fill, using `currentColor` so it responds to CSS colour changes on hover.
+
+### Results panel — simulation parameter summary
+
+Between the header and the legend, a parameter summary strip shows the key attributes of the selected simulation run: year, interval, irradiance source, sampling density, threshold, and computation timestamp. This replaces the previous approach of encoding all parameters into the dropdown label alone.
+
 ### Results panel — state management
 
 All results panel state lives in `useResultsPanel` (a custom hook), not in Zustand. The state is purely UI-local to the panel: selected simulation group, active tab, which setups are visible in the legend, and the lazily loaded full result data. Zustand is not the right tool for component-scoped state.
@@ -207,11 +220,11 @@ All results panel state lives in `useResultsPanel` (a custom hook), not in Zusta
 
 ### Setup colour palette — single source of truth
 
-`src/utils/SetupColours.ts` exports a fixed array of eight visually distinct colours and a `getSetupColour(index)` helper. Colour assignment is by position in the sorted group (best-producing setup is always colour 0). Every chart component and the legend use this same function, guaranteeing cross-chart colour consistency.
+`src/utils/SetupColoursUtils.ts` exports a fixed array of eight visually distinct colours and a `getSetupColour(index)` helper. Colour assignment is by position in the sorted group (best-producing setup is always colour 0). Every chart component and the legend use this same function, guaranteeing cross-chart colour consistency.
 
 ### Shared legend with toggle
 
-The legend above the tabs renders one button per setup. Clicking a button toggles that setup's ID in the `activeSetupIds: Set<string>` state. Every chart filters its input data to only the active setups before building its ECharts option. At least one setup must remain active — toggling the last active setup is a no-op.
+The legend above the tabs renders one button per setup. Clicking a button toggles that setup's ID in the `activeSetupIds: Set<string>` state. Every chart filters its input data to only the active setups before building its ECharts option. At least one setup must remain active — toggling the last active setup is a no-op. Labels are truncated with CSS ellipsis; the full label is accessible via the native `title` tooltip.
 
 ### CSS fragmentation into modules
 
@@ -222,11 +235,15 @@ The legend above the tabs renders one button per setup. Clicking a button toggle
 - `simulation.css` — annual simulation progress bars.
 - `results-panel.css` — floating overlay, tabs, heat maps.
 
-### Panel shadow heat map — physical layout
+### Panel shadow heat map — zone-level cells
 
-`PanelShadowHeatmap` groups panels by `arrayIndex`, then arranges them in a grid of `rows × cols` using each panel's `row` and `col` fields from `PanelAnnualData`. The shade colour interpolates green (0%) → yellow (50%) → red (100%) using RGB interpolation. A scale bar is shown below each heat map. Hovering a cell shows a tooltip with the panel ID and exact shade percentage.
+`PanelShadowHeatmap` groups panels by `arrayIndex`, then arranges them in a grid of `rows × cols` using each panel's `row` and `col` fields from `PanelAnnualData`. Each panel cell is sized proportionally to the physical panel dimensions (`actualWidth × actualHeight`, capped at `MAX_PANEL_PX` on the longer axis). Within each cell, one sub-cell is rendered per bypass-diode zone, coloured by `zoneShadeFraction` for the selected time window. Zones are laid out horizontally or vertically according to `zonesDisposition`, exactly mirroring the physical panel construction.
 
-The orientation follows the Three.js coordinate convention used throughout the project: row 0 is the northernmost row, column 0 is the westernmost column. Arrays are separated by a visible gap and labelled.
+The shade colour interpolates green (0%) → yellow (50%) → red (100%) using RGB interpolation. Hovering a cell shows the zone ID and exact shade percentage as a native browser tooltip. Zone IDs follow the 0-based scheme `{panelId}-z{zoneIndex}` (e.g. `a0-r0-c0-z1`), matching the labels rendered in the 3D view.
+
+### Physical geometry in `PanelAnnualData`
+
+`SimulationPanelData` carries `orientation`, `actualWidth`, `actualHeight`, `zones`, and `zonesDisposition` alongside the raycasting data. `SolarPanelConverter.toSimulationPanelData` populates these from `panel.renderData`. `AnnualSimulationEngine.finalizePanel` propagates them unchanged into `PanelAnnualData`. This allows the results panel to render correct heat map proportions without needing access to the original config.
 
 ### `SimulationResultsPanel` — auto-select on completion, no live results
 
@@ -235,6 +252,14 @@ The panel does not show partial results during an active run. When `isRunning` t
 ### Simulation results grouping
 
 IndexedDB stores one `SetupAnnualResult` per setup. `useResultsPanel` groups entries by `(year, intervalMinutes, irradianceSource, density, threshold)`. The group label encodes density and threshold compactly as `NNpMt`. `density` and `threshold` are stored directly on `SetupAnnualResult` and exposed by `SimulationCache.listResults()`.
+
+### Localised month names
+
+Month labels in the radar chart, and in the month/day selectors of the Monthly and Daily tabs, are driven by `t('months.short', { returnObjects: true })` and `t('months.long', { returnObjects: true })`. Both EN and ES translation files provide these arrays. This avoids hardcoded English strings in chart components and ensures the UI language setting is respected throughout.
+
+### Month and day navigation buttons
+
+The Monthly tab provides `‹` / `›` buttons that cycle through months circularly (December → January and back). The Daily tab provides the same for days, advancing to the next month when the last day is reached, and wrapping across year boundaries (31 Dec → 1 Jan). This pattern avoids the user having to change both the month and day selectors manually when stepping across month boundaries.
 
 ---
 
@@ -423,7 +448,7 @@ Three options: geometric, PVGIS, Open-Meteo. Only geometric is implemented; the 
 
 **BVH serialisation and per-worker geometry copies:** `MeshFactory.fromScene(scene).build()` produces independent typed-array copies per worker. Each worker's buffers are zero-copy transferred via `postMessage`.
 
-**Sample points pre-computed on the main thread:** `SolarPanelConverter.toSimulationPanelDataArray` transforms local-space sample points to world space before transfer.
+**Sample points pre-computed on the main thread:** `SolarPanelConverter.toSimulationPanelDataArray` transforms local-space sample points to world space before transfer. Physical geometry fields (`orientation`, `actualWidth`, `actualHeight`, `zones`, `zonesDisposition`) are also included so the worker can propagate them into `PanelAnnualData`.
 
 **Worker pool:**
 ```
@@ -434,7 +459,7 @@ workerCount = max(1, hardwareConcurrency − 1)
 
 ### Accumulation and finalisation
 
-`engine/AnnualSimulationEngine.ts` provides pure functions (`initAccumulators`, `accumulateStep`, `finalizePanel`, `buildSetupResult`) with no Three.js or worker dependencies.
+`engine/AnnualSimulationEngine.ts` provides pure functions (`initAccumulators`, `accumulateStep`, `finalizePanel`, `buildSetupResult`) with no Three.js or worker dependencies. `finalizePanel` propagates all physical geometry fields from `SimulationPanelData` into `PanelAnnualData`.
 
 ### Cache key and hashing
 
@@ -450,6 +475,11 @@ Keyed by `SimulationCacheKey` (setup geometry hash, density, threshold, interval
 PanelAnnualData.energyKwh         [month][dayOfMonth][hourOfDay]
 PanelAnnualData.shadeFraction     [month][dayOfMonth][hourOfDay]
 PanelAnnualData.zoneShadeFraction [zone][month][dayOfMonth][hourOfDay]
+PanelAnnualData.orientation       PanelOrientation
+PanelAnnualData.actualWidth       number (metres)
+PanelAnnualData.actualHeight      number (metres)
+PanelAnnualData.zones             number
+PanelAnnualData.zonesDisposition  ZonesDisposition
 ```
 
 `SetupAnnualResult` also carries `density`, `threshold`, pre-rolled `monthlyTotalKwh` and `annualTotalKwh`.
@@ -462,35 +492,39 @@ PanelAnnualData.zoneShadeFraction [zone][month][dayOfMonth][hourOfDay]
 
 The results panel is a `position: fixed` overlay anchored to the right edge of the viewport. It sits above the 3D canvas and render/simulation controls, which remain fully functional beneath it.
 
-The left edge of the panel is a drag handle. Dragging it resizes the panel freely between a minimum of 280px and `100vw`. Four icon buttons in the header control panel state:
+The left edge of the panel is a drag handle. Dragging it resizes the panel freely between a minimum of 280px and `100vw`. Three icon buttons in the header control panel state:
 
-| Button | Action |
-|--------|--------|
-| ⟳ | Reset to default width (420px) |
-| ⛶ / ⊠ | Toggle fullscreen (100vw) |
-| ✕ | Minimise (collapses to zero; a vertical restore button appears on the right edge) |
+| Button | Icon | Action |
+|--------|------|--------|
+| Reset width | Double horizontal arrow | Restore default width (420px) |
+| Fullscreen | Corner arrows outward/inward | Toggle 100vw width |
+| Minimise | Arrow toward right edge | Collapse panel; restore button appears |
+
+Icons are 16×16 SVG files in `src/assets/icons/`, using `currentColor` for theme compatibility. They communicate intent unambiguously without relying on Unicode character availability.
 
 ### Content organisation
+
+Below the header, a parameter summary strip shows year, interval, irradiance source, density, threshold, and computation timestamp for the selected simulation run.
+
+Below the summary, a shared legend shows one pill per setup. Clicking toggles that setup's visibility across all charts. Labels are truncated with CSS ellipsis; the full label is shown as a native tooltip on hover.
 
 Content is divided into three tabs:
 
 | Tab | Production section | Shadows section |
 |-----|--------------------|-----------------|
-| **Annual** | Horizontal bar chart (annual kWh per setup) + radar chart (monthly distribution) | Panel heat map — annual average shade fraction |
-| **Monthly** | Line chart — daily production totals for selected month | Panel heat map — monthly average shade fraction |
-| **Daily** | Line chart — hourly production for selected month + day | Panel heat map — daily average shade fraction |
+| **Annual** | Bar chart (annual kWh/setup) + radar chart (monthly distribution) | Zone heat map — annual average |
+| **Monthly** | Monthly total bar chart + daily production line chart | Zone heat map — monthly average |
+| **Daily** | Daily total bar chart + hourly production line chart | Zone heat map — daily average |
 
-### Shared legend
-
-A strip of toggle buttons above the tab bar shows one coloured pill per setup. Clicking a pill toggles that setup's visibility across all charts simultaneously. The last active setup cannot be deactivated.
+The Monthly tab has `‹` / `›` navigation buttons for circular month stepping. The Daily tab has the same for days, wrapping across month and year boundaries.
 
 ### Setup colour consistency
 
-`src/utils/SetupColours.ts` defines a fixed eight-colour palette. Colour assignment is by the setup's rank within the simulation group (the highest-producing setup is always colour 0). Every chart and the legend use `getSetupColour(index)`, guaranteeing that a given setup has the same colour in every chart.
+`src/utils/SetupColoursUtils.ts` defines a fixed eight-colour palette. Colour assignment is by the setup's rank within the simulation group (the highest-producing setup is always colour 0). Every chart and the legend use `getSetupColour(index)`.
 
-### Panel shadow heat map
+### Panel shadow zone heat map
 
-Each setup gets its own heat map. Panels are arranged in their physical grid layout (North top, South bottom, West left, East right). Multiple arrays within a setup are shown as separate sub-grids with a label. The shade colour scale interpolates green (0%) → yellow (50%) → red (100%). Hovering a cell shows a tooltip with the panel ID and exact shade percentage.
+Each setup gets its own heat map block. Panels are arranged in their physical grid layout (North top, South bottom, West left, East right). Each panel cell is sized proportionally to `actualWidth × actualHeight`, capped at 56px on the longer axis to prevent oversized cells on wide screens. Within each cell, bypass-diode zones are shown as coloured sub-cells matching the physical zone disposition (`horizontal` = horizontal bands, `vertical` = vertical columns). Colours interpolate green → yellow → red by shade fraction. Zone IDs (`a{arr}-r{row}-c{col}-z{zone}`) match the labels shown in the 3D view.
 
 ---
 
@@ -516,6 +550,7 @@ The canvas fills the full viewport (`100vw × 100vh`). All UI elements — rende
 - **Rail extensions end in a 90° cut**: a 45° mitre would require custom `BufferGeometry`.
 - **`window.confirm` for stop confirmation**: native dialog used. Custom modal straightforward to add.
 - **Drag-to-resize is mouse-only**: touch / trackpad pinch not supported.
+- **Zone heat map granularity**: shade fraction is per zone, not per sample point. Per-point storage would require ~100 M values for typical configurations and is not stored.
 
 ---
 
@@ -587,20 +622,32 @@ Comparing `prevIsRunning.current !== isRunning` inside a `useEffect` fires exact
 
 ### Fixed overlay panel avoids canvas resize
 
-Making the results panel a `position: fixed` overlay means the Three.js `<Canvas>` always occupies `100vw × 100vh`. Opening, closing, or resizing the results panel has no effect on the renderer's viewport, avoiding the resize event that would otherwise trigger a Three.js camera and renderer recalculation.
+Making the results panel a `position: fixed` overlay means the Three.js `<Canvas>` always occupies `100vw × 100vh`. Opening, closing, or resizing the results panel has no effect on the renderer's viewport.
 
 ### Component-scoped state stays out of Zustand
 
-The results panel's selected group, active tab, legend toggles, and loaded data are all managed by `useResultsPanel`, a custom hook local to the panel. Zustand manages only state that is shared between multiple unrelated parts of the application.
+The results panel's selected group, active tab, legend toggles, and loaded data are all managed by `useResultsPanel`, a custom hook local to the panel.
 
 ### Single colour source for chart consistency
 
-Defining the setup colour palette once in `SetupColours.ts` and importing `getSetupColour` everywhere guarantees that no chart can accidentally assign a different colour to the same setup.
+Defining the setup colour palette once in `SetupColoursUtils.ts` and importing `getSetupColour` everywhere guarantees consistent colours across all charts.
 
 ### Lazy full-result loading with `Promise.all`
 
-The summary list (`listResults`) is always fast. Full per-panel data is fetched in parallel for all setups in the selected group when the user changes the dropdown, and a spinner is shown during the fetch. This keeps the initial panel load snappy regardless of how many cached runs exist.
+The summary list (`listResults`) is always fast. Full per-panel data is fetched in parallel for all setups in the selected group when the user changes the dropdown.
 
 ### CSS fragmentation by concern
 
-Splitting `App.css` into five focused files eliminates the "where do I put this?" question and makes each file independently scannable. The barrel import in `index.css` means consumers import a single path.
+Splitting `App.css` into five focused files eliminates the "where do I put this?" question. The barrel import in `index.css` means consumers import a single path.
+
+### Physical geometry propagated through simulation pipeline
+
+Carrying `orientation`, `actualWidth`, `actualHeight`, `zones`, `zonesDisposition` from `SolarPanel` through `SimulationPanelData` into `PanelAnnualData` means the results panel can render proportionally correct heat maps without access to the original config. The alternative — re-loading the config in the results panel — would create an unnecessary coupling between the storage layer and the config loading path.
+
+### SVG icons as files, not inline or Unicode
+
+Icon SVGs live in `src/assets/icons/` and are imported as URLs by Vite. This keeps component code readable, makes icons individually replaceable without touching component logic, and avoids the font-rendering variability of Unicode symbols.
+
+### Zone ID scheme: 0-based throughout
+
+Zone IDs follow `a{arr}-r{row}-c{col}-z{zone}` using 0-based indices everywhere, matching the internal data model. The same IDs are rendered as `<Text>` labels in the 3D view and as tooltip content in the heat map, so the user can correlate a shaded zone in the 3D scene with its heat map cell without conversion.

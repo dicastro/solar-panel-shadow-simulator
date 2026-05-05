@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { Text } from '@react-three/drei';
 import { PanelRenderData, SamplePoint } from '../types/installation';
 import { ShadowMap } from '../hooks/useShadowSampler';
 
 interface SolarPanelComponentProps {
+  panelId: string;
   hasOptimizer: boolean;
   showPoints: boolean;
   renderData: PanelRenderData;
@@ -12,13 +14,19 @@ interface SolarPanelComponentProps {
 
 /**
  * Renders a single solar panel: the aluminium frame, the diode-zone glass
- * planes, and (optionally) the sample points used for shadow detection.
+ * planes, zone ID labels, and (optionally) the sample points used for shadow
+ * detection.
+ *
+ * Zone labels use the format `{panelId}-z{zoneIndex}` (e.g. `a0-r0-c0-z0`),
+ * matching the identifier scheme used in the results panel heat maps so the
+ * user can correlate 3D view and heat map without ambiguity.
  *
  * All geometry (panel dimensions, zone positions and sizes) is consumed from
- * `renderData`, which is pre-computed by SolarPanelFactory.  This component
+ * `renderData`, which is pre-computed by SolarPanelFactory. This component
  * is purely presentational and performs no calculations.
  */
 export function SolarPanelComponent({
+  panelId,
   hasOptimizer,
   showPoints,
   renderData,
@@ -42,6 +50,7 @@ export function SolarPanelComponent({
 
       {/* Diode zones */}
       {renderData.zones.map((zone) => {
+        const zoneId = `${panelId}-z${zone.zoneIndex}`;
         const zonePoints = showPoints
           ? samplePoints.filter(sp => sp.zoneIndex === zone.zoneIndex)
           : [];
@@ -58,6 +67,19 @@ export function SolarPanelComponent({
                 side={THREE.DoubleSide}
               />
             </mesh>
+
+            {/* Zone ID label rendered above the panel surface */}
+            <Text
+              position={[zone.posX, 0.035, zone.posZ]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              fontSize={Math.min(zone.width, zone.height) * 0.18}
+              color="#ffffff"
+              anchorX="center"
+              anchorY="middle"
+              depthOffset={-1}
+            >
+              {zoneId}
+            </Text>
 
             {/* Sample points (only shown when showPoints is enabled) */}
             {zonePoints.map((sp) => {

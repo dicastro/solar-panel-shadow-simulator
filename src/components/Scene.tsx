@@ -227,6 +227,7 @@ export function Scene({
                 rotation={[panel.worldRotation.x, panel.worldRotation.y, panel.worldRotation.z]}
               >
                 <SolarPanelComponent
+                  panelId={panel.id}
                   hasOptimizer={panel.hasOptimizer}
                   showPoints={showPoints}
                   renderData={panel.renderData}

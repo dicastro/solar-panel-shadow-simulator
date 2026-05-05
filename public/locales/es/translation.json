@@ -20,6 +20,36 @@
     "west": "O",
     "east": "E"
   },
+  "months": {
+    "short": [
+      "Ene",
+      "Feb",
+      "Mar",
+      "Abr",
+      "May",
+      "Jun",
+      "Jul",
+      "Ago",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dic"
+    ],
+    "long": [
+      "Enero",
+      "Febrero",
+      "Marzo",
+      "Abril",
+      "Mayo",
+      "Junio",
+      "Julio",
+      "Agosto",
+      "Septiembre",
+      "Octubre",
+      "Noviembre",
+      "Diciembre"
+    ]
+  },
   "simulationControls": {
     "title": "Simulación anual",
     "interval": "Intervalo",
@@ -71,7 +101,10 @@
     "fullscreen": "Expandir a pantalla completa",
     "exitFullscreen": "Restaurar anchura",
     "resetWidth": "Restablecer anchura",
-    "dragHint": "Arrastrar para redimensionar"
+    "dragHint": "Arrastrar para redimensionar",
+    "monthlyTotal": "Total del mes",
+    "dailyTotal": "Total del día",
+    "array": "Array"
   },
   "angleWarning": {
     "title": "Aviso de configuración",

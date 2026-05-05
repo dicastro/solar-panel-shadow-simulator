@@ -75,7 +75,9 @@ export const AnnualSimulationEngine = {
    *
    * Shade fractions are computed here by dividing raw shaded-step counts by
    * total step counts, avoiding accumulated floating-point error from running
-   * averages.
+   * averages. Physical geometry fields are propagated from the input panel data
+   * so the results panel can render heat maps with correct proportions and zone
+   * layouts without needing access to the original config.
    */
   finalizePanel: (
     panel: SimulationPanelData,
@@ -111,6 +113,11 @@ export const AnnualSimulationEngine = {
       energyKwh: acc.energyKwh,
       shadeFraction,
       zoneShadeFraction,
+      orientation: panel.orientation,
+      actualWidth: panel.actualWidth,
+      actualHeight: panel.actualHeight,
+      zones: panel.zones,
+      zonesDisposition: panel.zonesDisposition,
     };
   },
 
