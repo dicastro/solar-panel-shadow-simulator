@@ -1,16 +1,22 @@
 /**
  * Annual simulation worker.
  *
- * Receives a 'run' message with serialised BVH geometry and panel data,
- * steps through every N-minute interval of a full year, casts shadow rays
- * at each step, and returns a SetupAnnualResult. Progress updates are emitted
- * every PROGRESS_INTERVAL steps to avoid flooding the main thread.
+ * Receives a 'run' message with serialised BVH geometry, panel data, and an
+ * optional irradiance array. Steps through every N-minute interval of a full
+ * year, casts shadow rays at each step, and returns a SetupAnnualResult.
+ * Progress updates are emitted every PROGRESS_INTERVAL steps.
+ *
+ * Irradiance model:
+ *   When `irradianceData` is provided (a Float32Array of hourly DNI values in
+ *   W/m²), each time step's base power is scaled by `dni / 1000`, where 1000
+ *   W/m² is the Standard Test Condition reference irradiance. This applies a
+ *   real-weather correction to the otherwise clear-sky geometric estimate.
+ *   When `irradianceData` is null the worker uses the geometric model unchanged
+ *   (basePower = peakPower × incidenceFactor).
  *
  * Three.js math classes (Vector3, Matrix4, Raycaster) work correctly in a
  * worker context — they have no DOM or WebGL dependencies. SunCalc is
  * similarly DOM-free.
- *
- * Responds to 'ping' with diagnostic information (preserved from Phase 0).
  */
 
 import * as THREE from 'three';
@@ -42,7 +48,6 @@ const _rayOrigin = new THREE.Vector3();
  *
  * Casts one ray per sample point toward the sun and counts hits per zone.
  * A zone is considered shaded when its hit count reaches the threshold.
- * The raycaster's direction must be set by the caller before invoking this.
  */
 const computeShadedZones = (
   panel: SimulationPanelData,
@@ -65,6 +70,15 @@ const computeShadedZones = (
   return shadedCountByZone.map(count => count >= threshold);
 };
 
+/**
+ * Returns the UTC hour-of-year index (0-based) for a given Date object.
+ * Used to look up the correct entry in the irradianceData array.
+ */
+const utcHourOfYear = (date: Date, year: number): number => {
+  const yearStart = Date.UTC(year, 0, 1, 0, 0, 0);
+  return Math.floor((date.getTime() - yearStart) / 3_600_000);
+};
+
 // ── Simulation loop ───────────────────────────────────────────────────────────
 
 const runSimulation = (payload: WorkerSimulationPayload) => {
@@ -72,6 +86,7 @@ const runSimulation = (payload: WorkerSimulationPayload) => {
     setupId, setupLabel, cacheKey, year, intervalMinutes,
     latitude, longitude, irradianceSource,
     density, threshold, meshes: serializedMeshes, panels,
+    irradianceData,
   } = payload;
 
   const meshObjects = ThreeUtils.reconstructMeshes(serializedMeshes);
@@ -91,12 +106,26 @@ const runSimulation = (payload: WorkerSimulationPayload) => {
       _sunDir.set(sun.direction.x, sun.direction.y, sun.direction.z);
       raycaster.ray.direction.copy(_sunDir);
 
+      // Compute the irradiance multiplier for this time step.
+      // When irradianceData is present, scale by actual DNI / STC reference.
+      // DNI values cover UTC hours; for sub-hourly intervals all steps within
+      // the same UTC hour share the same DNI value.
+      let irradianceMultiplier = 1;
+      if (irradianceData) {
+        const hourIdx = utcHourOfYear(date, year);
+        const dni = hourIdx >= 0 && hourIdx < irradianceData.length
+          ? irradianceData[hourIdx]
+          : 0;
+        irradianceMultiplier = dni / 1000;
+      }
+
       const stringGroups = new Map<string, StringPanelEntry[]>();
       const shadedZonesByPanel: boolean[][] = [];
 
       panels.forEach((panel, idx) => {
         const basePower = (panel.peakPower / 1000) *
-          SolarEngine.calculateIncidenceFactor(sun.direction, panel.worldNormal);
+          SolarEngine.calculateIncidenceFactor(sun.direction, panel.worldNormal) *
+          irradianceMultiplier;
         const shadedZones = computeShadedZones(panel, meshObjects, raycaster, threshold);
         const power = SolarEngine.calculatePanelOutput(basePower, shadedZones, panel.hasOptimizer);
 

@@ -74,7 +74,6 @@
     "selectorLabel": "Simulation run",
     "groupLabel": "{{year}} · {{interval}} min · {{irradiance}} · {{samplingCode}} · {{setups}} setup(s)",
     "irradiance_geometric": "Geometric",
-    "irradiance_pvgis": "PVGIS",
     "irradiance_open-meteo": "Open-Meteo",
     "paramYear": "Year",
     "paramInterval": "Interval",

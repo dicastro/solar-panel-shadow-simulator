@@ -19,7 +19,6 @@ const openDb = (): Promise<IDBDatabase> =>
     request.onerror = (event) => reject((event.target as IDBOpenDBRequest).error);
   });
 
-
 /**
  * IndexedDB wrapper for annual simulation results.
  *

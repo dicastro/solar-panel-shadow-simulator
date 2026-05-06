@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useAppStore, availableSimulationYears, SimulationInterval } from '../store/AppStore';
+import { useAppStore, availableSimulationYears, availableIntervals, SimulationInterval } from '../store/AppStore';
 import { IrradianceSource } from '../types/simulation';
 import { AnnualSimulationProgress } from './AnnualSimulationProgress';
 
@@ -11,13 +11,22 @@ import { AnnualSimulationProgress } from './AnnualSimulationProgress';
  * independent of the render controls in RenderControls. Changing them only
  * affects future simulation runs — the 3D view is unaffected.
  *
+ * Both the interval selector and the year selector are conditioned to the
+ * selected irradiance source:
+ *
+ * - Open-Meteo only provides DNI at hourly resolution, so intervals below
+ *   60 min are hidden.
+ * - Open-Meteo only covers completed past years via its historical archive.
+ *   The current year is excluded to prevent the user from obtaining results
+ *   where all future hours are 0 W/m².
+ *
+ * Switching the irradiance source resets both interval and year to valid
+ * defaults atomically in the store (SimulationSlice.setIrradianceSource).
+ *
  * Ray count derivation:
  *   totalZones        = sum of zone counts across every panel in the active setup
  *   totalSamplePoints = totalZones × simulationDensity²
  *   totalRays         = totalSamplePoints × timeSteps
- *
- * Using the actual total zone count (rather than max zones × panel count) gives
- * an exact figure even when individual arrays override the default zone count.
  */
 export function SimulationControls() {
   const { t } = useTranslation();
@@ -44,7 +53,8 @@ export function SimulationControls() {
   const timeSteps = Math.floor((365 * 24 * 60) / simulationInterval);
   const totalRays = totalSamplePoints * timeSteps;
 
-  const simulationYears = availableSimulationYears();
+  const intervals = availableIntervals(irradianceSource);
+  const years = availableSimulationYears(irradianceSource);
 
   const handleRunStop = () => {
     if (isRunning) {
@@ -61,14 +71,26 @@ export function SimulationControls() {
       <h3>{t('simulationControls.title')}</h3>
 
       <div className="control-row">
+        <label>{t('simulationControls.irradianceSource')}:</label>
+        <select
+          value={irradianceSource}
+          onChange={e => setIrradianceSource(e.target.value as IrradianceSource)}
+          disabled={isRunning}
+        >
+          <option value="geometric">{t('simulationControls.irradianceGeometric')}</option>
+          <option value="open-meteo">Open-Meteo</option>
+        </select>
+      </div>
+
+      <div className="control-row">
         <label>{t('simulationControls.interval')}:</label>
         <select
           value={simulationInterval}
           onChange={e => setSimulationInterval(Number(e.target.value) as SimulationInterval)}
-          disabled={isRunning}
+          disabled={isRunning || intervals.length === 1}
         >
-          <option value={15}>15 min</option>
-          <option value={30}>30 min</option>
+          {intervals.includes(15) && <option value={15}>15 min</option>}
+          {intervals.includes(30) && <option value={30}>30 min</option>}
           <option value={60}>1 h</option>
         </select>
       </div>
@@ -80,22 +102,9 @@ export function SimulationControls() {
           onChange={e => setSimulationYear(Number(e.target.value))}
           disabled={isRunning}
         >
-          {simulationYears.map(y => (
+          {years.map(y => (
             <option key={y} value={y}>{y}</option>
           ))}
-        </select>
-      </div>
-
-      <div className="control-row">
-        <label>{t('simulationControls.irradianceSource')}:</label>
-        <select
-          value={irradianceSource}
-          onChange={e => setIrradianceSource(e.target.value as IrradianceSource)}
-          disabled={isRunning}
-        >
-          <option value="geometric">{t('simulationControls.irradianceGeometric')}</option>
-          <option value="pvgis">PVGIS</option>
-          <option value="open-meteo">Open-Meteo</option>
         </select>
       </div>
 

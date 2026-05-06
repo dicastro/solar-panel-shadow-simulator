@@ -12,6 +12,7 @@ import { SimulationCache } from '../db/SimulationCache';
 import { SolarPanelConverter } from '../converter/SolarPanelConverter';
 import AnnualWorker from '../workers/AnnualSimulation.worker?worker';
 import { MeshFactory } from '../factory/MeshFactory';
+import { createIrradianceProvider } from '../irradiance/IrradianceProvider';
 
 /**
  * How many logical CPU cores to use for simulation workers.
@@ -24,6 +25,9 @@ const maxWorkers = (): number =>
  * Builds the worker payload for a single setup using a fresh mesh serialisation.
  * The `cacheKey` is computed once by the caller and passed in here to avoid
  * hashing the same inputs twice (once for the cache lookup, once for the payload).
+ *
+ * `irradianceData` is pre-fetched on the main thread and included in the payload
+ * so the worker remains agnostic of the irradiance source.
  */
 const buildPayload = (
   setup: PanelSetup,
@@ -35,10 +39,18 @@ const buildPayload = (
   irradianceSource: IrradianceSource,
   cacheKey: string,
   getMeshes: ReturnType<typeof MeshFactory.fromScene>['build'],
+  irradianceData: Float32Array | null,
 ): { payload: WorkerSimulationPayload; transferables: ArrayBuffer[] } => {
   const allPanels = setup.panelArrays.flatMap(pa => pa.panels);
   const panels = SolarPanelConverter.toSimulationPanelDataArray(allPanels);
   const { meshes, transferables } = getMeshes();
+
+  // Include the irradiance buffer in the transfer list for zero-copy transfer.
+  // The cast is safe: Float32Array.slice() always produces a plain ArrayBuffer,
+  // never a SharedArrayBuffer, but TypeScript types .buffer as ArrayBufferLike.
+  if (irradianceData) {
+    transferables.push(irradianceData.buffer as ArrayBuffer);
+  }
 
   return {
     payload: {
@@ -54,6 +66,7 @@ const buildPayload = (
       threshold,
       meshes,
       panels,
+      irradianceData: irradianceData ?? null,
     },
     transferables,
   };
@@ -71,12 +84,19 @@ export interface AnnualSimulationCallbacks {
 
 /**
  * Manages the full lifecycle of the annual simulation:
+ *  - Resolves the irradiance provider for the selected source.
+ *  - Fetches and caches irradiance data on the main thread before worker launch.
  *  - Checks IndexedDB for each setup's cached result before doing any work.
  *  - Serialises scene geometry independently for each worker (zero-copy per
  *    worker, no shared buffer detachment between workers).
  *  - Spawns up to `maxWorkers()` concurrent workers; queues the rest.
  *  - Tracks per-setup progress with EMA-smoothed ETA.
  *  - Persists completed results to IndexedDB.
+ *
+ * Irradiance data is fetched once per simulation run (not per setup), because
+ * all setups share the same location and year. The same Float32Array is copied
+ * into each worker payload via `slice()` so that zero-copy buffer transfer does
+ * not detach the source buffer needed by subsequent workers.
  *
  * Must be called from inside a `<Canvas>` tree so that `useThree` works.
  * The returned `stop` function terminates all active workers immediately.
@@ -101,6 +121,25 @@ export function useAnnualSimulation() {
     callbacks: AnnualSimulationCallbacks,
   ) => {
     stop();
+
+    // Resolve irradiance data once, shared across all workers.
+    // Each worker receives its own slice() copy to allow zero-copy transfer.
+    let sharedIrradianceData: Float32Array | null = null;
+    try {
+      const provider = await createIrradianceProvider(irradianceSource);
+      sharedIrradianceData = await provider.getHourlyDNI(
+        site.location.latitude,
+        site.location.longitude,
+        year,
+      );
+      if (!sharedIrradianceData && irradianceSource !== 'geometric') {
+        console.warn(
+          'useAnnualSimulation: irradiance fetch failed, falling back to geometric model',
+        );
+      }
+    } catch (err) {
+      console.warn('useAnnualSimulation: irradiance provider error', err);
+    }
 
     // The cache key is computed once per setup and reused for both the cache
     // lookup and the worker payload, avoiding redundant hashing of the same inputs.
@@ -222,9 +261,15 @@ export function useAnnualSimulation() {
           onWorkerDone(worker);
         };
 
+        // Each worker gets its own copy of the irradiance buffer so that
+        // zero-copy transfer via postMessage does not detach the source array.
+        const irradianceCopy = sharedIrradianceData
+          ? sharedIrradianceData.slice()
+          : null;
+
         const { payload, transferables } = buildPayload(
           setup, site, density, threshold, intervalMinutes,
-          year, irradianceSource, cacheKey, getMeshes,
+          year, irradianceSource, cacheKey, getMeshes, irradianceCopy,
         );
         worker.postMessage({ type: 'run', payload }, transferables);
       }

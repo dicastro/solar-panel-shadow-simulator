@@ -10,22 +10,54 @@ const CURRENT_YEAR = dayjs().year();
  */
 const PAST_YEARS_AVAILABLE = 5;
 
-/** All years available for simulation: current year down to PAST_YEARS_AVAILABLE ago. */
-export const availableSimulationYears = (): number[] =>
-  Array.from({ length: PAST_YEARS_AVAILABLE + 1 }, (_, i) => CURRENT_YEAR - i);
+/**
+ * Returns the years available for simulation given the selected irradiance source.
+ *
+ * The geometric model works for any year including the current one.
+ * Open-Meteo is backed by the historical archive endpoint, which only covers
+ * completed past years — the current year is not yet available in full.
+ * Offering the current year with Open-Meteo would leave all future hours at
+ * 0 W/m², producing severely underestimated production figures.
+ */
+export const availableSimulationYears = (source: IrradianceSource = 'geometric'): number[] => {
+  const oldestYear = CURRENT_YEAR - PAST_YEARS_AVAILABLE;
+  if (source === 'open-meteo') {
+    // Exclude the current year: archive only covers completed past years.
+    return Array.from(
+      { length: PAST_YEARS_AVAILABLE },
+      (_, i) => CURRENT_YEAR - 1 - i,
+    );
+  }
+  return Array.from(
+    { length: PAST_YEARS_AVAILABLE + 1 },
+    (_, i) => CURRENT_YEAR - i,
+  ).filter(y => y >= oldestYear);
+};
+
+/**
+ * Interval options available for a given irradiance source.
+ *
+ * Open-Meteo provides DNI at hourly resolution only. Using a sub-hourly
+ * interval with Open-Meteo would repeat the same DNI value for every step
+ * within the hour, which is technically correct but misleading — the user
+ * would expect finer weather granularity. Restricting the selector to 60 min
+ * when Open-Meteo is active avoids this confusion without losing accuracy.
+ */
+export const availableIntervals = (source: IrradianceSource): SimulationInterval[] => {
+  if (source === 'open-meteo') return [60];
+  return [15, 30, 60];
+};
 
 /** Time interval (in minutes) used when stepping through the year simulation. */
 export type SimulationInterval = 15 | 30 | 60;
 
 export interface SimulationState {
-  // Annual simulation parameters — independent of render controls
   simulationDensity: number;
   simulationThreshold: number;
   simulationInterval: SimulationInterval;
   simulationYear: number;
   irradianceSource: IrradianceSource;
 
-  // Annual simulation lifecycle
   isRunning: boolean;
 
   /**
@@ -54,9 +86,13 @@ export interface SimulationActions {
   setSimulationThreshold: (threshold: number) => void;
   setSimulationInterval: (interval: SimulationInterval) => void;
   setSimulationYear: (year: number) => void;
+  /**
+   * Changes the irradiance source. If the currently selected interval or year
+   * is not valid for the new source, both are reset to safe defaults:
+   * interval → 60 min, year → the most recent available year for that source.
+   */
   setIrradianceSource: (source: IrradianceSource) => void;
 
-  // Annual simulation lifecycle
   startSimulation: () => void;
   stopSimulation: () => void;
   updateProgress: (progress: SetupSimulationProgress) => void;
@@ -93,7 +129,20 @@ export const createSimulationSlice = (
 
   setSimulationYear: (simulationYear) => set({ simulationYear }),
 
-  setIrradianceSource: (irradianceSource) => set({ irradianceSource }),
+  setIrradianceSource: (irradianceSource) =>
+    set((state) => {
+      const allowedIntervals = availableIntervals(irradianceSource);
+      const interval = allowedIntervals.includes(state.simulationInterval)
+        ? state.simulationInterval
+        : 60;
+
+      const allowedYears = availableSimulationYears(irradianceSource);
+      const year = allowedYears.includes(state.simulationYear)
+        ? state.simulationYear
+        : allowedYears[0];
+
+      return { irradianceSource, simulationInterval: interval, simulationYear: year };
+    }),
 
   startSimulation: () =>
     set({

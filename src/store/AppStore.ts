@@ -74,5 +74,5 @@ export const useAppStore = create<AppStore>((set, get) => {
 
 // Re-export helpers that consumers reference alongside useAppStore
 export { makeDateInTimezone } from './slices/RenderSlice';
-export { availableSimulationYears } from './slices/SimulationSlice';
+export { availableSimulationYears, availableIntervals } from './slices/SimulationSlice';
 export type { SimulationInterval } from './slices/SimulationSlice';

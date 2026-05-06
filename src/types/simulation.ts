@@ -17,7 +17,16 @@ export interface InstantProductionResult {
   readonly power: number; // kW
 }
 
-export type IrradianceSource = 'geometric' | 'pvgis' | 'open-meteo';
+/**
+ * Identifies the irradiance data source used for an annual simulation run.
+ *
+ * - `geometric`: clear-sky model based purely on sun geometry (no weather
+ *   correction). Always available, no network required.
+ * - `open-meteo`: hourly Direct Normal Irradiance (DNI) from the Open-Meteo
+ *   Historical Weather API. Free, no API key, CORS-compatible. Falls back to
+ *   geometric if the fetch fails.
+ */
+export type IrradianceSource = 'geometric' | 'open-meteo';
 
 /**
  * The set of inputs that fully determines a simulation result.
@@ -165,6 +174,11 @@ export interface SimulationPanelData {
 /**
  * All data the worker needs to run a full annual simulation for one setup.
  * Transferred once per worker launch; large typed arrays are zero-copy transferred.
+ *
+ * `irradianceData` is an optional Float32Array of hourly DNI values (W/m²)
+ * with one entry per UTC hour of the simulated year. When present, the worker
+ * multiplies `basePower` by `dni / 1000` at each time step (1000 W/m² = STC).
+ * When absent, the worker uses the geometric clear-sky model unchanged.
  */
 export interface WorkerSimulationPayload {
   readonly setupId: string;
@@ -180,6 +194,11 @@ export interface WorkerSimulationPayload {
   /** All shadow-casting meshes in the scene (walls, railings, panels of this setup). */
   readonly meshes: SerializedMesh[];
   readonly panels: SimulationPanelData[];
+  /**
+   * Hourly DNI values (W/m²), one per UTC hour of the simulated year.
+   * Null or absent means geometric clear-sky model (no weather correction).
+   */
+  readonly irradianceData: Float32Array | null;
 }
 
 // ── Messages: main thread → worker ───────────────────────────────────────────
