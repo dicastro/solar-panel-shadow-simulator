@@ -154,9 +154,22 @@ export interface SolarPanelArray {
  */
 export interface Site {
   readonly location: LocationConfiguration;
+  /**
+   * Site azimuth pre-negated for direct use as a Three.js rotation-y value.
+   * Stored negated so Scene.tsx can use it directly without knowledge of the
+   * sign convention difference between config space and Three.js.
+   */
   readonly azimuthRad: number;
   readonly centerX: number;
   readonly centerZ: number;
+  /**
+   * South-West corner of the terrace in config space (metres).
+   * Used as the origin reference for panel array positions: an array's
+   * configured position [x, z] places its SW corner at
+   * (swCornerX + x) East and (swCornerZ + z) North.
+   */
+  readonly swCornerX: number;
+  readonly swCornerZ: number;
   readonly boundingRadius: number;
   readonly walls: readonly Wall[];
   readonly wallIntersections: readonly WallIntersection[];

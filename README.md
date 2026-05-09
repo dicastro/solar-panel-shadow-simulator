@@ -126,8 +126,8 @@ src/
 │   └── useResizablePanel.ts
 │
 ├── db/
-│   ├── SimulationCache.ts         # IndexedDB v2: simulation-results store
-│   └── IrradianceCache.ts         # IndexedDB v2: irradiance-cache store (permanent cache, past years only)
+│   ├── SimulationCache.ts         # IndexedDB: simulation-results store
+│   └── IrradianceCache.ts         # IndexedDB: irradiance-cache store (permanent cache, past years only)
 │
 ├── workers/
 │   └── AnnualSimulation.worker.ts # Applies irradianceData multiplier when present
@@ -196,6 +196,34 @@ A half-cylinder uses `openEnded=true` and `thetaLength=Math.PI`.
 ### Store architecture — slice pattern with facade
 
 Three domain slices composed behind a single `useAppStore` facade. Each slice is a pure function. Slices never import each other.
+
+### Panel world-space positioning pipeline
+
+Panels are rendered outside the site `<group>` (which carries the site azimuth rotation) so their raycasting sample points are already in absolute world space. The positioning pipeline is:
+
+1. **`SiteFactory`** computes `swCornerX`, `swCornerZ` (minimum X and Z of all wall points in config space) and `azimuthRad`. These are stored on the `Site` domain object.
+
+2. **`SolarPanelArrayFactory`** converts the array's config-space position into Three.js world space in two steps:
+   - Finds the site's SW corner in centred Three.js coords, then rotates it by `siteAzimuthRad` to obtain the world-space SW corner of the site.
+   - Converts the array's position offset `[configX, configZ]` (East and North from the site SW corner, measured in the site's rotated frame) into world space using the same rotation matrix.
+   - The resulting origin is the **SW corner of the array** at `elevation` height.
+
+3. **`SolarPanelFactory`** places each panel relative to the array SW corner using two axis vectors derived from the array's own azimuth. These are obtained by applying the Three.js `Ry(θ)` matrix (`x' = cos·x + sin·z`, `z' = −sin·x + cos·z`) to the canonical East `(1,0,0)` and North `(0,0,−1)` vectors:
+   - `eastDir  = ( cos az,  0,  −sin az )`  — column direction
+   - `northDir = ( −sin az, 0,  −cos az )`  — row direction (up the slope, horizontally)
+   - Inclination lifts each panel vertically by `slopeLen × sin(inclination)`.
+
+4. **`ThreeConverter`** applies `order: 'YXZ'` Euler rotations so that inclination is always around the panel's own East-West axis, keeping panel edges parallel to the ground for any azimuth value.
+
+### Azimuth sign convention — unified across site and panels
+
+Both the site azimuth and panel array azimuths follow the same convention throughout the codebase:
+
+- **0 = South** (panel face or site North pointing due South/North)
+- **Positive = East** (clockwise from South when viewed from above)
+- **Negative = West** (anticlockwise from South)
+
+`SiteFactory` stores `azimuthRad = azimuth × π/180` (no sign flip). `Scene.tsx` applies `rotation-y = +site.azimuthRad` to the site group. Three.js `rotation-y` positive is mathematically anticlockwise, but in this project's top-down camera view it produces the correct clockwise-from-South rotation observed on screen. Panel arrays use `worldRotation.y = +radAzimuth` with the same sign, ensuring that a panel array with the same azimuth as the site faces the same direction as the site's South wall.
 
 ### Irradiance provider — Strategy pattern
 
@@ -283,13 +311,37 @@ West ─────┼───── East (+X)
       South (+Z)
 ```
 
-Config coordinates are flipped (`z_three = −z_config`) in `SiteFactory` and `SolarPanelArrayFactory`.
+Config Z coordinates are negated (`z_three = −z_config`) when converting wall points and the SW corner reference into centred Three.js coordinates.
 
-### Site azimuth
+### Azimuth convention
 
-- Defined in degrees, **South = 0**.
-- Positive values rotate towards West; negative towards East.
-- Panel arrays have their own independent `azimuth` (absolute, not relative to site).
+Both the site azimuth and panel array azimuths share one unified convention:
+
+| Value | Meaning |
+|-------|---------|
+| 0     | Panel face / site orientation points due South |
+| > 0   | Rotated toward East (clockwise from South, viewed from above) |
+| < 0   | Rotated toward West (anticlockwise from South, viewed from above) |
+
+A site with `azimuth = 18.5` has its South-facing wall rotated 18.5° toward the East. A panel array with `azimuth = 18.5` faces 18.5° East of South. Both are configured with the same positive value and both rotate in the same direction on screen.
+
+### Array position reference point
+
+The `position: [x, z]` of a panel array in `config.json` is the offset of the **SW corner of the array** from the **SW corner of the site** (the minimum-X, minimum-Z wall point), measured in the site's rotated reference frame:
+
+- `+x` = East along the rotated site
+- `+z` = North along the rotated site
+
+`position: [0, 0]` places the array's SW corner exactly at the site's SW corner (after site rotation).
+
+### Panel indexing within an array
+
+| Index | Axis      | 0 = …             | Increases toward … |
+|-------|-----------|-------------------|--------------------|
+| `row` | North–South | southernmost row (bottom of slope) | North (up the slope) |
+| `col` | West–East   | westernmost column | East |
+
+The coordinate `(row=0, col=0)` is the South-West panel of the array.
 
 ---
 
@@ -317,7 +369,7 @@ cross(a, b) = a.x·b.z − a.z·b.x
 {
   "site": {
     "location": { "latitude": 40.62, "longitude": -4.01 },
-    "azimuth": 0,
+    "azimuth": 18.5,
     "timezone": "Europe/Madrid",
     "wallPoints": [[0,0], [3.7,0], ...],
     "wallDefaults": { "height": 0.7, "thickness": 0.2 },
@@ -328,14 +380,29 @@ cross(a, b) = a.x·b.z − a.z·b.x
 }
 ```
 
+### `azimuth` — site and panel arrays
+
+Both the site `azimuth` and each array's `azimuth` follow the same convention:
+- `0` = South-facing
+- Positive = rotated toward **East** (clockwise from South, viewed from above)
+- Negative = rotated toward **West**
+
+These are **absolute** azimuths, not relative to each other. An installer measures each independently with a compass.
+
+### `position` — panel array placement
+
+`position: [x, z]` is the distance in metres from the **SW corner of the site** to the **SW corner of the array**, measured in the site's rotated frame (East and North, not global East and North).
+
 ### `arraysSettings` — per-panel overrides
 
 Each entry targets one specific panel by its `array` / `row` / `col` address (all 0-based) and overrides `hasOptimizer` and/or `string`.
 
-| Index | Axis | 0 = … |
-|-------|------|--------|
-| `row` | North–South | northernmost row |
-| `col` | West–East   | westernmost column |
+| Index | Axis | 0 = … | Increases toward … |
+|-------|------|--------|--------------------|
+| `row` | North–South | southernmost row | North |
+| `col` | West–East   | westernmost column | East |
+
+The coordinate `(array, row=0, col=0)` addresses the South-West panel of that array.
 
 ---
 
@@ -433,8 +500,6 @@ Each cache module manages its own database, keeping them fully decoupled:
 | `solar-simulator` | 1 | `simulation-results` | `cacheKey` hash | Full `SetupAnnualResult` |
 | `solar-simulator-irradiance` | 1 | `irradiance-cache` | `{source}:{lat4dp}:{lon4dp}:{year}` | Hourly DNI array |
 
-Separate databases mean each module's `onupgradeneeded` handler only knows about its own stores — no cross-module coupling during schema creation or migration.
-
 ### Worker architecture
 
 **Worker pool:** `max(1, hardwareConcurrency − 1)` concurrent workers.
@@ -518,6 +583,25 @@ Resolving irradiance data centrally before worker launch avoids duplicate networ
 ### Zero-copy buffer transfer with per-worker copies
 
 `Float32Array.slice()` produces an independent copy of the irradiance buffer for each worker. Without this, the first `postMessage` with `transfer` would detach the shared buffer, causing subsequent workers to receive an empty array.
+
+### Panel positioning: panels outside the site group, origin at SW corner
+
+Panels are rendered outside the `<group rotation-y={site.azimuthRad}>` that contains walls and railings, so their world-space coordinates must incorporate the site rotation explicitly. Computing the panel origin as the SW corner of the array (at `elevation` height) makes the config position `[x, z]` directly readable as "metres East and North from the site SW corner" — the same measurement an installer would make on-site.
+
+### Unified azimuth sign convention eliminates one source of confusion
+
+Historically the site and panel azimuths used opposite sign conventions, requiring mental negation when comparing the two. The unified convention (0 = South, positive = East, same sign for site and panels) removes that cognitive overhead and makes the `config.json` values directly comparable.
+
+### Array axis vectors derived analytically from the Three.js Ry(θ) matrix
+
+The Three.js `rotation-y = θ` matrix is `Ry(θ): x' = cos(θ)·x + sin(θ)·z, z' = −sin(θ)·x + cos(θ)·z`. Applying this to the canonical East `(1,0,0)` and North `(0,0,−1)` vectors gives the panel array axis directions in world space:
+
+```
+eastDir  = ( cos az,   0,  −sin az )
+northDir = ( −sin az,  0,  −cos az )
+```
+
+The same matrix is used to rotate the site's SW corner and the array position offset from centred config space into world space. Using the wrong sign for `sin` in either place produces a mirrored rotation that appears correct at azimuth=0 but diverges for any non-zero azimuth.
 
 ### IndexedDB schema versioning
 

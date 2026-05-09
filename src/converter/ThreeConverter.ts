@@ -8,5 +8,14 @@ import { Euler3, Vector3 } from '../types/geometry';
 export const ThreeConverter = {
   toVector3: (v: Vector3): THREE.Vector3 => new THREE.Vector3(v.x, v.y, v.z),
 
-  toEuler: (e: Euler3): THREE.Euler => new THREE.Euler(e.x, e.y, e.z),
+  /**
+   * Converts a domain Euler3 to a THREE.Euler, preserving the rotation order
+   * when specified. Defaults to Three.js 'XYZ' when order is absent.
+   *
+   * Panel rotations carry order 'YXZ' so that azimuth (Y) is applied before
+   * inclination (X), keeping panel edges parallel to the ground for any
+   * combination of azimuth and inclination.
+   */
+  toEuler: (e: Euler3): THREE.Euler =>
+    new THREE.Euler(e.x, e.y, e.z, e.order ?? 'XYZ'),
 };

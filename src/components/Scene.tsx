@@ -70,24 +70,18 @@ function RailingSupport({ data }: { data: RailingSupportRenderData }) {
 }
 
 /**
- * Root 3D scene component. Renders walls, railings, solar panels, sun and
- * compass, and wires the annual simulation hook to the application store.
+ * Root 3D scene component.
  *
- * `useAnnualSimulation` must be called from inside the `<Canvas>` tree
- * because it uses `useThree` internally to access the Three.js scene for
- * BVH serialisation. `Scene` is always rendered inside `<Canvas>` in App.tsx,
- * making it the correct host for this hook.
+ * Walls and railings are children of the site group (rotation-y = site.azimuthRad)
+ * so they inherit the site orientation automatically.
  *
- * The annual simulation is triggered by watching `isRunning` in the store.
- * When it transitions to true, all configured setups are built using the
- * simulation-specific density (simulationDensity) and dispatched to the
- * worker pool. The render view is unaffected because it uses renderDensity.
+ * Panels are rendered OUTSIDE the site group. Their worldPosition and
+ * worldRotation are already in absolute world space (site azimuth baked in by
+ * SolarPanelArrayFactory), which is required for the raycaster in useShadowSampler
+ * to operate correctly without Three.js group inheritance.
  *
- * The `isRunning` effect deliberately lists only `isRunning` as a dependency.
- * This is intentional: the simulation is a one-shot operation triggered by the
- * transition false→true. Re-running it on every parameter change during an
- * active run is not desired — those parameters are locked in the UI while
- * the simulation is running.
+ * The annual simulation effect lists only isRunning as a dependency — the
+ * simulation is a one-shot operation triggered by the false→true transition.
  */
 export function Scene({
   site, activeSetup, sun, date, showPoints,
@@ -173,6 +167,7 @@ export function Scene({
       <Compass />
       <Sun date={date} />
 
+      {/* Walls and railings — inside the site group, inherit site azimuth rotation. */}
       <group rotation-y={site.azimuthRad}>
         <mesh receiveShadow position={[0, 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <extrudeGeometry args={[floorShape, { depth: 0.02, bevelEnabled: false }]} />
@@ -200,9 +195,7 @@ export function Scene({
               <boxGeometry args={wall.renderData.boxArgs} />
               <meshStandardMaterial color={wall.renderData.color} />
             </mesh>
-
             {wall.railing && <RailingRail data={wall.railing.rail} />}
-
             {wall.railing?.supports.map((support, i) => (
               <RailingSupport key={i} data={support} />
             ))}
@@ -210,6 +203,12 @@ export function Scene({
         ))}
       </group>
 
+      {/*
+       * Panels — outside the site group. worldPosition and worldRotation are
+       * in absolute world space (site azimuth already incorporated by
+       * SolarPanelArrayFactory), so the raycaster in useShadowSampler receives
+       * correct world-space coordinates without Three.js group inheritance.
+       */}
       <ShadowedScene
         site={site}
         activeSetup={activeSetup}
@@ -224,7 +223,12 @@ export function Scene({
               <group
                 key={panel.id}
                 position={[panel.worldPosition.x, panel.worldPosition.y, panel.worldPosition.z]}
-                rotation={[panel.worldRotation.x, panel.worldRotation.y, panel.worldRotation.z]}
+                rotation={new THREE.Euler(
+                  panel.worldRotation.x,
+                  panel.worldRotation.y,
+                  panel.worldRotation.z,
+                  panel.worldRotation.order ?? 'XYZ',
+                )}
               >
                 <SolarPanelComponent
                   panelId={panel.id}

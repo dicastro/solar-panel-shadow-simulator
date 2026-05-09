@@ -45,22 +45,22 @@
       ]
     ],
     "wallDefaults": {
-      "height": 0.7,
-      "thickness": 0.2
+      "height": 0.72,
+      "thickness": 0.145
     },
     "railingDefaults": {
       "active": true,
-      "heightOffset": 0.18,
+      "heightOffset": 0.185,
       "shape": {
         "kind": "cylinder",
-        "radius": 0.02
+        "radius": 0.025
       },
       "support": {
         "shape": {
           "kind": "cylinder",
-          "radius": 0.01
+          "radius": 0.008
         },
-        "edgeDistance": 0.2
+        "edgeDistance": 0.22
       },
       "extendAtStart": true,
       "extendAtEnd": true,
@@ -161,6 +161,36 @@
   },
   "setups": [
     {
+      "label": "Configuración actual",
+      "panelDefaults": {
+        "width": 1,
+        "height": 2,
+        "peakPower": 415,
+        "zones": 2,
+        "zonesDisposition": "horizontal",
+        "hasOptimizer": false,
+        "string": "S1"
+      },
+      "arrays": [
+        {
+          "position": [
+            0.09,
+            0.212
+          ],
+          "azimuth": 16.5,
+          "elevation": 0.61,
+          "inclination": 20,
+          "rows": 3,
+          "columns": 3,
+          "spacing": [
+            0.005,
+            0.005
+          ],
+          "orientation": "portrait"
+        }
+      ]
+    },
+    {
       "label": "3 filas a 58cm alto 9° (optimizada)",
       "panelDefaults": {
         "width": 1,
@@ -177,7 +207,7 @@
             0.3,
             0.8
           ],
-          "azimuth": -18.5,
+          "azimuth": 18.5,
           "elevation": 0.58,
           "inclination": 9,
           "rows": 1,
@@ -193,7 +223,7 @@
             0.3,
             3.5
           ],
-          "azimuth": -18.5,
+          "azimuth": 18.5,
           "elevation": 0.58,
           "inclination": 9,
           "rows": 1,
@@ -209,7 +239,7 @@
             0.3,
             6.3
           ],
-          "azimuth": -18.5,
+          "azimuth": 18.5,
           "elevation": 0.58,
           "inclination": 9,
           "rows": 1,
@@ -239,7 +269,7 @@
             0.3,
             0.8
           ],
-          "azimuth": -18.5,
+          "azimuth": 18.5,
           "elevation": 0.58,
           "inclination": 9,
           "rows": 1,
@@ -255,7 +285,7 @@
             0.3,
             3.5
           ],
-          "azimuth": -18.5,
+          "azimuth": 18.5,
           "elevation": 0.58,
           "inclination": 9,
           "rows": 1,
@@ -271,40 +301,10 @@
             0.3,
             6.3
           ],
-          "azimuth": -18.5,
+          "azimuth": 18.5,
           "elevation": 0.58,
           "inclination": 9,
           "rows": 1,
-          "columns": 3,
-          "spacing": [
-            0.005,
-            0.005
-          ],
-          "orientation": "portrait"
-        }
-      ]
-    },
-    {
-      "label": "Configuración actual",
-      "panelDefaults": {
-        "width": 1,
-        "height": 2,
-        "peakPower": 415,
-        "zones": 2,
-        "zonesDisposition": "horizontal",
-        "hasOptimizer": false,
-        "string": "S1"
-      },
-      "arrays": [
-        {
-          "position": [
-            0.09,
-            0.212
-          ],
-          "azimuth": -16.5,
-          "elevation": 0.61,
-          "inclination": 20,
-          "rows": 3,
           "columns": 3,
           "spacing": [
             0.005,

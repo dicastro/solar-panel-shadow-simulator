@@ -9,33 +9,12 @@ import { WallIntersectionFactory } from './WallIntersectionFactory';
 /**
  * Result of SiteFactory.create, bundling the Site geometry with any angle
  * validation warnings detected during construction.
- *
- * Returning a result object rather than writing to external state keeps the
- * factory free of side effects — the caller decides what to do with each part.
  */
 export interface SiteFactoryResult {
   readonly site: Site;
-  /**
-   * Each entry describes three consecutive config-space wall points where the
-   * angle at the middle point is neither 90° nor 180°. Empty when all angles
-   * are valid. Coordinates use the original config system (+X = East, +Z = North)
-   * so they match the values the user typed in config.json.
-   */
   readonly angleWarnings: readonly AngleWarning[];
 }
 
-/**
- * Returns the longitudinal shortening (in metres) to apply at one end of a
- * wall segment at a shared vertex.
- *
- * Shortening is only needed at interior recess vertices (`isConvex = true` in
- * Three.js coordinates, which corresponds to a 270° interior angle). At those
- * vertices the displaced wall bodies would overlap the intersection post volume,
- * so each wall end is shortened by exactly `wallThickness` to eliminate the
- * overlap. Exterior corners and collinear vertices require no adjustment.
- *
- * See the README for the full geometric derivation.
- */
 const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
   if (isStraight || !isConvex) return 0;
   return wallThickness;
@@ -45,13 +24,17 @@ export const SiteFactory = {
   /**
    * Builds the complete Site geometry from a raw configuration.
    *
-   * Every vertex is classified once with `pointAlignedWithPreviousAndNext`.
-   * The resulting `vertexInfo` array is reused for both angle validation
-   * (populating `angleWarnings`) and geometry construction (wall adjustments,
-   * intersection posts), avoiding two separate traversals of the same data.
+   * Azimuth convention: in config space, 0 = South, positive = East, negative = West.
+   * azimuthRad is stored as the raw radian value (not negated). Scene.tsx applies
+   * -site.azimuthRad as the Three.js rotation-y, because Three.js rotation-y positive
+   * means anticlockwise from above (West), which is the opposite of the config convention.
    *
-   * Config coordinates use +Z = North. Three.js uses +Z = South, so Z is
-   * negated when centering. See the README for more details.
+   * The South-West corner (minimum X and minimum Z across all wall points) is stored as
+   * swCornerX / swCornerZ. Panel array positions are measured from this corner, matching
+   * how an installer measures on-site from the most accessible terrace corner.
+   *
+   * Config coordinates use +Z = North. Three.js uses +Z = South, so Z is negated when
+   * converting wall points to centred Three.js coordinates.
    */
   create: (config: Config): SiteFactoryResult => {
     const { wallPoints, wallDefaults, railingDefaults, wallsSettings, azimuth } = config.site;
@@ -59,6 +42,9 @@ export const SiteFactory = {
 
     const centerX = wallPoints.reduce((s, p) => s + p[0], 0) / n;
     const centerZ = wallPoints.reduce((s, p) => s + p[1], 0) / n;
+
+    const swCornerX = Math.min(...wallPoints.map(p => p[0]));
+    const swCornerZ = Math.min(...wallPoints.map(p => p[1]));
 
     const boundingRadius = Math.max(...wallPoints.map(p =>
       Math.sqrt((p[0] - centerX) ** 2 + (p[1] - centerZ) ** 2)
@@ -127,6 +113,8 @@ export const SiteFactory = {
       azimuthRad: (azimuth * Math.PI) / 180,
       centerX,
       centerZ,
+      swCornerX,
+      swCornerZ,
       boundingRadius,
       walls,
       wallIntersections,

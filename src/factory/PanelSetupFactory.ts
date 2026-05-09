@@ -23,9 +23,7 @@ const deriveSetupId = (label: string, index: number): string => {
 
 /**
  * Returns the frame and emissive colours for a panel cell based on whether
- * it has an optimizer. Extracted here so that overriding `hasOptimizer` via
- * `arraysSettings` also updates the visual colour without duplicating the
- * colour logic from SolarPanelFactory.
+ * it has an optimizer.
  */
 const panelColours = (hasOptimizer: boolean) => ({
   frameColor: hasOptimizer ? '#2ecc71' : '#121e36',
@@ -36,6 +34,10 @@ export const PanelSetupFactory = {
   /**
    * Creates a full PanelSetup from scratch: panel geometry, world positions,
    * render data, and sample points.
+   *
+   * The site's SW corner (`swCornerX`, `swCornerZ`) and azimuth (`azimuthRad`)
+   * are forwarded to `SolarPanelArrayFactory` so that array positions are
+   * measured from the correct reference point in the correct reference frame.
    *
    * After building all arrays, per-panel overrides from `arraysSettings` are
    * applied. Each override targets one panel by its `array`, `row`, and `col`
@@ -61,6 +63,9 @@ export const PanelSetupFactory = {
         density,
         site.centerX,
         site.centerZ,
+        site.swCornerX,
+        site.swCornerZ,
+        site.azimuthRad,
       ),
     );
 
@@ -68,33 +73,33 @@ export const PanelSetupFactory = {
     const overrides = setupConfig.arraysSettings;
     const finalArrays: SolarPanelArray[] = overrides && overrides.length > 0
       ? panelArrays.map(pa => {
-          const arrayOverrides = overrides.filter(o => o.array === pa.index);
-          if (arrayOverrides.length === 0) return pa;
+        const arrayOverrides = overrides.filter(o => o.array === pa.index);
+        if (arrayOverrides.length === 0) return pa;
 
-          const panels: SolarPanel[] = pa.panels.map(panel => {
-            const override = arrayOverrides.find(
-              o => o.row === panel.row && o.col === panel.col,
-            );
-            if (!override) return panel;
+        const panels: SolarPanel[] = pa.panels.map(panel => {
+          const override = arrayOverrides.find(
+            o => o.row === panel.row && o.col === panel.col,
+          );
+          if (!override) return panel;
 
-            const hasOptimizer = override.hasOptimizer ?? panel.hasOptimizer;
-            const string = override.string ?? panel.string;
-            const { frameColor, emissiveColor } = panelColours(hasOptimizer);
+          const hasOptimizer = override.hasOptimizer ?? panel.hasOptimizer;
+          const string = override.string ?? panel.string;
+          const { frameColor, emissiveColor } = panelColours(hasOptimizer);
 
-            return {
-              ...panel,
-              hasOptimizer,
-              string,
-              renderData: {
-                ...panel.renderData,
-                frameColor,
-                emissiveColor,
-              },
-            };
-          });
+          return {
+            ...panel,
+            hasOptimizer,
+            string,
+            renderData: {
+              ...panel.renderData,
+              frameColor,
+              emissiveColor,
+            },
+          };
+        });
 
-          return { ...pa, panels };
-        })
+        return { ...pa, panels };
+      })
       : panelArrays;
 
     return {

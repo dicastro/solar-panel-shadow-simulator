@@ -4,17 +4,87 @@ import { SamplePointFactory, computeZoneLayouts } from './SamplePointFactory';
 
 /**
  * Pre-computed origin of the panel array group in world space.
- * Calculated once in SolarPanelArrayFactory and passed to each panel.
+ *
+ * `x`, `y`, `z` are the Three.js world-space coordinates of the **South-West
+ * corner** of the array's base footprint at `elevation` height.
+ *
+ * "South-West" is relative to the array's own azimuth:
+ *   - South = bottom of slope (the edge closest to the ground).
+ *   - West  = opposite to the column-increase direction.
+ *
+ * `radAzimuth` follows the config convention: 0 = South, positive = East.
  */
 export interface ArrayOrigin {
   readonly x: number;
   readonly y: number;
   readonly z: number;
   readonly radInclination: number;
+  /** Azimuth in radians: 0 = South, positive = East (same as site convention). */
   readonly radAzimuth: number;
 }
 
 export const SolarPanelFactory = {
+  /**
+   * Creates a single solar panel within a panel array.
+   *
+   * ## Panel indexing
+   *
+   *   row = 0  → southernmost row (bottom of slope, South edge of array).
+   *   col = 0  → westernmost column (West edge of array).
+   *   Rows increase northward (up the slope); columns increase eastward.
+   *
+   * ## Three.js rotation-y matrix
+   *
+   * Three.js `rotation-y = θ` applies Ry(θ):
+   *
+   *   x' =  cos(θ)·x + sin(θ)·z
+   *   z' = −sin(θ)·x + cos(θ)·z
+   *
+   * ## Axis directions in Three.js world space
+   *
+   * With array azimuth `az` (radians, 0 = South, positive = East), the
+   * array's three natural axes in Three.js world space are derived by
+   * applying Ry(az) to the canonical unit vectors:
+   *
+   *   eastDir (col direction):   Ry(az) · (1, 0, 0)  = ( cos az,  0, −sin az )
+   *   northDir (row direction):  Ry(az) · (0, 0, −1) = (−sin az,  0, −cos az )
+   *   southDir (panel face):     Ry(az) · (0, 0, +1) = ( sin az,  0,  cos az )
+   *
+   * Verification with az = 0 (South-facing):
+   *   eastDir  = (1,  0,  0) = +X = East  ✓
+   *   northDir = (0,  0, −1) = −Z = North ✓
+   *   southDir = (0,  0,  1) = +Z = South ✓
+   *
+   * Verification with az = π/2 (East-facing):
+   *   eastDir  = (0,  0, −1) = North ✓  (columns go northward when facing East)
+   *   northDir = (−1, 0,  0) = West  ✓
+   *   southDir = (1,  0,  0) = East  ✓  (face points East)
+   *
+   * ## World position derivation
+   *
+   * Starting from the SW corner (origin) at elevation height:
+   *
+   *   localX   = col*(pWidth + sx) + pWidth/2      [East along array face]
+   *   slopeLen = row*(pHeight + sy) + pHeight/2     [up the slope from South edge]
+   *   horizNorth = slopeLen * cos(inclination)      [northward ground reach]
+   *   heightGain = slopeLen * sin(inclination)      [vertical rise]
+   *
+   * Panel centre in world space:
+   *   worldX = origin.x + cosAz*localX + (−sinAz)*horizNorth
+   *   worldY = origin.y + heightGain
+   *   worldZ = origin.z + (−sinAz)*localX + (−cosAz)*horizNorth
+   *
+   * ## World rotation
+   *
+   * Euler order 'YXZ':
+   *   Y = +radAzimuth      (applied first; same sign as site rotation-y)
+   *   X =  radInclination  (applied second, around the panel's own East-West axis)
+   *
+   * Using the same sign as the site group ensures a panel with the same azimuth
+   * as the site faces the same direction as the site's South wall.
+   * With 'YXZ' order, the X rotation always tilts around the panel's own
+   * East-West axis regardless of azimuth, keeping panel edges parallel to the ground.
+   */
   create: (
     arrayIndex: number,
     row: number,
@@ -22,7 +92,6 @@ export const SolarPanelFactory = {
     arrayConfig: PanelArrayConfiguration,
     defaults: PanelDefinition,
     density: number,
-    /** Pre-computed by SolarPanelArrayFactory */
     origin: ArrayOrigin,
   ): SolarPanel => {
     const orientation = arrayConfig.orientation ?? 'portrait';
@@ -38,29 +107,30 @@ export const SolarPanelFactory = {
     const pWidth = orientation === 'portrait' ? baseW : baseH;
     const pHeight = orientation === 'portrait' ? baseH : baseW;
 
-    const cols = arrayConfig.columns;
-    const rows = arrayConfig.rows;
+    // Distance along each axis from the SW corner to the panel centre.
+    const localX = col * (pWidth + spacing[0]) + pWidth / 2; // East along array
+    const slopeLen = row * (pHeight + spacing[1]) + pHeight / 2; // up the slope
 
-    // Local offset of this panel inside the group (flat, pre-rotation)
-    const localX = (col - (cols - 1) / 2) * (pWidth + spacing[0]);
-    const localZ = (row - (rows - 1) / 2) * (pHeight + spacing[1]);
+    const horizNorth = slopeLen * Math.cos(origin.radInclination);
+    const heightGain = slopeLen * Math.sin(origin.radInclination);
 
-    // The array group is rotated by radInclination around the X axis.
-    // localZ therefore contributes to both world Y and world Z.
-    const worldX = origin.x + localX;
-    const worldY = origin.y - localZ * Math.sin(origin.radInclination);
-    const worldZ = origin.z + localZ * Math.cos(origin.radInclination);
+    // Array axis directions from Ry(az):
+    //   eastDir  = ( cos az,  0, −sin az )
+    //   northDir = (−sin az,  0, −cos az )
+    const cosAz = Math.cos(origin.radAzimuth);
+    const sinAz = Math.sin(origin.radAzimuth);
+
+    const worldX = origin.x + cosAz * localX - sinAz * horizNorth;
+    const worldY = origin.y + heightGain;
+    const worldZ = origin.z + -sinAz * localX - cosAz * horizNorth;
 
     const id = `a${arrayIndex}-r${row}-c${col}`;
 
-    const actualW = orientation === 'portrait' ? baseW : baseH;
-    const actualH = orientation === 'portrait' ? baseH : baseW;
-
     const samplePoints = SamplePointFactory.createForPanel(
-      id, actualW, actualH, zones, zonesDisp, density,
+      id, pWidth, pHeight, zones, zonesDisp, density,
     );
 
-    const zoneLayouts = computeZoneLayouts(actualW, actualH, zones, zonesDisp);
+    const zoneLayouts = computeZoneLayouts(pWidth, pHeight, zones, zonesDisp);
 
     return {
       id,
@@ -74,11 +144,11 @@ export const SolarPanelFactory = {
       zonesDisposition: zonesDisp,
       orientation,
       worldPosition: { x: worldX, y: worldY, z: worldZ },
-      worldRotation: { x: origin.radInclination, y: -origin.radAzimuth, z: 0 },
+      worldRotation: { x: origin.radInclination, y: origin.radAzimuth, z: 0, order: 'YXZ' },
       samplePoints,
       renderData: {
-        actualWidth: actualW,
-        actualHeight: actualH,
+        actualWidth: pWidth,
+        actualHeight: pHeight,
         frameColor: hasOptimizer ? '#2ecc71' : '#121e36',
         emissiveColor: hasOptimizer ? '#0a2a16' : '#050a15',
         zones: zoneLayouts,
