@@ -24,6 +24,13 @@ interface SolarPanelComponentProps {
  * All geometry (panel dimensions, zone positions and sizes) is consumed from
  * `renderData`, which is pre-computed by SolarPanelFactory. This component
  * is purely presentational and performs no calculations.
+ *
+ * The frame mesh carries `userData={{ isPanelFrame: true }}` so that
+ * MeshFactory can exclude it from the static scene geometry batch sent to
+ * simulation workers. Panel frame geometry for each simulated setup is built
+ * independently by PanelMeshFactory from SimulationPanelData, ensuring the
+ * worker always receives the correct panels regardless of which setup is
+ * currently rendered in the 3D viewport.
  */
 export function SolarPanelComponent({
   panelId,
@@ -38,7 +45,11 @@ export function SolarPanelComponent({
   return (
     <group>
       {/* Frame + glass body */}
-      <mesh castShadow receiveShadow>
+      <mesh
+        castShadow
+        receiveShadow
+        userData={{ isPanelFrame: true }}
+      >
         <boxGeometry args={[actualWidth, 0.03, actualHeight]} />
         <meshStandardMaterial
           color={frameColor}

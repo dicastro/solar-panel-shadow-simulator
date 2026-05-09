@@ -12,9 +12,13 @@ export interface MeshBatch {
 }
 
 /**
- * Collects all shadow-casting meshes from a Three.js scene and provides a
- * factory method that produces independent typed-array copies of their
- * serialised geometry on each call.
+ * Collects shadow-casting meshes from a Three.js scene and provides a factory
+ * method that produces independent typed-array copies of their serialised
+ * geometry on each call.
+ *
+ * An optional `filter` predicate allows callers to exclude specific meshes.
+ * The default (no filter) collects all castShadow meshes, preserving the
+ * original behaviour.
  *
  * The `build` method must be called once per worker, not once per simulation
  * run. Typed array buffers are detached after a zero-copy `postMessage`
@@ -26,15 +30,24 @@ export interface MeshBatch {
  */
 export const MeshFactory = {
   /**
-   * Traverses the scene once to collect references to all shadow-casting meshes.
+   * Traverses the scene once to collect references to qualifying meshes.
    * Returns a `build` function that produces a fresh `MeshBatch` on each call.
+   *
+   * @param filter Optional predicate. Return `true` to include the mesh.
+   *               When omitted, all castShadow meshes are included.
    */
-  fromScene: (scene: THREE.Scene): { build: () => MeshBatch } => {
+  fromScene: (
+    scene: THREE.Scene,
+    filter?: (mesh: THREE.Mesh) => boolean,
+  ): { build: () => MeshBatch } => {
     const liveMeshes: THREE.Mesh[] = [];
     scene.traverse(obj => {
-      if (obj instanceof THREE.Mesh && obj.castShadow) {
-        liveMeshes.push(obj);
-      }
+      if (!(obj instanceof THREE.Mesh)) return;
+      if (!obj.castShadow) return;
+      if (!(obj.geometry instanceof THREE.BufferGeometry)) return;
+      if (filter && !filter(obj)) return;
+
+      liveMeshes.push(obj);
     });
 
     return {

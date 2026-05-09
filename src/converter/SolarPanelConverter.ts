@@ -52,11 +52,16 @@ export const SolarPanelConverter = {
    * Converts a single `SolarPanel` into the `SimulationPanelData` shape required
    * by the annual simulation worker.
    *
-   * World-space positions and normals are pre-computed so the worker only needs
-   * to perform raycasting and arithmetic during its inner loop. Physical geometry
-   * fields (orientation, actualWidth, actualHeight, zones, zonesDisposition) are
-   * included so the worker can propagate them into PanelAnnualData for use by
-   * the results panel heat maps.
+   * World-space positions, normals, and sample points are pre-computed so the
+   * worker only needs to perform raycasting and arithmetic during its inner loop.
+   *
+   * `worldPosition` and `worldRotation` are included so that the main thread can
+   * reconstruct accurate panel frame meshes for BVH raycasting for each simulated
+   * setup independently of which setup is currently rendered in the 3D view.
+   *
+   * Physical geometry fields (orientation, actualWidth, actualHeight, zones,
+   * zonesDisposition) are included so the worker can propagate them into
+   * PanelAnnualData for use by the results panel heat maps.
    */
   toSimulationPanelData: (panel: SolarPanel): SimulationPanelData => ({
     id: panel.id,
@@ -72,6 +77,8 @@ export const SolarPanelConverter = {
     hasOptimizer: panel.hasOptimizer,
     string: panel.string,
     worldNormal: SolarPanelConverter.toWorldNormal(panel),
+    worldPosition: panel.worldPosition,
+    worldRotation: panel.worldRotation,
     samplePoints: SolarPanelConverter.toWorldSpaceSamplePoints(panel),
   }),
 

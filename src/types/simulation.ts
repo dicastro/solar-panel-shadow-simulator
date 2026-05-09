@@ -1,4 +1,4 @@
-import { Vector3 } from './geometry';
+import { Vector3, Euler3 } from './geometry';
 import { PanelOrientation, ZonesDisposition } from './config';
 
 export interface SunState {
@@ -146,8 +146,16 @@ export interface SimulationSamplePoint {
 
 /**
  * Per-panel data required to run the annual simulation.
- * World-space positions and normals are pre-computed on the main thread
- * to avoid repeating matrix multiplications inside the worker at every time step.
+ *
+ * World-space positions, normals, and sample points are pre-computed on the
+ * main thread to avoid repeating matrix multiplications inside the worker at
+ * every time step.
+ *
+ * `worldPosition` and `worldRotation` are included so that the main thread can
+ * build accurate panel meshes for BVH raycasting for each simulated setup
+ * independently of which setup is currently rendered in the 3D view. Without
+ * these fields, the worker payload would have to depend on the live scene,
+ * which only ever contains the currently active setup's panels.
  *
  * Physical geometry fields are included so the worker can propagate them into
  * PanelAnnualData without needing access to the original config.
@@ -167,6 +175,13 @@ export interface SimulationPanelData {
   readonly string: string;
   /** Panel normal in world space, pre-computed from worldRotation. */
   readonly worldNormal: Vector3;
+  /** Panel centre in world space. Used to build the panel mesh for raycasting. */
+  readonly worldPosition: Vector3;
+  /**
+   * Panel rotation in world space (Euler, order 'YXZ').
+   * Used to orient the panel mesh correctly for raycasting.
+   */
+  readonly worldRotation: Euler3;
   /** Sample points already in world space. */
   readonly samplePoints: SimulationSamplePoint[];
 }

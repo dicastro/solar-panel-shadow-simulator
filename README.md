@@ -82,7 +82,8 @@ src/
 │   ├── geometry.ts
 │   ├── installation.ts
 │   ├── results.ts
-│   ├── simulation.ts              # IrradianceSource ('geometric' | 'open-meteo'),
+│   ├── simulation.ts              # IrradianceSource, SimulationPanelData (includes
+│   │                              #   worldPosition + worldRotation for mesh reconstruction),
 │   │                              #   WorkerSimulationPayload (includes irradianceData)
 │   └── index.ts
 │
@@ -99,7 +100,10 @@ src/
 │   ├── SolarPanelFactory.ts
 │   ├── SamplePointFactory.ts
 │   ├── PointXZFactory.ts
-│   └── MeshFactory.ts
+│   ├── MeshFactory.ts             # Collects castShadow meshes from scene; accepts optional
+│   │                              #   filter predicate to exclude panel frame meshes
+│   └── PanelMeshFactory.ts        # Builds panel frame meshes from SimulationPanelData
+│                                  #   without requiring them in the live scene
 │
 ├── irradiance/                    # Irradiance provider strategy pattern
 │   ├── IrradianceProvider.ts      # Interface + factory function (createIrradianceProvider)
@@ -108,7 +112,8 @@ src/
 │
 ├── converter/
 │   ├── ThreeConverter.ts
-│   └── SolarPanelConverter.ts
+│   └── SolarPanelConverter.ts     # toSimulationPanelData now includes worldPosition
+│                                  #   and worldRotation for per-setup mesh reconstruction
 │
 ├── store/
 │   ├── AppStore.ts                # Re-exports availableIntervals
@@ -121,7 +126,8 @@ src/
 ├── hooks/
 │   ├── useBVH.ts
 │   ├── useShadowSampler.ts
-│   ├── useAnnualSimulation.ts     # Resolves irradiance data before launching workers
+│   ├── useAnnualSimulation.ts     # Separates static scene meshes from panel meshes;
+│   │                              #   resolves irradiance data before launching workers
 │   ├── useResultsPanel.ts
 │   └── useResizablePanel.ts
 │
@@ -144,7 +150,7 @@ src/
 └── components/
     ├── Scene.tsx
     ├── ShadowedScene.tsx
-    ├── SolarPanelComponent.tsx
+    ├── SolarPanelComponent.tsx    # Panel frame mesh marked userData.isPanelFrame = true
     ├── Sun.tsx
     ├── Compass.tsx
     ├── RenderControls.tsx
@@ -270,6 +276,18 @@ Open-Meteo has two constraints that must be reflected in the UI:
 **Year**: The Open-Meteo historical archive only covers completed past years. The current year is not yet available in full — requesting it would leave all future hours at 0 W/m², producing severely underestimated production figures. `availableSimulationYears(source)` excludes the current year when `source === 'open-meteo'`.
 
 `setIrradianceSource` in `SimulationSlice` resets both interval and year atomically in a single `set((state) => ...)` updater, so no component ever observes an inconsistent combination.
+
+### Panel mesh separation for per-setup simulation correctness
+
+The 3D viewport only ever renders the currently active setup. When the simulation runs for all setups in parallel, each worker must receive the panel geometry of the setup it is simulating — not the panels of whatever setup happens to be displayed at launch time.
+
+This is solved by splitting the shadow-casting geometry into two independent sources:
+
+1. **Static meshes** (walls, railings, intersection posts): collected from the live scene using `MeshFactory.fromScene` with a filter that excludes panel frame meshes. These are identical for all setups and reused across workers.
+
+2. **Panel frame meshes**: built procedurally per setup by `PanelMeshFactory.buildFromPanelData`, using `worldPosition` and `worldRotation` from `SimulationPanelData`. This creates the same `BoxGeometry([actualWidth, 0.03, actualHeight])` that `SolarPanelComponent` renders, but from domain data rather than from the live scene.
+
+Panel frame meshes in the scene are marked with `userData.isPanelFrame = true` by `SolarPanelComponent`. The `MeshFactory` filter checks this flag to exclude them from the static batch. This convention keeps the separation clean and avoids coupling to geometry size heuristics or internal naming.
 
 ### Results panel — floating resizable overlay
 
@@ -491,6 +509,18 @@ createIrradianceProvider(source)
   → zero-copy postMessage            basePower *= dni / 1000  (if data present)
 ```
 
+### Shadow geometry per setup
+
+The simulation worker must receive the panel geometry of the setup it is simulating. The 3D viewport only ever renders the currently active setup, so a naïve approach of serialising all scene meshes would give every worker the wrong panels when more than one setup is simulated.
+
+The geometry sent to each worker is assembled in two stages:
+
+1. **Static meshes** (walls, railings, intersection posts): serialised once from the live scene using `MeshFactory.fromScene` with an `isNotPanelFrame` filter. Panel frames marked with `userData.isPanelFrame = true` are excluded.
+
+2. **Panel frame meshes**: built procedurally for each setup by `PanelMeshFactory.buildFromPanelData`. This constructs `BoxGeometry([actualWidth, 0.03, actualHeight])` meshes with correct world matrices from `SimulationPanelData.worldPosition` and `SimulationPanelData.worldRotation`, exactly matching the geometry rendered by `SolarPanelComponent`.
+
+Both batches are concatenated into the `meshes` array in the worker payload.
+
 ### IndexedDB — two independent databases
 
 Each cache module manages its own database, keeping them fully decoupled:
@@ -584,6 +614,14 @@ Resolving irradiance data centrally before worker launch avoids duplicate networ
 
 `Float32Array.slice()` produces an independent copy of the irradiance buffer for each worker. Without this, the first `postMessage` with `transfer` would detach the shared buffer, causing subsequent workers to receive an empty array.
 
+### Panel geometry for simulation must be independent of the active viewport
+
+The 3D viewport only renders the currently selected setup. If the simulation serialises all scene meshes naïvely, every worker receives the panels of whatever setup happens to be active when the simulation is launched — not the panels of the setup it is actually computing.
+
+The fix is to separate shadow geometry into two sources: structural geometry (walls, railings) from the live scene, and panel frame geometry built procedurally per setup from `SimulationPanelData`. `SimulationPanelData` carries `worldPosition` and `worldRotation` precisely so that panel meshes can be reconstructed outside the scene context. `PanelMeshFactory` performs this reconstruction, applying the same `BoxGeometry([actualWidth, 0.03, actualHeight])` and world matrix composition that `SolarPanelComponent` uses in the renderer.
+
+The `userData.isPanelFrame = true` convention on rendered panel frame meshes is what allows `MeshFactory` to exclude them cleanly without geometry size heuristics.
+
 ### Panel positioning: panels outside the site group, origin at SW corner
 
 Panels are rendered outside the `<group rotation-y={site.azimuthRad}>` that contains walls and railings, so their world-space coordinates must incorporate the site rotation explicitly. Computing the panel origin as the SW corner of the array (at `elevation` height) makes the config position `[x, z]` directly readable as "metres East and North from the site SW corner" — the same measurement an installer would make on-site.
@@ -633,7 +671,7 @@ Cache the result in a `useRef` and invalidate with the same key used to rebuild 
 
 ### Per-worker geometry copies, not shared transfer
 
-Each worker must receive its own copy. `MeshFactory.fromScene(scene).build()` produces a fresh `MeshBatch` on each call.
+Each worker must receive its own copy. `MeshFactory.fromScene(scene, filter).build()` produces a fresh `MeshBatch` on each call. `PanelMeshFactory.buildFromPanelData` always produces fresh typed arrays.
 
 ### Sample points pre-computed before worker transfer
 

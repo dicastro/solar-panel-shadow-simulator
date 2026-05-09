@@ -1,17 +1,20 @@
 import { useCallback, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
+import * as THREE from 'three';
 import { PanelSetup, Site } from '../types/installation';
 import {
   WorkerSimulationPayload,
   WorkerOutgoingMessage,
   SetupSimulationProgress,
   IrradianceSource,
+  SerializedMesh,
 } from '../types/simulation';
 import { SimulationCacheUtils } from '../utils/SimulationCacheUtils';
 import { SimulationCache } from '../db/SimulationCache';
 import { SolarPanelConverter } from '../converter/SolarPanelConverter';
 import AnnualWorker from '../workers/AnnualSimulation.worker?worker';
 import { MeshFactory } from '../factory/MeshFactory';
+import { PanelMeshFactory } from '../factory/PanelMeshFactory';
 import { createIrradianceProvider } from '../irradiance/IrradianceProvider';
 
 /**
@@ -22,12 +25,29 @@ const maxWorkers = (): number =>
   Math.max(1, (navigator.hardwareConcurrency ?? 2) - 1);
 
 /**
- * Builds the worker payload for a single setup using a fresh mesh serialisation.
- * The `cacheKey` is computed once by the caller and passed in here to avoid
- * hashing the same inputs twice (once for the cache lookup, once for the payload).
+ * Returns true for meshes that are NOT panel frames.
  *
- * `irradianceData` is pre-fetched on the main thread and included in the payload
- * so the worker remains agnostic of the irradiance source.
+ * Panel frame meshes are marked with `userData.isPanelFrame = true` by
+ * SolarPanelComponent. Excluding them from the static batch ensures each
+ * worker receives only the scene's structural geometry (walls, railings,
+ * intersection posts). The correct panel geometry for each simulated setup
+ * is added separately via PanelMeshFactory.
+ */
+const isNotPanelFrame = (mesh: THREE.Mesh): boolean =>
+  mesh.userData.isPanelFrame !== true;
+
+/**
+ * Builds the complete worker payload for a single setup.
+ *
+ * The serialised mesh list combines:
+ *  1. Static meshes (walls, railings, intersection posts) — extracted once
+ *     from the live scene (panel frames excluded) and reused across all setups.
+ *  2. Panel frame meshes — built procedurally from the setup's panel data by
+ *     PanelMeshFactory, ensuring each worker receives the correct panels for
+ *     the setup it simulates, independently of the 3D viewport state.
+ *
+ * All transferable buffers are collected into a single list for one-pass
+ * zero-copy postMessage transfer.
  */
 const buildPayload = (
   setup: PanelSetup,
@@ -38,16 +58,21 @@ const buildPayload = (
   year: number,
   irradianceSource: IrradianceSource,
   cacheKey: string,
-  getMeshes: ReturnType<typeof MeshFactory.fromScene>['build'],
+  getStaticMeshes: () => { meshes: SerializedMesh[]; transferables: ArrayBuffer[] },
   irradianceData: Float32Array | null,
 ): { payload: WorkerSimulationPayload; transferables: ArrayBuffer[] } => {
   const allPanels = setup.panelArrays.flatMap(pa => pa.panels);
   const panels = SolarPanelConverter.toSimulationPanelDataArray(allPanels);
-  const { meshes, transferables } = getMeshes();
 
-  // Include the irradiance buffer in the transfer list for zero-copy transfer.
-  // The cast is safe: Float32Array.slice() always produces a plain ArrayBuffer,
-  // never a SharedArrayBuffer, but TypeScript types .buffer as ArrayBufferLike.
+  const staticBatch = getStaticMeshes();
+  const panelBatch = PanelMeshFactory.buildFromPanelData(panels);
+
+  const meshes: SerializedMesh[] = [...staticBatch.meshes, ...panelBatch.meshes];
+  const transferables: ArrayBuffer[] = [
+    ...staticBatch.transferables,
+    ...panelBatch.transferables,
+  ];
+
   if (irradianceData) {
     transferables.push(irradianceData.buffer as ArrayBuffer);
   }
@@ -87,16 +112,17 @@ export interface AnnualSimulationCallbacks {
  *  - Resolves the irradiance provider for the selected source.
  *  - Fetches and caches irradiance data on the main thread before worker launch.
  *  - Checks IndexedDB for each setup's cached result before doing any work.
- *  - Serialises scene geometry independently for each worker (zero-copy per
- *    worker, no shared buffer detachment between workers).
+ *  - Collects static scene meshes (walls, railings) once, excluding panel frames.
+ *  - Builds panel frame meshes procedurally per setup via PanelMeshFactory so
+ *    each worker always receives the correct geometry regardless of which setup
+ *    is currently displayed in the 3D viewport.
  *  - Spawns up to `maxWorkers()` concurrent workers; queues the rest.
  *  - Tracks per-setup progress with EMA-smoothed ETA.
  *  - Persists completed results to IndexedDB.
  *
  * Irradiance data is fetched once per simulation run (not per setup), because
- * all setups share the same location and year. The same Float32Array is copied
- * into each worker payload via `slice()` so that zero-copy buffer transfer does
- * not detach the source buffer needed by subsequent workers.
+ * all setups share the same location and year. The same Float32Array is sliced
+ * into each worker payload so zero-copy transfer does not detach the shared array.
  *
  * Must be called from inside a `<Canvas>` tree so that `useThree` works.
  * The returned `stop` function terminates all active workers immediately.
@@ -122,8 +148,6 @@ export function useAnnualSimulation() {
   ) => {
     stop();
 
-    // Resolve irradiance data once, shared across all workers.
-    // Each worker receives its own slice() copy to allow zero-copy transfer.
     let sharedIrradianceData: Float32Array | null = null;
     try {
       const provider = await createIrradianceProvider(irradianceSource);
@@ -141,8 +165,6 @@ export function useAnnualSimulation() {
       console.warn('useAnnualSimulation: irradiance provider error', err);
     }
 
-    // The cache key is computed once per setup and reused for both the cache
-    // lookup and the worker payload, avoiding redundant hashing of the same inputs.
     const uncachedSetups: Array<{ setup: PanelSetup; cacheKey: string }> = [];
     for (const setup of setups) {
       const cacheKey = SimulationCacheUtils.hashCacheKey(
@@ -166,10 +188,10 @@ export function useAnnualSimulation() {
       return;
     }
 
-    // Traverse the scene once and produce a factory that yields fresh typed-array
-    // copies on each call. Each worker receives its own independent copy so that
-    // zero-copy transfer does not detach buffers needed by subsequent workers.
-    const { build: getMeshes } = MeshFactory.fromScene(scene);
+    // Traverse the scene once, excluding panel frame meshes. The static batch
+    // contains walls, railings, and intersection posts — geometry shared by all
+    // setups that never changes during a simulation run.
+    const { build: getStaticMeshes } = MeshFactory.fromScene(scene, isNotPanelFrame);
 
     const queue = [...uncachedSetups];
     let activeWorkerCount = 0;
@@ -261,15 +283,13 @@ export function useAnnualSimulation() {
           onWorkerDone(worker);
         };
 
-        // Each worker gets its own copy of the irradiance buffer so that
-        // zero-copy transfer via postMessage does not detach the source array.
         const irradianceCopy = sharedIrradianceData
           ? sharedIrradianceData.slice()
           : null;
 
         const { payload, transferables } = buildPayload(
           setup, site, density, threshold, intervalMinutes,
-          year, irradianceSource, cacheKey, getMeshes, irradianceCopy,
+          year, irradianceSource, cacheKey, getStaticMeshes, irradianceCopy,
         );
         worker.postMessage({ type: 'run', payload }, transferables);
       }
