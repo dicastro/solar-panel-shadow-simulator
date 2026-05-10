@@ -1,84 +1,15 @@
 * He actualizado en tu contexto el código con la última versión. Esta versión no es una versión productiva todavía, por lo que se puede hacer cualquier refactor sin miramientos, ya que no va a haber afectación a usuarios.
 
-* Los últimos cambios han sido para corregir la representación del azimuth tanto del site como de los arrays de paneles solares. Ahora ya se están representando bien. Al menos en el renderizado. Me queda la duda de si para el cálculo de la simulación anual se está haciendo bien o si ha sido impactado por los últimos cambios.
+* Los últimos cambios realizados en el código han sido para corregir la simulación anual y hacerla independiente del setup que está siendo renderizado en el momento de iniciar la ejecución de la simulación anual
 
-* Vamos a centrarnos en la producción energética geométrica, ya que es la que se utiliza para estimar la producción instantánea y así puedo compararlo con los resultados diarios de la ejecución de una simulación anual (seleccionando la irradiación geométrica)
+* Ahora vamos a centrarnos en el cálculo de la simulación anual cuando se tienen en cuenta las condiciones climatológicas, para lo cual se hace uso de OpenMeteo. Actualmente tengo uno de los setups configurados en `config.json` en mi casa (el setup "Configuración actual"), tengo este setup desde hace 3 años, y tengo datos de producción real de estos 2 últimos años al completo (2025 y 2024). En todo el 2025 la producción real de la instalación fueron 5550MWh. He hecho la simulación anual con OpenMeteo para ese setup, y espero obtener un valor cercano al real, sin embargo esto no es así, con el método de cálculo actual obtengo algo más de 3000MWh, lo cual dista mucho de los más de 5000MWh reales. Diría que ese cálculo teniendo en cuenta los datos de OpenMeteo está teniendo en cuenta únicamente la irradiación directa (DNI). Pero diría también que OpenMeteo también devuelve datos de irradiación difusa (DHI) y de temperatura, para poder aplicar un factor de ineficiencia/pérdida en función de la temperatura y no sé si también aplicar una pérdida/ineficiencia del cableado+inversor. Ahora mismo ya hay implementado una pérdida del 10% para cuando un panel activa una de sus zonas de diodos (esto no sé si es correcto y si debería aplicar únicamente cuando no hay optimizador, no sé si con un optimizador se evita esta pérdida adicional). Por lo que me he estado informando se podría mejorar ese cálculo de producción estimada con la irradiancia directa + irradiancia difusa + irradiancia albelo, donde la irradiancia de albelo diría que es la irradiancia global horizontal multiplicado por el coeficiente de reflexión del suelo. Y la irradiancia global horizontal es la suma de la irradiancia directa más la difusa sobre una superficie plana. 
 
-* En la aplicación se muestra la producción instantánea, y esta producción se calcula en base a una irradiación geométrica. Diría que para este caso el raycasting utiliza three.js para calcular la intersección de los puntos de muestreo con los objetos que generan sombras. Esta producción me parece correcta ya que veo las horas a las que sube y baja y puedo ver los puntos de muestreo y cuáles tienen sombras y cuales no. He recogido los datos del día 9 de mayo de 2026 para la configuración con etiqueta "Configuración actual" y también para la configuración con etiqueta "3 filas a 58cm alto 9° (optimizada)". A continuación muestro la tabla con las producciones por hora para ese día
+* Analiza lo que yo digo sobre cómo mejorar este cálculo, no soy experto en la materia y lo que te he contado es una simplificación de una explicación que me ha dado otra IA. verifica que es cierto y obten una forma de mejorar el cálculo para que sea más cercano a la realidad. Esto es una aplicación para uso doméstico/semi-profesional, quiero que sea algo sofisticado, por encima de algo muy sencillo o de la media, pero no quiero algo de alta precisión. Hay que llegar a un compromiso intermedio entre precisión y complejidad. Si complica en exceso la solución tampoco interesa. Al final la aplicación desarrollada pretende servir para comparar distintos setups de paneles, no pretende servir para estimar producciones con máxima precisión
 
-| hora | Configuración actual | 3 filas a 58cm alto 9° (optimizada) |
-|------|----------------------|-------------------------------------|
-| 5:00 | 0,000 | 0,000 |
-| 6:00 | 0,000 | 0,000 |
-| 7:00 | 0,000 | 0,000 |
-| 8:00 | 0,250 | 0,260 |
-| 9:00 | 0,640 | 0,770 |
-| 10:00 | 0,990 | 1,400 |
-| 11:00 | 1,290 | 2,430 |
-| 12:00 | 1,510 | 2,850 |
-| 13:00 | 3,650 | 3,510 |
-| 14:00 | 3,720 | 3,610 |
-| 15:00 | 3,570 | 3,510 |
-| 16:00 | 1,440 | 3,200 |
-| 17:00 | 1,190 | 2,720 |
-| 18:00 | 0,870 | 1,750 |
-| 19:00 | 0,500 | 1,140 |
-| 20:00 | 0,110 | 0,390 |
-| 21:00 | 0,000 | 0,000 |
-| total | 19,730 | 27,540 |
+* Quiero que revises la implementación actual y la refactorices. Quizá haya que añadir más configuraciones al fichero de configuración: se me ocurre por ejemplo pérdida de inversor + cableado (no sé si tenerlo por separado en 2 propiedades o 1 sola propiedad, supongo que los inversores darán este valor de eficiencia, y para el cableado se podría asumir otro valor más o menos constante pero configurable), también podría configurarse pérdida por activación de diodo sin optimizador, también podría configurarse pérdida de eficiencia por temperatura (que entiendo que iría por rangos, para un rango de temperatura, una eficiencia, para otro rango otra eficiencia, pudiendo tener rangos "abiertos" solo con un límite (inferior o superior)). También podría configurarse la reflexión del suelo de la terraza (desconozco en qué unidades iría esto)
 
-* Los valores de las tablas anteriores me cuadran, porque estoy viendo los puntos de muestreo, cómo les afectan las sombras y cuándo suben y bajan. Estoy asumiendo que el cálculo por panel es correcto. La configuración actual tiene un azimuth de 16.5 (el sur hacia el este), es un array de 3x3 paneles de 1x2m de 415w pico y el array con una inclinación de 20°. La otra configuración son 3 arrays de 3x1 paneles de 1x2m de 415w pico y con una inclinación cada array de 9°
+* Con respecto a la estimación de la producción geométrica (sin tener en cuenta las condiciones climatológicas) no sé hasta qué punto es precisa. He ejecutado una simulación anual utilizando una densidad de 4 (4x4 puntos de muestreo por cada zona de panel) y un threshold de 1 punto (si hay sombra en un punto muestreo, se considera que esa zona de panel está en sombra) y he obtenido una producción de unos 5300KWh en todo el año. Esto es incluso algo inferior a la producción real que he tenido el año pasado. Así que asumiendo que el cálculo de la producción es geométrica, tiene que haber otro factor que haga que este cálculo de este valor. Tratándose de la producción geométrica, sin tener en cuenta condiciones climatológicas, tendría que ser considerablemente superior a la producción real que he tenido el año pasado. También podría tener con el periodo del intervalo de tiempo usado para la simulación, que ha sido de 1h, igual esto hace que cuando la sombra se está quitando, tarde en quitarse 1h, cuando igual en 15min ya se habría quitado. Para la producción geométrica soporto intervalos de 15m, 30m y 1h. Para la climatológica (que usa OpenMeteo) soporta solo 1h, ya que OpenMeteo no tiene más resolución. Con respecto a esto no sé si merecería la pena sofistificar el mecanismo de threshold, podría haber una forma sencilla que sea la actual: en base a un número de puntos de muestreo en sombra. Pero se me ocurre otra en la que no se considerarían igual todos los puntos de muestreo, por ejemplo los de los bordes de panel tendrían menos peso y los del centro tendrían más peso, de esta forma si hay solo 1 punto de borde en sombra no se dispararía, pero si es un punto interior sí se dispararía. Que igual esta sofisticaión complica mucho la solución y sería mejor ejecutar la simulación con más puntos de muestreo para detectar mejor las sombras y aumentar también el threshold, pero claro, esto hace que haya muchos más puntos de muestreo y que el cálculo de la simulación sea mucho más costoso. El número de cálculos a hacer sube exponencialmente. Densidad de 4 puntos implica tener 16 puntos por zona y 32 puntos por panel. 1 solo punto más, 5, implicarían 25 puntos por zona y 50 puntos por panel, que es un 50% más de puntos por panel... por 9 paneles que tengo, por los intervalos de tiempo de 1 año. Se te ocurre otra forma de mejorar este cálculo de zonas en sombra?
 
-* El la aplicación hay un combo donde se selecciona el setup y al cambiar de setup se actualiza el renderizado y se actualiza la producción instantánea. Aquí hay un comportamiento raro. Cuando se pasa de "Configuración actual" >>> "3 filas a 58cm alto 9° (optimizada)" la producción de la configuración "3 filas a 58cm alto 9° (optimizada)" no es la misma que cuando se está en esta configuración ("3 filas a 58cm alto 9° (optimizada)") y se van cambiando las horas. A continuación muestro una tabla con los valores de la producción de la configuración "3 filas a 58cm alto 9° (optimizada)" cuando se ha cambiado desde la configuración "Configuración actual"
+* Si la producción real en el 2025 de la configuración "Configuración actual" del `config.json` han sido 5550KWh, me esperaría tener una estimación de la producción con openmeteo similar a la real y una estimación de la producción geométrica considerablemente superior.
 
-| hora | 3 filas a 58cm alto 9° (optimizada) (tras cambiar el setup seleccionado) |
-|------|--------------------------------------------------------------------------|
-| 5:00 | 0,000 |
-| 6:00 | 0,000 |
-| 7:00 | 0,000 |
-| 8:00 | 0,260 |
-| 9:00 | 0,460 |
-| 10:00 | 0,820 |
-| 11:00 | 1,520 |
-| 12:00 | 1,780 |
-| 13:00 | 2,340 |
-| 14:00 | 2,410 |
-| 15:00 | 2,340 |
-| 16:00 | 2,140 |
-| 17:00 | 1,810 |
-| 18:00 | 1,160 |
-| 19:00 | 0,990 |
-| 20:00 | 0,390 |
-| 21:00 | 0,000 |
-| total | 18,420 |
-
-* Cuando ejecuto una simulación de la producción anual (con irradiación geométrica) y me voy a ver la gráfica de producción diaria para el mismo día (9 de mayo de 2020) veo diferencias con los datos obtenidos para la producción instantánea. Para el caso de la configuraicón "configuración actual" los datos coinciden. Sin embargo para la configuración "3 filas a 58cm alto 9° (optimizada)" hay una diferencia considerable. A continuación muestro los datos diarios obtenidos con la simulación anual. En este caso se ve una diferencia en las horas, porque diría que se está utilizando UTC en lugar de la hora local, por eso empiezan a producir antes y acaban de producir antes también. Esta diferencia es una cosa de visualización de datos en las gráficas que ahora mismo no me preocupa.
-
-| hora | Configuración actual | 3 filas a 58cm alto 9° (optimizada) |
-|------|----------------------|-------------------------------------|
-| 5:00 | 0,000 | 0,000 |
-| 6:00 | 0,253 | 0,165 |
-| 7:00 | 0,638 | 0,383 |
-| 8:00 | 0,991 | 0,234 |
-| 9:00 | 1,289 | 0,607 |
-| 10:00 | 1,511 | 0,357 |
-| 11:00 | 3,651 | 0,585 |
-| 12:00 | 3,722 | 0,602 |
-| 13:00 | 3,567 | 0,585 |
-| 14:00 | 1,439 | 1,068 |
-| 15:00 | 1,186 | 1,059 |
-| 16:00 | 0,866 | 0,815 |
-| 17:00 | 0,499 | 0,835 |
-| 18:00 | 0,110 | 0,357 |
-| 19:00 | 0,000 | 0,000 |
-| 20:00 | 0,000 | 0,000 |
-| 21:00 | 0,000 | 0,000 |
-| total | 19,722 | 7,652 |
-
-* No me cuadran los datos de la configuración "3 filas a 58cm alto 9° (optimizada)" obtenidos en la simulación anual. Los de la configuración "Configuración actual" coinciden con los obtenidos para cada hora en la producción instantánea.
-
-* Antes de proseguir con mejoras en la estimación de la producción cuando la irradiación es OpenMeteo y se tiene en cuenta la climatología, quiero cerciorarme que los cálculos geométricos, que definen la manera de hacer el raycasting es correcto. Tienen que coincidir en ambos casos, tanto producción instantánea como simulación anual.
-
-* Todos los datos que te he pasado son datos reales obtenidos con la aplicación con la versión de código que tienes disponible en el contexto.
-
-* Una última cosa que acabo de probar. La primera vez (los datos anteriores que he pasado de la simulación anual) he ejecutado la simulación anual cuando tenía seleccionada la configuración "Configuración actual". Ahora acabo de probar a lanzar otra simulación anual teniendo seleccionada la configuración "3 filas a 58cm alto 9° (optimizada)", y ahora los datos diarios de la simulación anual para esa configuración coinciden con los obtenidos mediante la producción instantánea. Así que parece que influye qué configuración está seleccionada y renderizada en la ejecución de la simulación anual. Esto no debería de ser así y la simulación debería de ser independiente de la configuración que se está visualizando. De hecho, es que sería posible cambiar la visualización en el renderizado mientras se están ejecutando los cálculos y estos no debería afectar a los resultados de la simulación anual en curso.
+* La aplicación la estoy desarrollando porque la configuración "Configuración actual" que tengo tiene mucha vela y en mi zona hay unos cuantos días al año con rachas de viento muy fuerte, diría que por encima de los 100km/h. La instalación ya la ha desplazado el viento, la estructura sobre la que está instalada se ma descuadrado, no está apoyando bien sobre todos sus apoyos, por lo que la carga de peso no está bien distribuida. Así que estoy valorando hacer un desembolso económico para situar los paneles con otra distribución/configuración. Pero antes de hacer ese desembolso quiero saber si voy a mantener la producción, si va a disminuir y cuánto o incluso si podría mejorar (por ejemplo con optimizadores). Al final lo que me gustaría es tener una instalación que produzca tanto o más que la actual y que haga mucha menos vela y apenas "sufra" con rachas fuertes de viento. Todo esto te lo cuento, no para que me asesores sobre otra distribución posible, sino para que tengas el contexto sobre qué me ha llevado a desarrollar esta aplicación. Antes de lanzarme a desarrollarla hice una búsqueda de alguna aplicación que hiciera esto mismo pero no encontré ninguna que me resolviera esta papeleta. Considero que puede ser útil, aunque la veo muy de nicho, porque veo muchas instalaciones solares domésticas, pero en terrazas planas no tantas. Por un momento había pensado que podría ser útil para instaladores solares, para casos "complicados", con la intención de tratar de monetizarla, pero no sé si lo veo. Qué opinas al respecto? Le ves futuro? Crees que podría venderse y monetizar?
