@@ -1,7 +1,14 @@
+import { HourlyWeatherData } from '../irradiance/IrradianceProvider';
+
 const DB_NAME = 'solar-simulator-irradiance';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'irradiance-cache';
 
+/**
+ * Persisted shape for one cache entry. Arrays are stored as plain number[]
+ * because IndexedDB does not natively serialise Float32Array; the conversion
+ * is done at read and write time.
+ */
 interface IrradianceCacheEntry {
   /** Storage key: `{source}:{lat4dp}:{lon4dp}:{year}` */
   readonly key: string;
@@ -9,6 +16,13 @@ interface IrradianceCacheEntry {
   readonly fetchedAt: number;
   /** Hourly DNI values (W/m²), one per UTC hour of the year. */
   readonly dni: number[];
+  /** Hourly DHI values (W/m²), one per UTC hour of the year. */
+  readonly dhi: number[];
+  /**
+   * Hourly ambient temperature (°C), one per UTC hour of the year.
+   * Stored as an empty array when the provider did not supply temperature data.
+   */
+  readonly temperature: number[];
 }
 
 const openDb = (): Promise<IDBDatabase> =>
@@ -17,9 +31,13 @@ const openDb = (): Promise<IDBDatabase> =>
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'key' });
+      // Drop the old store on upgrade — the schema has changed (added dhi and
+      // temperature columns). Existing DNI-only entries are invalid and must be
+      // re-fetched anyway.
+      if (db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME);
       }
+      db.createObjectStore(STORE_NAME, { keyPath: 'key' });
     };
 
     request.onsuccess = (event) => resolve((event.target as IDBOpenDBRequest).result);
@@ -38,7 +56,7 @@ const buildKey = (source: string, lat: number, lon: number, year: number): strin
   `${source}:${lat.toFixed(4)}:${lon.toFixed(4)}:${year}`;
 
 /**
- * IndexedDB wrapper for hourly DNI data fetched from external irradiance APIs.
+ * IndexedDB wrapper for hourly weather data fetched from external irradiance APIs.
  *
  * Open-Meteo only provides data for completed past years via its historical
  * archive, so all cached entries are permanently valid — historical reanalysis
@@ -55,7 +73,7 @@ export const IrradianceCache = {
     lat: number,
     lon: number,
     year: number,
-  ): Promise<Float32Array | null> => {
+  ): Promise<HourlyWeatherData | null> => {
     const db = await openDb();
     const key = buildKey(source, lat, lon, year);
 
@@ -65,7 +83,17 @@ export const IrradianceCache = {
       const request = store.get(key);
       request.onsuccess = (event) => {
         const entry = (event.target as IDBRequest<IrradianceCacheEntry | undefined>).result;
-        resolve(entry ? new Float32Array(entry.dni) : null);
+        if (!entry) {
+          resolve(null);
+          return;
+        }
+        resolve({
+          dni: new Float32Array(entry.dni),
+          dhi: new Float32Array(entry.dhi),
+          temperature: entry.temperature.length > 0
+            ? new Float32Array(entry.temperature)
+            : null,
+        });
       };
       request.onerror = (event) => reject((event.target as IDBRequest).error);
     });
@@ -76,14 +104,16 @@ export const IrradianceCache = {
     lat: number,
     lon: number,
     year: number,
-    dni: Float32Array,
+    data: HourlyWeatherData,
   ): Promise<void> => {
     const db = await openDb();
     const key = buildKey(source, lat, lon, year);
     const entry: IrradianceCacheEntry = {
       key,
       fetchedAt: Date.now(),
-      dni: Array.from(dni),
+      dni: Array.from(data.dni),
+      dhi: Array.from(data.dhi),
+      temperature: data.temperature ? Array.from(data.temperature) : [],
     };
 
     return new Promise((resolve, reject) => {

@@ -151,6 +151,27 @@ export interface InstallationConfiguration {
   readonly wallDefaults: WallConfiguration;
   readonly railingDefaults: RailingConfiguration;
   readonly wallsSettings?: WallSettingsConfiguration[];
+  /**
+   * Fraction of incoming light reflected by the ground surface toward the
+   * panels (dimensionless, 0–1). Used to compute the albedo component of
+   * plane-of-array irradiance. Typical values: 0.20 for concrete/asphalt,
+   * 0.25 for light-coloured gravel, 0.10 for dark roofing membrane.
+   * Defaults to 0.20 when omitted.
+   */
+  readonly groundAlbedo?: number;
+  /**
+   * Rated efficiency of the DC/AC inverter (dimensionless, 0–1).
+   * Applied as a multiplier to the DC power output of each time step.
+   * Typical modern string inverters: 0.96–0.98. Defaults to 0.97 when omitted.
+   */
+  readonly inverterEfficiency?: number;
+  /**
+   * Fraction of DC power lost in wiring between panels and inverter
+   * (dimensionless, 0–1). Applied as an additional loss factor on top of
+   * inverter efficiency. Typical residential installations: 0.01–0.03.
+   * Defaults to 0.02 when omitted.
+   */
+  readonly wiringLoss?: number;
 }
 
 export interface PanelDefinition {
@@ -161,6 +182,24 @@ export interface PanelDefinition {
   readonly zonesDisposition: ZonesDisposition;
   readonly hasOptimizer: boolean;
   readonly string: string;
+  /**
+   * Temperature coefficient of maximum power (per °C, typically negative).
+   * Represents the relative change in panel output per degree Celsius above
+   * the Standard Test Condition temperature of 25°C.
+   * Typical monocrystalline silicon panels: −0.004 /°C (−0.4 %/°C).
+   * Available in the panel datasheet as Pmax temperature coefficient.
+   * Defaults to −0.004 when omitted.
+   */
+  readonly temperatureCoefficient?: number;
+  /**
+   * Nominal Operating Cell Temperature in °C. The cell temperature reached
+   * under reference conditions: 800 W/m² irradiance, 20°C ambient, 1 m/s wind.
+   * Used to estimate actual cell temperature from ambient temperature and POA:
+   *   T_cell = T_ambient + (NOCT − 20) / 800 × POA
+   * Typical value: 45°C. Available in the panel datasheet. Defaults to 45
+   * when omitted.
+   */
+  readonly noct?: number;
 }
 
 export interface PanelArrayConfiguration {
@@ -185,6 +224,8 @@ export interface PanelArrayConfiguration {
   readonly zonesDisposition?: ZonesDisposition;
   readonly hasOptimizer?: boolean;
   readonly string?: string;
+  readonly temperatureCoefficient?: number;
+  readonly noct?: number;
 }
 
 export interface PanelArraySettings {
@@ -216,6 +257,19 @@ export interface PanelSetupConfiguration {
    * Multiple entries can target different panels within the same setup.
    */
   readonly arraysSettings?: PanelArraySettings[];
+  /**
+   * Setup-level override for the panel temperature coefficient (per °C).
+   * When provided, takes precedence over the value in panelDefaults for all
+   * panels in this setup. Useful when comparing setups with panels of
+   * different technologies or generations.
+   */
+  readonly temperatureCoefficient?: number;
+  /**
+   * Setup-level override for the panel NOCT (°C).
+   * When provided, takes precedence over the value in panelDefaults for all
+   * panels in this setup.
+   */
+  readonly noct?: number;
 }
 
 export interface Config {

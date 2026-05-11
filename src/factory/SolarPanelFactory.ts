@@ -50,16 +50,6 @@ export const SolarPanelFactory = {
    *   northDir (row direction):  Ry(az) · (0, 0, −1) = (−sin az,  0, −cos az )
    *   southDir (panel face):     Ry(az) · (0, 0, +1) = ( sin az,  0,  cos az )
    *
-   * Verification with az = 0 (South-facing):
-   *   eastDir  = (1,  0,  0) = +X = East  ✓
-   *   northDir = (0,  0, −1) = −Z = North ✓
-   *   southDir = (0,  0,  1) = +Z = South ✓
-   *
-   * Verification with az = π/2 (East-facing):
-   *   eastDir  = (0,  0, −1) = North ✓  (columns go northward when facing East)
-   *   northDir = (−1, 0,  0) = West  ✓
-   *   southDir = (1,  0,  0) = East  ✓  (face points East)
-   *
    * ## World position derivation
    *
    * Starting from the SW corner (origin) at elevation height:
@@ -84,6 +74,14 @@ export const SolarPanelFactory = {
    * as the site faces the same direction as the site's South wall.
    * With 'YXZ' order, the X rotation always tilts around the panel's own
    * East-West axis regardless of azimuth, keeping panel edges parallel to the ground.
+   *
+   * ## temperatureCoefficient and noct resolution
+   *
+   * The array configuration can override the setup-level panelDefaults values.
+   * Resolution order (highest to lowest priority):
+   *   arrayConfig.temperatureCoefficient → defaults.temperatureCoefficient → undefined
+   * Undefined values are resolved later in SolarPanelConverter using its own defaults,
+   * keeping the domain model free of hard-coded fallback knowledge.
    */
   create: (
     arrayIndex: number,
@@ -103,20 +101,18 @@ export const SolarPanelFactory = {
     const hasOptimizer = arrayConfig.hasOptimizer ?? defaults.hasOptimizer;
     const string = arrayConfig.string ?? defaults.string;
     const peakPower = arrayConfig.peakPower ?? defaults.peakPower;
+    const temperatureCoefficient = arrayConfig.temperatureCoefficient ?? defaults.temperatureCoefficient;
+    const noct = arrayConfig.noct ?? defaults.noct;
 
     const pWidth = orientation === 'portrait' ? baseW : baseH;
     const pHeight = orientation === 'portrait' ? baseH : baseW;
 
-    // Distance along each axis from the SW corner to the panel centre.
-    const localX = col * (pWidth + spacing[0]) + pWidth / 2; // East along array
-    const slopeLen = row * (pHeight + spacing[1]) + pHeight / 2; // up the slope
+    const localX = col * (pWidth + spacing[0]) + pWidth / 2;
+    const slopeLen = row * (pHeight + spacing[1]) + pHeight / 2;
 
     const horizNorth = slopeLen * Math.cos(origin.radInclination);
     const heightGain = slopeLen * Math.sin(origin.radInclination);
 
-    // Array axis directions from Ry(az):
-    //   eastDir  = ( cos az,  0, −sin az )
-    //   northDir = (−sin az,  0, −cos az )
     const cosAz = Math.cos(origin.radAzimuth);
     const sinAz = Math.sin(origin.radAzimuth);
 
@@ -153,6 +149,8 @@ export const SolarPanelFactory = {
         emissiveColor: hasOptimizer ? '#0a2a16' : '#050a15',
         zones: zoneLayouts,
       },
+      temperatureCoefficient,
+      noct,
     };
   },
 };

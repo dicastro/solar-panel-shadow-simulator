@@ -4,6 +4,8 @@ import { SimulationPanelData, SimulationSamplePoint } from '../types/simulation'
 import { Vector3 } from '../types/geometry';
 import { ThreeConverter } from './ThreeConverter';
 
+const DEFAULT_TEMPERATURE_COEFFICIENT = -0.004;
+const DEFAULT_NOCT = 45;
 
 export const SolarPanelConverter = {
   /**
@@ -62,6 +64,9 @@ export const SolarPanelConverter = {
    * Physical geometry fields (orientation, actualWidth, actualHeight, zones,
    * zonesDisposition) are included so the worker can propagate them into
    * PanelAnnualData for use by the results panel heat maps.
+   *
+   * `temperatureCoefficient` and `noct` fall back to standard defaults when
+   * not specified in the panel configuration.
    */
   toSimulationPanelData: (panel: SolarPanel): SimulationPanelData => ({
     id: panel.id,
@@ -80,6 +85,8 @@ export const SolarPanelConverter = {
     worldPosition: panel.worldPosition,
     worldRotation: panel.worldRotation,
     samplePoints: SolarPanelConverter.toWorldSpaceSamplePoints(panel),
+    temperatureCoefficient: panel.temperatureCoefficient ?? DEFAULT_TEMPERATURE_COEFFICIENT,
+    noct: panel.noct ?? DEFAULT_NOCT,
   }),
 
   /**

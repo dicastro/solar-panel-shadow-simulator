@@ -33,7 +33,8 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Estimates instantaneous power output in kW, applying bypass-diode, string-mismatch and optimizer logic.
 - Supports multiple installation layouts ("setups") selectable via the UI.
 - Runs a full annual simulation for all configured setups in parallel Web Workers, accumulating energy (kWh) per panel broken down by month, day, and hour. Results are cached in IndexedDB so re-running the same configuration is instant.
-- Supports two irradiance sources: a geometric clear-sky model (no network required) and Open-Meteo (real hourly DNI data fetched from a free, CORS-compatible API, cached in IndexedDB).
+- Supports two irradiance sources: a geometric clear-sky model (no network required) and Open-Meteo (real hourly DNI + DHI + temperature data fetched from a free, CORS-compatible API, cached in IndexedDB). The Open-Meteo model applies full Plane-of-Array irradiance decomposition and panel temperature correction.
+- Applies configurable system losses (inverter efficiency, wiring loss) to the DC output of every time step.
 - Displays annual results in a floating resizable overlay panel with three tabs (Annual, Monthly, Daily), each containing a Production section (ECharts charts) and a Shadows section (per-panel zone heat maps). A shared legend lets the user toggle setups on/off and all charts update accordingly.
 - Validates the wall configuration and displays a prominent warning listing the exact config-space coordinate triples that form non-90° or non-180° angles.
 
@@ -78,13 +79,17 @@ src/
 │   └── results-panel.css
 │
 ├── types/
-│   ├── config.ts
+│   ├── config.ts                  # groundAlbedo, inverterEfficiency, wiringLoss on
+│   │                              #   InstallationConfiguration; temperatureCoefficient
+│   │                              #   and noct on PanelDefinition and PanelArrayConfiguration
 │   ├── geometry.ts
-│   ├── installation.ts
+│   ├── installation.ts            # temperatureCoefficient, noct on SolarPanel;
+│   │                              #   groundAlbedo, inverterEfficiency, wiringLoss on Site
 │   ├── results.ts
-│   ├── simulation.ts              # IrradianceSource, SimulationPanelData (includes
-│   │                              #   worldPosition + worldRotation for mesh reconstruction),
-│   │                              #   WorkerSimulationPayload (includes irradianceData)
+│   ├── simulation.ts              # SystemLossParams; WorkerSimulationPayload carries
+│   │                              #   weatherData (DNI+DHI+temperature), panelInclinationRad,
+│   │                              #   systemLoss; SimulationPanelData carries
+│   │                              #   temperatureCoefficient and noct
 │   └── index.ts
 │
 ├── engine/
@@ -92,51 +97,57 @@ src/
 │   └── AnnualSimulationEngine.ts
 │
 ├── factory/
-│   ├── SiteFactory.ts
+│   ├── SiteFactory.ts             # Reads groundAlbedo, inverterEfficiency, wiringLoss
+│   │                              #   from config with sensible defaults
 │   ├── WallFactory.ts
 │   ├── WallIntersectionFactory.ts
 │   ├── PanelSetupFactory.ts
 │   ├── SolarPanelArrayFactory.ts
-│   ├── SolarPanelFactory.ts
+│   ├── SolarPanelFactory.ts       # Reads temperatureCoefficient and noct from
+│   │                              #   arrayConfig (override) or panelDefaults
 │   ├── SamplePointFactory.ts
 │   ├── PointXZFactory.ts
-│   ├── MeshFactory.ts             # Collects castShadow meshes from scene; accepts optional
-│   │                              #   filter predicate to exclude panel frame meshes
-│   └── PanelMeshFactory.ts        # Builds panel frame meshes from SimulationPanelData
-│                                  #   without requiring them in the live scene
+│   ├── MeshFactory.ts
+│   └── PanelMeshFactory.ts
 │
 ├── irradiance/                    # Irradiance provider strategy pattern
-│   ├── IrradianceProvider.ts      # Interface + factory function (createIrradianceProvider)
+│   ├── IrradianceProvider.ts      # Interface returns HourlyWeatherData (DNI+DHI+temperature)
+│   │                              #   + factory function (createIrradianceProvider)
 │   ├── GeometricIrradianceProvider.ts  # Returns null → worker uses geometric model
-│   └── OpenMeteoIrradianceProvider.ts  # Fetches hourly DNI from Open-Meteo; IndexedDB cache
+│   └── OpenMeteoIrradianceProvider.ts  # Fetches DNI, DHI, temperature from Open-Meteo;
+│                                  #   IndexedDB cache (DB version 2)
 │
 ├── converter/
 │   ├── ThreeConverter.ts
-│   └── SolarPanelConverter.ts     # toSimulationPanelData now includes worldPosition
-│                                  #   and worldRotation for per-setup mesh reconstruction
+│   └── SolarPanelConverter.ts     # Propagates temperatureCoefficient and noct into
+│                                  #   SimulationPanelData; applies defaults when absent
 │
 ├── store/
-│   ├── AppStore.ts                # Re-exports availableIntervals
+│   ├── AppStore.ts
 │   └── slices/
 │       ├── ConfigSlice.ts
 │       ├── RenderSlice.ts
-│       └── SimulationSlice.ts     # availableIntervals() conditioned by irradiance source;
-│                                  #   setIrradianceSource resets interval if incompatible
+│       └── SimulationSlice.ts
 │
 ├── hooks/
 │   ├── useBVH.ts
 │   ├── useShadowSampler.ts
-│   ├── useAnnualSimulation.ts     # Separates static scene meshes from panel meshes;
-│   │                              #   resolves irradiance data before launching workers
+│   ├── useAnnualSimulation.ts     # Fetches HourlyWeatherData once; distributes
+│   │                              #   independent slice() copies to each worker;
+│   │                              #   computes meanInclinationRad per setup;
+│   │                              #   builds SystemLossParams from site
 │   ├── useResultsPanel.ts
 │   └── useResizablePanel.ts
 │
 ├── db/
-│   ├── SimulationCache.ts         # IndexedDB: simulation-results store
-│   └── IrradianceCache.ts         # IndexedDB: irradiance-cache store (permanent cache, past years only)
+│   ├── SimulationCache.ts
+│   └── IrradianceCache.ts         # DB version 2: stores DNI + DHI + temperature;
+│                                  #   old DNI-only entries dropped on upgrade
 │
 ├── workers/
-│   └── AnnualSimulation.worker.ts # Applies irradianceData multiplier when present
+│   └── AnnualSimulation.worker.ts # Full POA model (direct + diffuse + albedo);
+│                                  #   NOCT-based temperature correction;
+│                                  #   system loss factor applied after string mismatch
 │
 └── utils/
     ├── HashUtils.ts
@@ -150,11 +161,11 @@ src/
 └── components/
     ├── Scene.tsx
     ├── ShadowedScene.tsx
-    ├── SolarPanelComponent.tsx    # Panel frame mesh marked userData.isPanelFrame = true
+    ├── SolarPanelComponent.tsx
     ├── Sun.tsx
     ├── Compass.tsx
     ├── RenderControls.tsx
-    ├── SimulationControls.tsx     # Interval selector conditioned to irradiance source
+    ├── SimulationControls.tsx
     ├── SimulationResultsPanel.tsx
     ├── AnnualSimulationProgress.tsx
     ├── AngleWarningBanner.tsx
@@ -207,95 +218,62 @@ Three domain slices composed behind a single `useAppStore` facade. Each slice is
 
 Panels are rendered outside the site `<group>` (which carries the site azimuth rotation) so their raycasting sample points are already in absolute world space. The positioning pipeline is:
 
-1. **`SiteFactory`** computes `swCornerX`, `swCornerZ` (minimum X and Z of all wall points in config space) and `azimuthRad`. These are stored on the `Site` domain object.
+1. **`SiteFactory`** computes `swCornerX`, `swCornerZ` and `azimuthRad`. These are stored on the `Site` domain object alongside the system loss parameters.
 
-2. **`SolarPanelArrayFactory`** converts the array's config-space position into Three.js world space in two steps:
-   - Finds the site's SW corner in centred Three.js coords, then rotates it by `siteAzimuthRad` to obtain the world-space SW corner of the site.
-   - Converts the array's position offset `[configX, configZ]` (East and North from the site SW corner, measured in the site's rotated frame) into world space using the same rotation matrix.
-   - The resulting origin is the **SW corner of the array** at `elevation` height.
+2. **`SolarPanelArrayFactory`** converts the array's config-space position into Three.js world space.
 
-3. **`SolarPanelFactory`** places each panel relative to the array SW corner using two axis vectors derived from the array's own azimuth. These are obtained by applying the Three.js `Ry(θ)` matrix (`x' = cos·x + sin·z`, `z' = −sin·x + cos·z`) to the canonical East `(1,0,0)` and North `(0,0,−1)` vectors:
-   - `eastDir  = ( cos az,  0,  −sin az )`  — column direction
-   - `northDir = ( −sin az, 0,  −cos az )`  — row direction (up the slope, horizontally)
-   - Inclination lifts each panel vertically by `slopeLen × sin(inclination)`.
+3. **`SolarPanelFactory`** places each panel relative to the array SW corner using axis vectors derived from the array's own azimuth. `temperatureCoefficient` and `noct` are resolved by preferring the array-level value over the setup-level `panelDefaults` value, following the same override pattern used for `peakPower`, `zones`, etc.
 
-4. **`ThreeConverter`** applies `order: 'YXZ'` Euler rotations so that inclination is always around the panel's own East-West axis, keeping panel edges parallel to the ground for any azimuth value.
+4. **`ThreeConverter`** applies `order: 'YXZ'` Euler rotations so that inclination is always around the panel's own East-West axis.
 
 ### Azimuth sign convention — unified across site and panels
 
-Both the site azimuth and panel array azimuths follow the same convention throughout the codebase:
-
-- **0 = South** (panel face or site North pointing due South/North)
-- **Positive = East** (clockwise from South when viewed from above)
-- **Negative = West** (anticlockwise from South)
-
-`SiteFactory` stores `azimuthRad = azimuth × π/180` (no sign flip). `Scene.tsx` applies `rotation-y = +site.azimuthRad` to the site group. Three.js `rotation-y` positive is mathematically anticlockwise, but in this project's top-down camera view it produces the correct clockwise-from-South rotation observed on screen. Panel arrays use `worldRotation.y = +radAzimuth` with the same sign, ensuring that a panel array with the same azimuth as the site faces the same direction as the site's South wall.
+Both the site azimuth and panel array azimuths follow the same convention: 0 = South, positive = East, negative = West.
 
 ### Irradiance provider — Strategy pattern
 
 The `IrradianceProvider` interface (`src/irradiance/IrradianceProvider.ts`) defines a single method:
 
 ```ts
-getHourlyDNI(lat, lon, year): Promise<Float32Array | null>
+getHourlyWeatherData(lat, lon, year): Promise<HourlyWeatherData | null>
 ```
 
-Concrete implementations live in separate modules:
+`HourlyWeatherData` carries three parallel `Float32Array` arrays indexed by UTC hour-of-year:
+- `dni` — Direct Normal Irradiance (W/m²)
+- `dhi` — Diffuse Horizontal Irradiance (W/m²)
+- `temperature` — ambient temperature at 2 m (°C), or null when unavailable
 
-- `GeometricIrradianceProvider` — returns `null` immediately. The worker interprets `null` as "use geometric clear-sky model unchanged".
-- `OpenMeteoIrradianceProvider` — fetches hourly DNI from Open-Meteo, caches in IndexedDB, returns a `Float32Array` of W/m² values.
+Concrete implementations:
 
-The factory function `createIrradianceProvider(source)` uses dynamic `import()` so each provider module is only bundled into the chunk that needs it.
+- `GeometricIrradianceProvider` — returns `null` immediately. The worker uses the geometric clear-sky model.
+- `OpenMeteoIrradianceProvider` — fetches all three variables from Open-Meteo in a single request, caches in IndexedDB (DB version 2), returns a `HourlyWeatherData` object.
 
-The worker is completely unaware of the irradiance source. `useAnnualSimulation` resolves the data once on the main thread and includes it in the `WorkerSimulationPayload` as `irradianceData: Float32Array | null`. Adding a new source in the future requires only a new module and a new `case` in the factory — the worker, store, and simulation engine are unaffected.
+Adding a new source requires only a new module and a new `case` in the factory — the worker, store, and simulation engine are unaffected.
 
 ### Irradiance data — main thread fetch, not worker fetch
 
-Fetching irradiance data inside the worker would require network access from a Worker context (which is supported, but adds complexity) and would result in one fetch per worker even though all setups share the same location and year. Fetching once on the main thread and distributing via `postMessage` is simpler and more efficient. Each worker receives its own `slice()` copy of the `Float32Array` so that zero-copy buffer transfer does not detach the shared array.
+Fetching on the main thread and distributing via `postMessage` is simpler and avoids one fetch per worker. Each worker receives its own `slice()` copy of each `Float32Array` so zero-copy buffer transfer does not detach the shared array.
 
 ### Open-Meteo — why this API
 
 - Free for non-commercial use, no API key, no registration.
-- Explicitly supports CORS from browser origins — the only hard requirement for a static GitHub Pages app with no backend.
-- Single call returns a full year of hourly DNI data (~26 KB gzipped JSON).
+- Explicit CORS support from browser origins — hard requirement for a static GitHub Pages app.
+- Single call returns a full year of hourly DNI, DHI, and temperature data.
 - Data goes back to 1940 via the historical archive endpoint.
 
-PVGIS was evaluated and rejected: its API explicitly blocks AJAX requests from browser origins (`Warning: access to PVGIS APIs via AJAX is not allowed`). A proxy or backend would be required, which contradicts the no-backend constraint.
+PVGIS was evaluated and rejected: its API explicitly blocks AJAX requests from browser origins. A proxy or backend would be required, which contradicts the no-backend constraint.
 
-### Irradiance cache — permanent, no TTL
+### Irradiance cache — DB version 2, permanent, no TTL
 
-`IrradianceCache` stores entries under `{source}:{lat4dp}:{lon4dp}:{year}`.
+`IrradianceCache` uses `DB_VERSION = 2`. The upgrade handler drops the old store (which contained only DNI) and creates a fresh one. Historical reanalysis data is immutable, so no TTL is needed. Store size is bounded by distinct (source, location, year) combinations.
 
-Open-Meteo only supports completed past years via its historical archive endpoint. Historical reanalysis data is immutable — it will never change for a given (location, year) pair. The cache therefore has no TTL: any stored entry is returned as-is, and only one record per key is ever stored (`put` overwrites). The store size is bounded by the number of distinct (source, location, year) combinations the user has simulated.
+### Panel-level temperature and NOCT — resolved with defaults in SolarPanelConverter
 
-### Interval and year selectors conditioned to irradiance source
+`SolarPanel` carries `temperatureCoefficient` and `noct` as optional fields. `SolarPanelConverter.toSimulationPanelData` resolves them with well-known defaults (−0.004 /°C and 45°C) when absent. This keeps the domain model free of hard-coded fallback knowledge — the factory chain simply passes through whatever the config provides.
 
-Open-Meteo has two constraints that must be reflected in the UI:
+### System losses applied after string mismatch
 
-**Interval**: DNI is available at hourly resolution only. Using a 15- or 30-minute interval would repeat the same DNI value for every sub-hourly step — correct numerically but misleading. `availableIntervals(source)` returns `[60]` for `open-meteo` and `[15, 30, 60]` for `geometric`.
-
-**Year**: The Open-Meteo historical archive only covers completed past years. The current year is not yet available in full — requesting it would leave all future hours at 0 W/m², producing severely underestimated production figures. `availableSimulationYears(source)` excludes the current year when `source === 'open-meteo'`.
-
-`setIrradianceSource` in `SimulationSlice` resets both interval and year atomically in a single `set((state) => ...)` updater, so no component ever observes an inconsistent combination.
-
-### Panel mesh separation for per-setup simulation correctness
-
-The 3D viewport only ever renders the currently active setup. When the simulation runs for all setups in parallel, each worker must receive the panel geometry of the setup it is simulating — not the panels of whatever setup happens to be displayed at launch time.
-
-This is solved by splitting the shadow-casting geometry into two independent sources:
-
-1. **Static meshes** (walls, railings, intersection posts): collected from the live scene using `MeshFactory.fromScene` with a filter that excludes panel frame meshes. These are identical for all setups and reused across workers.
-
-2. **Panel frame meshes**: built procedurally per setup by `PanelMeshFactory.buildFromPanelData`, using `worldPosition` and `worldRotation` from `SimulationPanelData`. This creates the same `BoxGeometry([actualWidth, 0.03, actualHeight])` that `SolarPanelComponent` renders, but from domain data rather than from the live scene.
-
-Panel frame meshes in the scene are marked with `userData.isPanelFrame = true` by `SolarPanelComponent`. The `MeshFactory` filter checks this flag to exclude them from the static batch. This convention keeps the separation clean and avoids coupling to geometry size heuristics or internal naming.
-
-### Results panel — floating resizable overlay
-
-The results panel is a `position: fixed` overlay that sits on top of the 3D canvas. The canvas always fills `100vw × 100vh`.
-
-### CSS fragmentation into modules
-
-`src/styles/index.css` is a barrel import of five focused files.
+`SystemLossParams` (inverter efficiency, wiring loss, ground albedo) is built from `Site` in `useAnnualSimulation` and transferred in the worker payload as a constant object. The combined loss factor `inverterEfficiency × (1 − wiringLoss)` is computed once at the start of `runSimulation` and applied to each panel's effective power after the string mismatch algorithm, matching the physical order of DC→AC conversion.
 
 ### Panel shadow heat map — zone-level cells
 
@@ -304,6 +282,14 @@ Panels grouped by `arrayIndex`, sized proportionally to `actualWidth × actualHe
 ### Physical geometry in `PanelAnnualData`
 
 Carries `orientation`, `actualWidth`, `actualHeight`, `zones`, `zonesDisposition` so the results panel can render correct heat maps without the original config.
+
+### Results panel — floating resizable overlay
+
+The results panel is a `position: fixed` overlay that sits on top of the 3D canvas. The canvas always fills `100vw × 100vh`.
+
+### CSS fragmentation into modules
+
+`src/styles/index.css` is a barrel import of five focused files.
 
 ---
 
@@ -329,11 +315,7 @@ West ─────┼───── East (+X)
       South (+Z)
 ```
 
-Config Z coordinates are negated (`z_three = −z_config`) when converting wall points and the SW corner reference into centred Three.js coordinates.
-
 ### Azimuth convention
-
-Both the site azimuth and panel array azimuths share one unified convention:
 
 | Value | Meaning |
 |-------|---------|
@@ -341,25 +323,16 @@ Both the site azimuth and panel array azimuths share one unified convention:
 | > 0   | Rotated toward East (clockwise from South, viewed from above) |
 | < 0   | Rotated toward West (anticlockwise from South, viewed from above) |
 
-A site with `azimuth = 18.5` has its South-facing wall rotated 18.5° toward the East. A panel array with `azimuth = 18.5` faces 18.5° East of South. Both are configured with the same positive value and both rotate in the same direction on screen.
-
 ### Array position reference point
 
-The `position: [x, z]` of a panel array in `config.json` is the offset of the **SW corner of the array** from the **SW corner of the site** (the minimum-X, minimum-Z wall point), measured in the site's rotated reference frame:
-
-- `+x` = East along the rotated site
-- `+z` = North along the rotated site
-
-`position: [0, 0]` places the array's SW corner exactly at the site's SW corner (after site rotation).
+`position: [x, z]` is the offset of the SW corner of the array from the SW corner of the site, measured in the site's rotated reference frame.
 
 ### Panel indexing within an array
 
 | Index | Axis      | 0 = …             | Increases toward … |
 |-------|-----------|-------------------|--------------------|
-| `row` | North–South | southernmost row (bottom of slope) | North (up the slope) |
+| `row` | North–South | southernmost row | North (up the slope) |
 | `col` | West–East   | westernmost column | East |
-
-The coordinate `(row=0, col=0)` is the South-West panel of the array.
 
 ---
 
@@ -377,8 +350,6 @@ n = (-dz, dx) / |d|    (left-hand perpendicular)
 cross(a, b) = a.x·b.z − a.z·b.x
 ```
 
-`isConvex = true` in Three.js coordinates means an interior recess (270° interior angle).
-
 ---
 
 ## Configuration reference
@@ -389,38 +360,62 @@ cross(a, b) = a.x·b.z − a.z·b.x
     "location": { "latitude": 40.62, "longitude": -4.01 },
     "azimuth": 18.5,
     "timezone": "Europe/Madrid",
+    "groundAlbedo": 0.20,
+    "inverterEfficiency": 0.97,
+    "wiringLoss": 0.02,
     "wallPoints": [[0,0], [3.7,0], ...],
     "wallDefaults": { "height": 0.7, "thickness": 0.2 },
     "railingDefaults": { ... },
     "wallsSettings": [...]
   },
-  "setups": [...]
+  "setups": [
+    {
+      "label": "My setup",
+      "panelDefaults": {
+        "width": 1, "height": 2, "peakPower": 415,
+        "zones": 2, "zonesDisposition": "horizontal",
+        "hasOptimizer": false, "string": "S1",
+        "temperatureCoefficient": -0.004,
+        "noct": 45
+      },
+      "arrays": [...]
+    }
+  ]
 }
 ```
 
+### Site-level physical properties
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `groundAlbedo` | number (0–1) | 0.20 | Fraction of GHI reflected by the ground toward the panels. Typical: 0.20 concrete, 0.25 light gravel, 0.10 dark membrane. |
+| `inverterEfficiency` | number (0–1) | 0.97 | Rated DC/AC conversion efficiency of the inverter. |
+| `wiringLoss` | number (0–1) | 0.02 | Fraction of DC power lost in cables between panels and inverter. |
+
+All three default to industry-standard values when omitted, so existing `config.json` files without these fields continue to work correctly.
+
+### Panel-level physical properties (in `panelDefaults` and `arrays[*]`)
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `temperatureCoefficient` | number (per °C) | −0.004 | Relative change in peak power per °C above 25°C. Available in the panel datasheet as "Pmax temperature coefficient". |
+| `noct` | number (°C) | 45 | Nominal Operating Cell Temperature. Used to estimate cell temperature from ambient temperature and POA. Available in the panel datasheet. |
+
+Both can be set at the `panelDefaults` level and overridden per `arrays[*]` entry, following the same pattern as `peakPower`, `zones`, etc. A setup-level override (`setup.temperatureCoefficient`) is also supported to apply a uniform value across all arrays without editing each entry.
+
 ### `azimuth` — site and panel arrays
 
-Both the site `azimuth` and each array's `azimuth` follow the same convention:
 - `0` = South-facing
 - Positive = rotated toward **East** (clockwise from South, viewed from above)
 - Negative = rotated toward **West**
 
-These are **absolute** azimuths, not relative to each other. An installer measures each independently with a compass.
-
 ### `position` — panel array placement
 
-`position: [x, z]` is the distance in metres from the **SW corner of the site** to the **SW corner of the array**, measured in the site's rotated frame (East and North, not global East and North).
+`position: [x, z]` is the distance in metres from the SW corner of the site to the SW corner of the array, measured in the site's rotated frame.
 
 ### `arraysSettings` — per-panel overrides
 
 Each entry targets one specific panel by its `array` / `row` / `col` address (all 0-based) and overrides `hasOptimizer` and/or `string`.
-
-| Index | Axis | 0 = … | Increases toward … |
-|-------|------|--------|--------------------|
-| `row` | North–South | southernmost row | North |
-| `col` | West–East   | westernmost column | East |
-
-The coordinate `(array, row=0, col=0)` addresses the South-West panel of that array.
 
 ---
 
@@ -430,24 +425,56 @@ The coordinate `(array, row=0, col=0)` addresses the South-West panel of that ar
 
 `suncalc.getPosition(date, lat, lon)` → altitude and azimuth → Three.js direction vector.
 
-### 2. Incidence factor
+### 2. Geometric model (no weather data)
 
 ```
 incidenceFactor = max(0, dot(sunDirection, panelNormal))
 basePower (kW)  = peakPower (Wp) / 1000 × incidenceFactor
 ```
 
-### 3. Irradiance correction (Open-Meteo source)
+This is the clear-sky model used when the irradiance source is set to "Geometric". It produces an upper-bound estimate because it assumes perfect clear-sky conditions at all times with no temperature penalty.
 
-When real DNI data is available:
+### 3. POA irradiance model (Open-Meteo source)
+
+When real weather data is available, the worker computes Plane-of-Array (POA) irradiance using the isotropic sky decomposition model:
 
 ```
-basePower (kW) = peakPower (Wp) / 1000 × incidenceFactor × (DNI / 1000)
+POA_direct  = DNI × cos(angle_of_incidence)
+POA_diffuse = DHI × (1 + cos(tilt)) / 2
+POA_albedo  = GHI × groundAlbedo × (1 − cos(tilt)) / 2
+
+GHI = DNI × cos(solar_zenith) + DHI
+
+basePower (kW) = peakPower (Wp) / 1000 × (POA / 1000)
 ```
 
-where 1000 W/m² is the Standard Test Condition (STC) reference irradiance. Clear-sky days with DNI ≈ 1000 W/m² produce results identical to the geometric model; overcast days with lower DNI are automatically discounted.
+where 1000 W/m² is the Standard Test Condition (STC) reference irradiance. The isotropic sky model treats diffuse irradiance as uniform across the sky hemisphere — a well-established simplification that is accurate enough for residential comparison purposes.
 
-### 4. Panel output with bypass diodes
+The three POA components correspond to:
+- **Direct**: beam radiation striking the tilted panel face.
+- **Diffuse**: scattered sky radiation, proportional to how much of the sky hemisphere the panel can "see" (sky-view factor `(1 + cos(tilt)) / 2`).
+- **Albedo**: ground-reflected radiation, proportional to how much ground the panel faces (ground-view factor `(1 − cos(tilt)) / 2`) multiplied by the site's ground albedo.
+
+### 4. Temperature correction (Open-Meteo source)
+
+When ambient temperature data is available, a temperature factor is applied to `basePower`:
+
+```
+T_cell = T_ambient + (NOCT − 20) / 800 × POA
+temperatureFactor = max(0, 1 + γ × (T_cell − 25))
+
+basePower_corrected = basePower × temperatureFactor
+```
+
+where:
+- `NOCT` = Nominal Operating Cell Temperature (°C), from the panel datasheet
+- `γ` = temperature coefficient of maximum power (per °C, negative for Si panels)
+- 25°C = STC reference temperature
+- 800 W/m² = NOCT reference irradiance
+
+At 25°C ambient and 1000 W/m² POA with NOCT=45°C, the cell reaches ~50°C, giving a temperature loss of ~10% for γ=−0.004/°C. In summer at 35°C ambient the loss can reach 15–20%.
+
+### 5. Panel output with bypass diodes
 
 | Shaded zones | Without optimizer                                   | With optimizer        |
 |--------------|-----------------------------------------------------|-----------------------|
@@ -455,9 +482,22 @@ where 1000 W/m² is the Standard Test Condition (STC) reference irradiance. Clea
 | k out of n   | `basePower × (n−k)/n × 0.9` (10% mismatch penalty) | `basePower × (n−k)/n` |
 | all          | 0                                                   | 0                     |
 
-### 5. String mismatch
+The 10% mismatch penalty models the voltage mismatch that occurs when some bypass diodes are active and the remaining cells must operate at a sub-optimal point on the I-V curve. With an optimizer, the panel's operating point is decoupled from the string, so the loss is purely proportional to the fraction of shaded zones.
 
-Without optimizers, string efficiency is limited by the least-efficient panel.
+### 6. String mismatch
+
+Without optimizers, string efficiency is limited by the least-efficient panel (series current constraint). With at least one optimizer in the string, every panel is treated as independent.
+
+### 7. System losses
+
+After string mismatch, a system loss factor is applied to all panel powers simultaneously:
+
+```
+systemLossFactor = inverterEfficiency × (1 − wiringLoss)
+effectivePower   = stringPower × systemLossFactor
+```
+
+This models the DC→AC conversion loss in the inverter and the resistive losses in the DC wiring between panels and inverter. Applied as the final step so it does not interact with the per-panel shading and string mismatch logic.
 
 ---
 
@@ -488,58 +528,65 @@ Steps through every N-minute interval of a full year for all setups simultaneous
 
 ### Irradiance sources
 
-| Source | Description | Network | Interval support | Year support |
-|--------|-------------|---------|-----------------|--------------|
-| `geometric` | Clear-sky model, sun geometry only | None | 15, 30, 60 min | Current + past 5 years |
-| `open-meteo` | Hourly DNI from Open-Meteo Historical API | Required | 60 min only | Past 5 years only |
+| Source | Description | Network | Variables | Interval support | Year support |
+|--------|-------------|---------|-----------|-----------------|--------------|
+| `geometric` | Clear-sky model, sun geometry only | None | — | 15, 30, 60 min | Current + past 5 years |
+| `open-meteo` | POA model with DNI, DHI, temperature | Required | DNI, DHI, T_ambient | 60 min only | Past 5 years only |
 
-Selecting Open-Meteo automatically restricts both the interval selector (60 min only) and the year selector (past years only). The current year is excluded because the Open-Meteo archive only covers completed years — including it would produce results where all future hours show 0 W/m².
+Selecting Open-Meteo automatically restricts both the interval selector (60 min only) and the year selector (past years only).
 
-On fetch failure, `useAnnualSimulation` logs a warning and proceeds with `irradianceData = null`, which causes the worker to fall back to the geometric model transparently.
+On fetch failure, `useAnnualSimulation` logs a warning and proceeds with `weatherData = null`, causing the worker to fall back to the geometric model.
 
-### Irradiance data flow
+### Weather data flow
 
 ```
-Main thread                        Worker
-──────────────────────────────     ─────────────────────────────────
+Main thread                              Worker
+────────────────────────────────────     ─────────────────────────────────────
 createIrradianceProvider(source)
-  → provider.getHourlyDNI(...)     receives irradianceData: Float32Array | null
-  → Float32Array (8760 values)     per time step:
-  → slice() per worker copy          dni = irradianceData[utcHourOfYear]
-  → zero-copy postMessage            basePower *= dni / 1000  (if data present)
+  → getHourlyWeatherData(lat, lon, year) receives weatherData: {dni, dhi, temperature} | null
+  → HourlyWeatherData {                  per time step:
+      dni: Float32Array,                   hourIdx = utcHourOfYear(date, year)
+      dhi: Float32Array,                   POA = direct + diffuse + albedo
+      temperature: Float32Array            T_cell from NOCT model
+    }                                      temperatureFactor = 1 + γ(T_cell − 25)
+  → slice() per worker copy               basePower × (POA/1000) × tempFactor
+  → zero-copy postMessage                 × systemLossFactor
 ```
 
 ### Shadow geometry per setup
 
-The simulation worker must receive the panel geometry of the setup it is simulating. The 3D viewport only ever renders the currently active setup, so a naïve approach of serialising all scene meshes would give every worker the wrong panels when more than one setup is simulated.
-
-The geometry sent to each worker is assembled in two stages:
-
-1. **Static meshes** (walls, railings, intersection posts): serialised once from the live scene using `MeshFactory.fromScene` with an `isNotPanelFrame` filter. Panel frames marked with `userData.isPanelFrame = true` are excluded.
-
-2. **Panel frame meshes**: built procedurally for each setup by `PanelMeshFactory.buildFromPanelData`. This constructs `BoxGeometry([actualWidth, 0.03, actualHeight])` meshes with correct world matrices from `SimulationPanelData.worldPosition` and `SimulationPanelData.worldRotation`, exactly matching the geometry rendered by `SolarPanelComponent`.
-
-Both batches are concatenated into the `meshes` array in the worker payload.
+Static meshes (walls, railings) from the live scene + panel frame meshes built procedurally per setup by `PanelMeshFactory`. Panel frames in the scene are marked `userData.isPanelFrame = true` and excluded from the static batch.
 
 ### IndexedDB — two independent databases
-
-Each cache module manages its own database, keeping them fully decoupled:
 
 | Database | Version | Store | Key | Contents |
 |----------|---------|-------|-----|----------|
 | `solar-simulator` | 1 | `simulation-results` | `cacheKey` hash | Full `SetupAnnualResult` |
-| `solar-simulator-irradiance` | 1 | `irradiance-cache` | `{source}:{lat4dp}:{lon4dp}:{year}` | Hourly DNI array |
+| `solar-simulator-irradiance` | 2 | `irradiance-cache` | `{source}:{lat4dp}:{lon4dp}:{year}` | DNI + DHI + temperature arrays |
+
+The irradiance cache was bumped to version 2. The upgrade handler drops the old store (DNI-only schema) and creates a fresh one — existing entries are re-fetched on next use.
 
 ### Worker architecture
 
 **Worker pool:** `max(1, hardwareConcurrency − 1)` concurrent workers.
 
-**Irradiance multiplier per step:**
+**POA computation per step:**
 ```ts
-const hourIdx = Math.floor((date.getTime() - yearStartUTC) / 3_600_000);
-const dni = irradianceData ? irradianceData[hourIdx] : 1000;
-irradianceMultiplier = dni / 1000;
-basePower = peakPower/1000 × incidenceFactor × irradianceMultiplier;
+GHI = DNI × cos(zenith) + DHI
+POA = DNI × incidenceFactor
+    + DHI × (1 + cos(tilt)) / 2
+    + GHI × albedo × (1 − cos(tilt)) / 2
+```
+
+**Temperature correction per panel per step:**
+```ts
+T_cell = T_ambient + (NOCT − 20) / 800 × POA
+factor = max(0, 1 + γ × (T_cell − 25))
+```
+
+**System loss (constant per run):**
+```ts
+systemLossFactor = inverterEfficiency × (1 − wiringLoss)
 ```
 
 **Progress reporting:** every 100 steps, EMA-smoothed ETA.
@@ -594,7 +641,8 @@ Canvas fills `100vw × 100vh`. All UI elements are absolute or fixed overlays.
 
 - **90° wall angles only**: non-right angles produce incorrect post placement.
 - **Open-Meteo resolution is hourly**: sub-hourly intervals are only available with the geometric model.
-- **No diffuse irradiance**: only DNI (direct beam) is used for the Open-Meteo correction. Diffuse sky radiation is not modelled.
+- **Isotropic sky model**: the diffuse component assumes uniform sky radiance. More accurate models (Perez, Hay-Davies) require additional inputs not available from Open-Meteo's free tier.
+- **Single inclination per setup for POA**: the worker uses the mean inclination across all arrays. Setups with mixed inclinations will have a small systematic error in the diffuse and albedo components.
 - **Rail extensions end in a 90° cut**: a 45° mitre would require custom `BufferGeometry`.
 - **Drag-to-resize is mouse-only**: touch not supported.
 
@@ -602,96 +650,61 @@ Canvas fills `100vw × 100vh`. All UI elements are absolute or fixed overlays.
 
 ## Lessons learned
 
+### Full POA irradiance is essential for realistic estimates
+
+Using only DNI (direct beam on a perpendicular surface) severely underestimates production because it ignores the diffuse sky component, which can represent 20–35% of annual yield — especially in winter and on partly cloudy days. The isotropic sky model adds DHI and albedo components with minimal complexity: two view-factor multiplications per time step.
+
+### Temperature correction is significant in summer
+
+At 35°C ambient with 1000 W/m² irradiance, a panel with NOCT=45°C reaches ~60°C, giving a ~14% loss for γ=−0.004/°C. Omitting temperature correction causes systematic overestimation of summer production.
+
+### NOCT model is accurate enough for residential comparison
+
+The NOCT model (`T_cell = T_ambient + (NOCT−20)/800 × POA`) is a linear approximation that ignores wind speed and mounting configuration. More accurate models (Faiman, Sandia) require additional meteorological inputs. For a tool whose primary goal is comparing setups against each other, the NOCT model provides sufficient relative accuracy.
+
+### System losses must be applied after string mismatch
+
+Applying inverter and wiring losses before the string mismatch algorithm would understate the bottleneck effect: the least-efficient panel would appear even less efficient, pulling the string further down. The correct order is: shading → bypass diode → string mismatch → system losses.
+
 ### Factory pattern for irradiance sources
 
-The Strategy pattern via an `IrradianceProvider` interface keeps the simulation worker and engine completely agnostic of how irradiance data is obtained. Adding a new source is a two-file change: one new module and one new `case` in the factory.
+The Strategy pattern via an `IrradianceProvider` interface keeps the simulation worker and engine completely agnostic of how irradiance data is obtained. Adding a new source is a two-file change.
 
 ### Fetch once on the main thread, distribute to workers
 
-Resolving irradiance data centrally before worker launch avoids duplicate network requests (one per worker) and keeps the worker free of I/O concerns.
+Resolving weather data centrally before worker launch avoids duplicate network requests and keeps the worker free of I/O concerns.
 
 ### Zero-copy buffer transfer with per-worker copies
 
-`Float32Array.slice()` produces an independent copy of the irradiance buffer for each worker. Without this, the first `postMessage` with `transfer` would detach the shared buffer, causing subsequent workers to receive an empty array.
+`Float32Array.slice()` produces an independent copy for each worker. Without this, the first `postMessage` with `transfer` would detach the shared buffer, corrupting subsequent workers.
 
 ### Panel geometry for simulation must be independent of the active viewport
 
-The 3D viewport only renders the currently selected setup. If the simulation serialises all scene meshes naïvely, every worker receives the panels of whatever setup happens to be active when the simulation is launched — not the panels of the setup it is actually computing.
-
-The fix is to separate shadow geometry into two sources: structural geometry (walls, railings) from the live scene, and panel frame geometry built procedurally per setup from `SimulationPanelData`. `SimulationPanelData` carries `worldPosition` and `worldRotation` precisely so that panel meshes can be reconstructed outside the scene context. `PanelMeshFactory` performs this reconstruction, applying the same `BoxGeometry([actualWidth, 0.03, actualHeight])` and world matrix composition that `SolarPanelComponent` uses in the renderer.
-
-The `userData.isPanelFrame = true` convention on rendered panel frame meshes is what allows `MeshFactory` to exclude them cleanly without geometry size heuristics.
-
-### Panel positioning: panels outside the site group, origin at SW corner
-
-Panels are rendered outside the `<group rotation-y={site.azimuthRad}>` that contains walls and railings, so their world-space coordinates must incorporate the site rotation explicitly. Computing the panel origin as the SW corner of the array (at `elevation` height) makes the config position `[x, z]` directly readable as "metres East and North from the site SW corner" — the same measurement an installer would make on-site.
-
-### Unified azimuth sign convention eliminates one source of confusion
-
-Historically the site and panel azimuths used opposite sign conventions, requiring mental negation when comparing the two. The unified convention (0 = South, positive = East, same sign for site and panels) removes that cognitive overhead and makes the `config.json` values directly comparable.
-
-### Array axis vectors derived analytically from the Three.js Ry(θ) matrix
-
-The Three.js `rotation-y = θ` matrix is `Ry(θ): x' = cos(θ)·x + sin(θ)·z, z' = −sin(θ)·x + cos(θ)·z`. Applying this to the canonical East `(1,0,0)` and North `(0,0,−1)` vectors gives the panel array axis directions in world space:
-
-```
-eastDir  = ( cos az,   0,  −sin az )
-northDir = ( −sin az,  0,  −cos az )
-```
-
-The same matrix is used to rotate the site's SW corner and the array position offset from centred config space into world space. Using the wrong sign for `sin` in either place produces a mirrored rotation that appears correct at azimuth=0 but diverges for any non-zero azimuth.
+Static geometry (walls, railings) from the live scene + panel frames built procedurally per setup from `SimulationPanelData`. `userData.isPanelFrame = true` on rendered panel frames allows clean exclusion from the static batch.
 
 ### IndexedDB schema versioning
 
-Bumping `DB_VERSION` and handling `onupgradeneeded` correctly ensures the new `irradiance-cache` store is created on upgrade without losing existing `simulation-results` records.
+Bumping `DB_VERSION` to 2 and dropping the old store in `onupgradeneeded` ensures all clients migrate cleanly. The DNI-only schema is incompatible with the new DNI+DHI+temperature schema, so a clean drop-and-recreate is the right approach rather than an additive migration.
 
 ### No TTL needed when only immutable data is cached
 
-Since Open-Meteo is restricted to past years, all cached irradiance data is from immutable historical reanalysis. A permanent cache (no TTL, no expiry) is correct and simpler than maintaining a TTL strategy.
+All cached irradiance data covers completed past years — historical reanalysis is immutable. A permanent cache with no expiry is correct and simpler.
 
 ### Year restriction communicates API coverage gap
 
-Rather than fetching partial data for the current year and leaving future hours at 0 W/m², the year selector is restricted to past years when Open-Meteo is selected. This is the honest approach: the user sees only years for which complete data exists.
+The year selector is restricted to past years when Open-Meteo is selected, because the archive only covers completed years. Fetching a partial current year would leave future hours at 0, producing badly underestimated results.
 
 ### Interval and year reset atomically on source change
 
-Changing the irradiance source, clamping the interval, and clamping the year all happen in a single `set((state) => ...)` updater call, so no component ever sees an inconsistent combination of source + interval + year.
+Changing the irradiance source, clamping the interval, and clamping the year all happen in a single `set((state) => ...)` updater call.
 
-### `useEffect` dependency arrays must reflect semantic intent
+### Unified azimuth sign convention eliminates one source of confusion
 
-`showPoints` is absent from `ShadowedScene`'s props and the shadow dirty-flag effect. The annual simulation effect in `Scene` lists only `isRunning`.
+0 = South, positive = East, same sign for site and panels throughout the codebase.
 
-### Memoising derived arrays that feed hooks
+### Array axis vectors derived analytically from the Three.js Ry(θ) matrix
 
-`allPanels` inside `ShadowedScene` is wrapped in `useMemo([activeSetup])`.
-
-### Caching scene traversal in hooks
-
-Cache the result in a `useRef` and invalidate with the same key used to rebuild the BVH.
-
-### Per-worker geometry copies, not shared transfer
-
-Each worker must receive its own copy. `MeshFactory.fromScene(scene, filter).build()` produces a fresh `MeshBatch` on each call. `PanelMeshFactory.buildFromPanelData` always produces fresh typed arrays.
-
-### Sample points pre-computed before worker transfer
-
-`SolarPanelConverter.toSimulationPanelDataArray` pre-computes world-space positions once.
-
-### EMA for ETA smoothing
-
-An EMA with α = 0.2 smooths burst noise from variable shadow complexity.
-
-### Discriminated unions over string enums for geometry variants
-
-Adding a new shape without handling it in the renderer is a compile error.
-
-### FNV-1a for cache key hashing
-
-Synchronous, ~10 lines, public domain, negligible collision probability.
-
-### Slice pattern with facade for global store
-
-Each slice owns a clearly bounded domain. Cross-slice reads use a structural interface to avoid circular imports.
+`eastDir = (cos az, 0, −sin az)`, `northDir = (−sin az, 0, −cos az)`.
 
 ### Simulation results grouped at display time, not at storage time
 
@@ -700,10 +713,6 @@ IndexedDB stores one entry per setup. Grouping at display time keeps the storage
 ### Fixed overlay panel avoids canvas resize
 
 Making the results panel a `position: fixed` overlay means the Three.js `<Canvas>` always occupies `100vw × 100vh`.
-
-### Component-scoped state stays out of Zustand
-
-The results panel's selected group, active tab, legend toggles, and loaded data are all managed by `useResultsPanel`.
 
 ### Physical geometry propagated through simulation pipeline
 

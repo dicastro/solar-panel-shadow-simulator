@@ -6,6 +6,9 @@
     },
     "azimuth": 18.5,
     "timezone": "Europe/Madrid",
+    "groundAlbedo": 0.20,
+    "inverterEfficiency": 0.97,
+    "wiringLoss": 0.02,
     "wallPoints": [
       [
         0,
@@ -169,7 +172,9 @@
         "zones": 2,
         "zonesDisposition": "horizontal",
         "hasOptimizer": false,
-        "string": "S1"
+        "string": "S1",
+        "temperatureCoefficient": -0.004,
+        "noct": 45
       },
       "arrays": [
         {
@@ -199,7 +204,9 @@
         "zones": 2,
         "zonesDisposition": "horizontal",
         "hasOptimizer": true,
-        "string": "S1"
+        "string": "S1",
+        "temperatureCoefficient": -0.004,
+        "noct": 45
       },
       "arrays": [
         {
@@ -261,7 +268,9 @@
         "zones": 2,
         "zonesDisposition": "horizontal",
         "hasOptimizer": false,
-        "string": "S1"
+        "string": "S1",
+        "temperatureCoefficient": -0.004,
+        "noct": 45
       },
       "arrays": [
         {

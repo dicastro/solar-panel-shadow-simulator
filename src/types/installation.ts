@@ -141,6 +141,16 @@ export interface SolarPanel {
   readonly worldRotation: Euler3;
   readonly samplePoints: readonly SamplePoint[];
   readonly renderData: PanelRenderData;
+  /**
+   * Temperature coefficient of maximum power (per °C, typically negative).
+   * Undefined means the simulation will use the default value of −0.004 /°C.
+   */
+  readonly temperatureCoefficient?: number;
+  /**
+   * Nominal Operating Cell Temperature (°C).
+   * Undefined means the simulation will use the default value of 45°C.
+   */
+  readonly noct?: number;
 }
 
 export interface SolarPanelArray {
@@ -173,6 +183,12 @@ export interface Site {
   readonly boundingRadius: number;
   readonly walls: readonly Wall[];
   readonly wallIntersections: readonly WallIntersection[];
+  /** Ground albedo (0–1). Fraction of GHI reflected toward the panels. */
+  readonly groundAlbedo: number;
+  /** Inverter efficiency (0–1). Applied as a multiplier to DC output. */
+  readonly inverterEfficiency: number;
+  /** Wiring loss fraction (0–1). Applied as an additional loss after inverter efficiency. */
+  readonly wiringLoss: number;
 }
 
 export interface PanelSetup {

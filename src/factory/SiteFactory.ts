@@ -6,6 +6,10 @@ import { PointXZFactory } from './PointXZFactory';
 import { WallFactory } from './WallFactory';
 import { WallIntersectionFactory } from './WallIntersectionFactory';
 
+const DEFAULT_GROUND_ALBEDO = 0.20;
+const DEFAULT_INVERTER_EFFICIENCY = 0.97;
+const DEFAULT_WIRING_LOSS = 0.02;
+
 /**
  * Result of SiteFactory.create, bundling the Site geometry with any angle
  * validation warnings detected during construction.
@@ -35,6 +39,9 @@ export const SiteFactory = {
    *
    * Config coordinates use +Z = North. Three.js uses +Z = South, so Z is negated when
    * converting wall points to centred Three.js coordinates.
+   *
+   * System-level loss parameters (groundAlbedo, inverterEfficiency, wiringLoss) default
+   * to industry-standard values when omitted from the configuration.
    */
   create: (config: Config): SiteFactoryResult => {
     const { wallPoints, wallDefaults, railingDefaults, wallsSettings, azimuth } = config.site;
@@ -118,6 +125,9 @@ export const SiteFactory = {
       boundingRadius,
       walls,
       wallIntersections,
+      groundAlbedo: config.site.groundAlbedo ?? DEFAULT_GROUND_ALBEDO,
+      inverterEfficiency: config.site.inverterEfficiency ?? DEFAULT_INVERTER_EFFICIENCY,
+      wiringLoss: config.site.wiringLoss ?? DEFAULT_WIRING_LOSS,
     };
 
     return { site, angleWarnings };

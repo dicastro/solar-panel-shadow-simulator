@@ -22,7 +22,7 @@ export interface InstantProductionResult {
  *
  * - `geometric`: clear-sky model based purely on sun geometry (no weather
  *   correction). Always available, no network required.
- * - `open-meteo`: hourly Direct Normal Irradiance (DNI) from the Open-Meteo
+ * - `open-meteo`: hourly DNI, DHI and temperature from the Open-Meteo
  *   Historical Weather API. Free, no API key, CORS-compatible. Falls back to
  *   geometric if the fetch fails.
  */
@@ -184,16 +184,43 @@ export interface SimulationPanelData {
   readonly worldRotation: Euler3;
   /** Sample points already in world space. */
   readonly samplePoints: SimulationSamplePoint[];
+  /**
+   * Temperature coefficient of maximum power (per °C, typically negative).
+   * Applied per time step when ambient temperature data is available.
+   */
+  readonly temperatureCoefficient: number;
+  /**
+   * Nominal Operating Cell Temperature (°C).
+   * Used to estimate cell temperature from ambient temperature and POA irradiance.
+   */
+  readonly noct: number;
+}
+
+/**
+ * System-level loss parameters shared by all panels in a simulation run.
+ * Derived from the site configuration and applied as post-processing factors
+ * on the total DC power output of each time step.
+ */
+export interface SystemLossParams {
+  /** Inverter efficiency (0–1). Typical value: 0.97. */
+  readonly inverterEfficiency: number;
+  /** Wiring loss fraction (0–1). Typical value: 0.02. */
+  readonly wiringLoss: number;
+  /**
+   * Ground albedo (0–1). Fraction of global horizontal irradiance reflected
+   * by the ground surface toward the panel underside. Typical value: 0.20.
+   */
+  readonly groundAlbedo: number;
 }
 
 /**
  * All data the worker needs to run a full annual simulation for one setup.
  * Transferred once per worker launch; large typed arrays are zero-copy transferred.
  *
- * `irradianceData` is an optional Float32Array of hourly DNI values (W/m²)
- * with one entry per UTC hour of the simulated year. When present, the worker
- * multiplies `basePower` by `dni / 1000` at each time step (1000 W/m² = STC).
- * When absent, the worker uses the geometric clear-sky model unchanged.
+ * When `weatherData` is present the worker computes full Plane-of-Array (POA)
+ * irradiance including direct, diffuse, and albedo components, and applies a
+ * temperature correction to panel efficiency. When absent, the worker uses the
+ * geometric clear-sky model unchanged.
  */
 export interface WorkerSimulationPayload {
   readonly setupId: string;
@@ -210,10 +237,24 @@ export interface WorkerSimulationPayload {
   readonly meshes: SerializedMesh[];
   readonly panels: SimulationPanelData[];
   /**
-   * Hourly DNI values (W/m²), one per UTC hour of the simulated year.
-   * Null or absent means geometric clear-sky model (no weather correction).
+   * Inclination of the panel array in radians, used to compute the POA
+   * diffuse and albedo components. When multiple arrays have different
+   * inclinations within the same setup, a representative value (mean) is used
+   * because the worker applies one factor for the whole setup per time step.
+   * In practice most residential setups use a single inclination.
    */
-  readonly irradianceData: Float32Array | null;
+  readonly panelInclinationRad: number;
+  /** System-level losses applied as a single multiplier after DC production. */
+  readonly systemLoss: SystemLossParams;
+  /**
+   * Hourly weather data for the simulated year: DNI, DHI, and ambient
+   * temperature. Null means geometric clear-sky model (no weather correction).
+   */
+  readonly weatherData: {
+    readonly dni: Float32Array;
+    readonly dhi: Float32Array;
+    readonly temperature: Float32Array | null;
+  } | null;
 }
 
 // ── Messages: main thread → worker ───────────────────────────────────────────

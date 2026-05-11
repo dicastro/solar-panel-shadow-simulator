@@ -8,6 +8,7 @@ import {
   SetupSimulationProgress,
   IrradianceSource,
   SerializedMesh,
+  SystemLossParams,
 } from '../types/simulation';
 import { SimulationCacheUtils } from '../utils/SimulationCacheUtils';
 import { SimulationCache } from '../db/SimulationCache';
@@ -37,6 +38,22 @@ const isNotPanelFrame = (mesh: THREE.Mesh): boolean =>
   mesh.userData.isPanelFrame !== true;
 
 /**
+ * Computes a representative panel inclination for a setup, used by the worker
+ * to calculate the diffuse and albedo POA components.
+ *
+ * Most residential setups use a single inclination across all arrays. When
+ * arrays differ, the mean inclination is a reasonable approximation because
+ * the sky-view and ground-view factors vary slowly with tilt and the
+ * cross-array difference is small compared to other uncertainties.
+ */
+const meanInclinationRad = (setup: PanelSetup): number => {
+  const allPanels = setup.panelArrays.flatMap(pa => pa.panels);
+  if (allPanels.length === 0) return 0;
+  const sum = allPanels.reduce((acc, p) => acc + p.worldRotation.x, 0);
+  return sum / allPanels.length;
+};
+
+/**
  * Builds the complete worker payload for a single setup.
  *
  * The serialised mesh list combines:
@@ -59,7 +76,7 @@ const buildPayload = (
   irradianceSource: IrradianceSource,
   cacheKey: string,
   getStaticMeshes: () => { meshes: SerializedMesh[]; transferables: ArrayBuffer[] },
-  irradianceData: Float32Array | null,
+  weatherData: { dni: Float32Array; dhi: Float32Array; temperature: Float32Array | null } | null,
 ): { payload: WorkerSimulationPayload; transferables: ArrayBuffer[] } => {
   const allPanels = setup.panelArrays.flatMap(pa => pa.panels);
   const panels = SolarPanelConverter.toSimulationPanelDataArray(allPanels);
@@ -73,8 +90,23 @@ const buildPayload = (
     ...panelBatch.transferables,
   ];
 
-  if (irradianceData) {
-    transferables.push(irradianceData.buffer as ArrayBuffer);
+  const systemLoss: SystemLossParams = {
+    inverterEfficiency: site.inverterEfficiency,
+    wiringLoss: site.wiringLoss,
+    groundAlbedo: site.groundAlbedo,
+  };
+
+  // Each worker needs its own copy of the typed arrays — zero-copy transfer
+  // detaches the buffer on the sending side, so a shared reference would
+  // corrupt subsequent workers.
+  let workerWeatherData: WorkerSimulationPayload['weatherData'] = null;
+  if (weatherData) {
+    const dniCopy = weatherData.dni.slice();
+    const dhiCopy = weatherData.dhi.slice();
+    const tempCopy = weatherData.temperature?.slice() ?? null;
+    transferables.push(dniCopy.buffer as ArrayBuffer, dhiCopy.buffer as ArrayBuffer);
+    if (tempCopy) transferables.push(tempCopy.buffer as ArrayBuffer);
+    workerWeatherData = { dni: dniCopy, dhi: dhiCopy, temperature: tempCopy };
   }
 
   return {
@@ -91,7 +123,9 @@ const buildPayload = (
       threshold,
       meshes,
       panels,
-      irradianceData: irradianceData ?? null,
+      panelInclinationRad: meanInclinationRad(setup),
+      systemLoss,
+      weatherData: workerWeatherData,
     },
     transferables,
   };
@@ -110,7 +144,8 @@ export interface AnnualSimulationCallbacks {
 /**
  * Manages the full lifecycle of the annual simulation:
  *  - Resolves the irradiance provider for the selected source.
- *  - Fetches and caches irradiance data on the main thread before worker launch.
+ *  - Fetches and caches weather data (DNI, DHI, temperature) on the main
+ *    thread before worker launch; distributes independent copies to each worker.
  *  - Checks IndexedDB for each setup's cached result before doing any work.
  *  - Collects static scene meshes (walls, railings) once, excluding panel frames.
  *  - Builds panel frame meshes procedurally per setup via PanelMeshFactory so
@@ -119,10 +154,6 @@ export interface AnnualSimulationCallbacks {
  *  - Spawns up to `maxWorkers()` concurrent workers; queues the rest.
  *  - Tracks per-setup progress with EMA-smoothed ETA.
  *  - Persists completed results to IndexedDB.
- *
- * Irradiance data is fetched once per simulation run (not per setup), because
- * all setups share the same location and year. The same Float32Array is sliced
- * into each worker payload so zero-copy transfer does not detach the shared array.
  *
  * Must be called from inside a `<Canvas>` tree so that `useThree` works.
  * The returned `stop` function terminates all active workers immediately.
@@ -148,15 +179,17 @@ export function useAnnualSimulation() {
   ) => {
     stop();
 
-    let sharedIrradianceData: Float32Array | null = null;
+    let sharedWeatherData: { dni: Float32Array; dhi: Float32Array; temperature: Float32Array | null } | null = null;
     try {
       const provider = await createIrradianceProvider(irradianceSource);
-      sharedIrradianceData = await provider.getHourlyDNI(
+      const data = await provider.getHourlyWeatherData(
         site.location.latitude,
         site.location.longitude,
         year,
       );
-      if (!sharedIrradianceData && irradianceSource !== 'geometric') {
+      if (data) {
+        sharedWeatherData = { dni: data.dni, dhi: data.dhi, temperature: data.temperature };
+      } else if (irradianceSource !== 'geometric') {
         console.warn(
           'useAnnualSimulation: irradiance fetch failed, falling back to geometric model',
         );
@@ -188,9 +221,6 @@ export function useAnnualSimulation() {
       return;
     }
 
-    // Traverse the scene once, excluding panel frame meshes. The static batch
-    // contains walls, railings, and intersection posts — geometry shared by all
-    // setups that never changes during a simulation run.
     const { build: getStaticMeshes } = MeshFactory.fromScene(scene, isNotPanelFrame);
 
     const queue = [...uncachedSetups];
@@ -283,13 +313,9 @@ export function useAnnualSimulation() {
           onWorkerDone(worker);
         };
 
-        const irradianceCopy = sharedIrradianceData
-          ? sharedIrradianceData.slice()
-          : null;
-
         const { payload, transferables } = buildPayload(
           setup, site, density, threshold, intervalMinutes,
-          year, irradianceSource, cacheKey, getStaticMeshes, irradianceCopy,
+          year, irradianceSource, cacheKey, getStaticMeshes, sharedWeatherData,
         );
         worker.postMessage({ type: 'run', payload }, transferables);
       }
