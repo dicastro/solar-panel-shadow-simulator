@@ -114,5 +114,29 @@
     "madeBy": "Desarrollado por",
     "donate": "Invítame a un café",
     "donateTitle": "Apoya este proyecto en Ko-fi"
+  },
+  "settings": {
+    "title": "Ajustes",
+    "openTitle": "Abrir ajustes",
+    "close": "Cerrar ajustes",
+    "cache": {
+      "sectionTitle": "Gestión de caché",
+      "loading": "Cargando…",
+      "simulationsTitle": "Resultados de simulación",
+      "noSimulations": "No hay resultados de simulación en caché.",
+      "clearAllSimulations": "Eliminar todos los resultados de simulación",
+      "irradianceTitle": "Datos de irradiancia (Open-Meteo)",
+      "noIrradiance": "No hay datos de irradiancia en caché.",
+      "clearAllIrradiance": "Eliminar todos los datos de irradiancia",
+      "deleteEntry": "Eliminar esta entrada"
+    },
+    "exportImport": {
+      "sectionTitle": "Exportar / Importar",
+      "placeholder": "La exportación e importación de copias de seguridad estará disponible en una próxima actualización."
+    },
+    "configuration": {
+      "sectionTitle": "Configuración",
+      "placeholder": "La edición de la configuración desde la aplicación estará disponible en una próxima actualización."
+    }
   }
 }

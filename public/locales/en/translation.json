@@ -114,5 +114,29 @@
     "madeBy": "Made by",
     "donate": "Buy me a coffee",
     "donateTitle": "Support this project on Ko-fi"
+  },
+  "settings": {
+    "title": "Settings",
+    "openTitle": "Open settings",
+    "close": "Close settings",
+    "cache": {
+      "sectionTitle": "Cache management",
+      "loading": "Loading…",
+      "simulationsTitle": "Simulation results",
+      "noSimulations": "No cached simulation results.",
+      "clearAllSimulations": "Delete all simulation results",
+      "irradianceTitle": "Irradiance data (Open-Meteo)",
+      "noIrradiance": "No cached irradiance data.",
+      "clearAllIrradiance": "Delete all irradiance data",
+      "deleteEntry": "Delete this entry"
+    },
+    "exportImport": {
+      "sectionTitle": "Export / Import",
+      "placeholder": "Export and import of backups will be available in a future update."
+    },
+    "configuration": {
+      "sectionTitle": "Configuration",
+      "placeholder": "In-app configuration editing will be available in a future update."
+    }
   }
 }

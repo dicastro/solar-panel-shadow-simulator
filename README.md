@@ -17,10 +17,11 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 9. [Shadow detection — Raycasting + BVH](#shadow-detection--raycasting--bvh)
 10. [Annual simulation](#annual-simulation)
 11. [Results panel](#results-panel)
-12. [Application layout](#application-layout)
-13. [Timezone and DST](#timezone-and-dst)
-14. [Known limitations](#known-limitations)
-15. [Lessons learned](#lessons-learned)
+12. [Settings sidebar](#settings-sidebar)
+13. [Application layout](#application-layout)
+14. [Timezone and DST](#timezone-and-dst)
+15. [Known limitations](#known-limitations)
+16. [Lessons learned](#lessons-learned)
 
 ---
 
@@ -36,7 +37,9 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Supports two irradiance sources: a geometric clear-sky model (no network required) and Open-Meteo (real hourly DNI + DHI + temperature data fetched from a free, CORS-compatible API, cached in IndexedDB). The Open-Meteo model applies full Plane-of-Array irradiance decomposition and panel temperature correction.
 - Applies configurable system losses (inverter efficiency, wiring loss) to the DC output of every time step.
 - Displays annual results in a floating resizable overlay panel with three tabs (Annual, Monthly, Daily), each containing a Production section (ECharts charts) and a Shadows section (per-panel zone heat maps). A shared legend lets the user toggle setups on/off and all charts update accordingly.
+- Provides a settings sidebar (gear icon, top-left) for cache management: cached simulation results and Open-Meteo irradiance data can be listed and deleted individually or in bulk without requiring browser developer tools.
 - Validates the wall configuration and displays a prominent warning listing the exact config-space coordinate triples that form non-90° or non-180° angles.
+- Displays the application version in the footer, sourced from `package.json` at build time.
 
 ---
 
@@ -61,7 +64,7 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 
 ```
 src/
-├── App.tsx                        # Root: loads config, full-viewport canvas + overlay panel
+├── App.tsx                        # Root: loads config, full-viewport canvas + overlay panels
 ├── i18n.ts                        # i18next initialisation
 │
 ├── assets/icons/                  # SVG icon files for the results panel header buttons
@@ -76,20 +79,15 @@ src/
 │   ├── layout.css
 │   ├── controls.css
 │   ├── simulation.css
-│   └── results-panel.css
+│   ├── results-panel.css
+│   └── settings-sidebar.css
 │
 ├── types/
-│   ├── config.ts                  # groundAlbedo, inverterEfficiency, wiringLoss on
-│   │                              #   InstallationConfiguration; temperatureCoefficient
-│   │                              #   and noct on PanelDefinition and PanelArrayConfiguration
+│   ├── config.ts
 │   ├── geometry.ts
-│   ├── installation.ts            # temperatureCoefficient, noct on SolarPanel;
-│   │                              #   groundAlbedo, inverterEfficiency, wiringLoss on Site
+│   ├── installation.ts
 │   ├── results.ts
-│   ├── simulation.ts              # SystemLossParams; WorkerSimulationPayload carries
-│   │                              #   weatherData (DNI+DHI+temperature), panelInclinationRad,
-│   │                              #   systemLoss; SimulationPanelData carries
-│   │                              #   temperatureCoefficient and noct
+│   ├── simulation.ts
 │   └── index.ts
 │
 ├── engine/
@@ -97,57 +95,49 @@ src/
 │   └── AnnualSimulationEngine.ts
 │
 ├── factory/
-│   ├── SiteFactory.ts             # Reads groundAlbedo, inverterEfficiency, wiringLoss
-│   │                              #   from config with sensible defaults
+│   ├── SiteFactory.ts
 │   ├── WallFactory.ts
 │   ├── WallIntersectionFactory.ts
 │   ├── PanelSetupFactory.ts
 │   ├── SolarPanelArrayFactory.ts
-│   ├── SolarPanelFactory.ts       # Reads temperatureCoefficient and noct from
-│   │                              #   arrayConfig (override) or panelDefaults
+│   ├── SolarPanelFactory.ts
 │   ├── SamplePointFactory.ts
 │   ├── PointXZFactory.ts
 │   ├── MeshFactory.ts
 │   └── PanelMeshFactory.ts
 │
-├── irradiance/                    # Irradiance provider strategy pattern
-│   ├── IrradianceProvider.ts      # Interface returns HourlyWeatherData (DNI+DHI+temperature)
-│   │                              #   + factory function (createIrradianceProvider)
-│   ├── GeometricIrradianceProvider.ts  # Returns null → worker uses geometric model
-│   └── OpenMeteoIrradianceProvider.ts  # Fetches DNI, DHI, temperature from Open-Meteo;
-│                                  #   IndexedDB cache (DB version 2)
+├── irradiance/
+│   ├── IrradianceProvider.ts
+│   ├── GeometricIrradianceProvider.ts
+│   └── OpenMeteoIrradianceProvider.ts
 │
 ├── converter/
 │   ├── ThreeConverter.ts
-│   └── SolarPanelConverter.ts     # Propagates temperatureCoefficient and noct into
-│                                  #   SimulationPanelData; applies defaults when absent
+│   └── SolarPanelConverter.ts
 │
 ├── store/
 │   ├── AppStore.ts
 │   └── slices/
 │       ├── ConfigSlice.ts
 │       ├── RenderSlice.ts
-│       └── SimulationSlice.ts
+│       ├── SimulationSlice.ts
+│       └── SettingsSlice.ts       # Settings sidebar open/close state
 │
 ├── hooks/
 │   ├── useBVH.ts
 │   ├── useShadowSampler.ts
-│   ├── useAnnualSimulation.ts     # Fetches HourlyWeatherData once; distributes
-│   │                              #   independent slice() copies to each worker;
-│   │                              #   computes meanInclinationRad per setup;
-│   │                              #   builds SystemLossParams from site
+│   ├── useAnnualSimulation.ts
 │   ├── useResultsPanel.ts
 │   └── useResizablePanel.ts
 │
 ├── db/
+│   ├── DbUtils.ts                 # Shared openDatabase helper (used by all cache modules)
 │   ├── SimulationCache.ts
-│   └── IrradianceCache.ts         # DB version 2: stores DNI + DHI + temperature;
-│                                  #   old DNI-only entries dropped on upgrade
+│   ├── IrradianceCache.ts
+│   └── IrradianceCacheManager.ts  # List/delete operations for the settings sidebar UI
 │
 ├── workers/
-│   └── AnnualSimulation.worker.ts # Full POA model (direct + diffuse + albedo);
-│                                  #   NOCT-based temperature correction;
-│                                  #   system loss factor applied after string mismatch
+│   └── AnnualSimulation.worker.ts
 │
 └── utils/
     ├── HashUtils.ts
@@ -170,6 +160,8 @@ src/
     ├── AnnualSimulationProgress.tsx
     ├── AngleWarningBanner.tsx
     ├── DeveloperFooter.tsx
+    ├── SettingsSidebar.tsx        # Settings sidebar with cache management
+    ├── SettingsSidebarButton.tsx  # Gear icon button that opens the sidebar
     └── results/
         ├── AnnualTab.tsx
         ├── MonthlyTab.tsx
@@ -212,7 +204,34 @@ A half-cylinder uses `openEnded=true` and `thetaLength=Math.PI`.
 
 ### Store architecture — slice pattern with facade
 
-Three domain slices composed behind a single `useAppStore` facade. Each slice is a pure function. Slices never import each other.
+Four domain slices composed behind a single `useAppStore` facade:
+
+- `ConfigSlice` — raw config and site geometry.
+- `RenderSlice` — 3D view state (date, timezone, active setup, sun, density, threshold).
+- `SimulationSlice` — annual simulation parameters and lifecycle.
+- `SettingsSlice` — settings sidebar open/close state.
+
+Each slice is a pure function. Slices never import each other.
+
+### Settings sidebar as a fixed overlay
+
+The settings sidebar is a `position: fixed` overlay on the left edge, consistent with the results panel on the right. The Three.js canvas always fills `100vw × 100vh` — no layout reflow occurs when the sidebar opens or closes. A semi-transparent backdrop covers the rest of the viewport; clicking it closes the sidebar. The gear button disappears while the sidebar is open (the sidebar provides its own close button), preventing a visual overlap.
+
+### RenderControls top offset when gear button is visible
+
+The gear button (40px height) and `RenderControls` share the same `top: 20px; left: 20px` anchor. When the sidebar is closed and the gear button is visible, `RenderControls` receives an `offsetTop` prop that applies the `.controls-panel--offset-top` CSS modifier, shifting the panel 68px from the top (button height + 8px gap). When the sidebar is open the gear button is hidden and `RenderControls` returns to its default position.
+
+### Shared IndexedDB helper
+
+`SimulationCache` and `IrradianceCache` previously duplicated an inline `openDb` Promise wrapper. The shared helper `src/db/DbUtils.ts` exposes a single `openDatabase(name, version, onUpgrade)` function that both modules delegate to. The public APIs of both cache modules are unchanged.
+
+### Cache management split between provider and manager modules
+
+`IrradianceCache` handles get/set for the simulation pipeline and has no knowledge of the UI. `IrradianceCacheManager` exposes list/delete operations used exclusively by the settings sidebar. This separation keeps the provider module free of UI concerns and avoids coupling the simulation pipeline to display logic.
+
+### App version sourced from package.json at build time
+
+`vite.config.ts` defines `__APP_VERSION__` as a compile-time constant populated from `process.env.npm_package_version` (set by npm at build time). `DeveloperFooter` reads this global directly. No runtime fetch, environment variable lookup, or separate version file is needed. The ambient declaration in `src/vite-env.d.ts` gives TypeScript full type safety for the global.
 
 ### Panel world-space positioning pipeline
 
@@ -289,7 +308,7 @@ The results panel is a `position: fixed` overlay that sits on top of the 3D canv
 
 ### CSS fragmentation into modules
 
-`src/styles/index.css` is a barrel import of five focused files.
+`src/styles/index.css` is a barrel import of six focused files: `base.css`, `layout.css`, `controls.css`, `simulation.css`, `results-panel.css`, and `settings-sidebar.css`.
 
 ---
 
@@ -450,11 +469,6 @@ basePower (kW) = peakPower (Wp) / 1000 × (POA / 1000)
 
 where 1000 W/m² is the Standard Test Condition (STC) reference irradiance. The isotropic sky model treats diffuse irradiance as uniform across the sky hemisphere — a well-established simplification that is accurate enough for residential comparison purposes.
 
-The three POA components correspond to:
-- **Direct**: beam radiation striking the tilted panel face.
-- **Diffuse**: scattered sky radiation, proportional to how much of the sky hemisphere the panel can "see" (sky-view factor `(1 + cos(tilt)) / 2`).
-- **Albedo**: ground-reflected radiation, proportional to how much ground the panel faces (ground-view factor `(1 − cos(tilt)) / 2`) multiplied by the site's ground albedo.
-
 ### 4. Temperature correction (Open-Meteo source)
 
 When ambient temperature data is available, a temperature factor is applied to `basePower`:
@@ -472,8 +486,6 @@ where:
 - 25°C = STC reference temperature
 - 800 W/m² = NOCT reference irradiance
 
-At 25°C ambient and 1000 W/m² POA with NOCT=45°C, the cell reaches ~50°C, giving a temperature loss of ~10% for γ=−0.004/°C. In summer at 35°C ambient the loss can reach 15–20%.
-
 ### 5. Panel output with bypass diodes
 
 | Shaded zones | Without optimizer                                   | With optimizer        |
@@ -481,8 +493,6 @@ At 25°C ambient and 1000 W/m² POA with NOCT=45°C, the cell reaches ~50°C, gi
 | 0            | `basePower`                                         | `basePower`           |
 | k out of n   | `basePower × (n−k)/n × 0.9` (10% mismatch penalty) | `basePower × (n−k)/n` |
 | all          | 0                                                   | 0                     |
-
-The 10% mismatch penalty models the voltage mismatch that occurs when some bypass diodes are active and the remaining cells must operate at a sub-optimal point on the I-V curve. With an optimizer, the panel's operating point is decoupled from the string, so the loss is purely proportional to the fraction of shaded zones.
 
 ### 6. String mismatch
 
@@ -496,8 +506,6 @@ After string mismatch, a system loss factor is applied to all panel powers simul
 systemLossFactor = inverterEfficiency × (1 − wiringLoss)
 effectivePower   = stringPower × systemLossFactor
 ```
-
-This models the DC→AC conversion loss in the inverter and the resistive losses in the DC wiring between panels and inverter. Applied as the final step so it does not interact with the per-panel shading and string mismatch logic.
 
 ---
 
@@ -533,10 +541,6 @@ Steps through every N-minute interval of a full year for all setups simultaneous
 | `geometric` | Clear-sky model, sun geometry only | None | — | 15, 30, 60 min | Current + past 5 years |
 | `open-meteo` | POA model with DNI, DHI, temperature | Required | DNI, DHI, T_ambient | 60 min only | Past 5 years only |
 
-Selecting Open-Meteo automatically restricts both the interval selector (60 min only) and the year selector (past years only).
-
-On fetch failure, `useAnnualSimulation` logs a warning and proceeds with `weatherData = null`, causing the worker to fall back to the geometric model.
-
 ### Weather data flow
 
 ```
@@ -553,10 +557,6 @@ createIrradianceProvider(source)
   → zero-copy postMessage                 × systemLossFactor
 ```
 
-### Shadow geometry per setup
-
-Static meshes (walls, railings) from the live scene + panel frame meshes built procedurally per setup by `PanelMeshFactory`. Panel frames in the scene are marked `userData.isPanelFrame = true` and excluded from the static batch.
-
 ### IndexedDB — two independent databases
 
 | Database | Version | Store | Key | Contents |
@@ -564,30 +564,11 @@ Static meshes (walls, railings) from the live scene + panel frame meshes built p
 | `solar-simulator` | 1 | `simulation-results` | `cacheKey` hash | Full `SetupAnnualResult` |
 | `solar-simulator-irradiance` | 2 | `irradiance-cache` | `{source}:{lat4dp}:{lon4dp}:{year}` | DNI + DHI + temperature arrays |
 
-The irradiance cache was bumped to version 2. The upgrade handler drops the old store (DNI-only schema) and creates a fresh one — existing entries are re-fetched on next use.
+Both databases use the shared `openDatabase` helper from `src/db/DbUtils.ts`.
 
 ### Worker architecture
 
 **Worker pool:** `max(1, hardwareConcurrency − 1)` concurrent workers.
-
-**POA computation per step:**
-```ts
-GHI = DNI × cos(zenith) + DHI
-POA = DNI × incidenceFactor
-    + DHI × (1 + cos(tilt)) / 2
-    + GHI × albedo × (1 − cos(tilt)) / 2
-```
-
-**Temperature correction per panel per step:**
-```ts
-T_cell = T_ambient + (NOCT − 20) / 800 × POA
-factor = max(0, 1 + γ × (T_cell − 25))
-```
-
-**System loss (constant per run):**
-```ts
-systemLossFactor = inverterEfficiency × (1 − wiringLoss)
-```
 
 **Progress reporting:** every 100 steps, EMA-smoothed ETA.
 
@@ -625,9 +606,39 @@ Physical panel grid, proportional cell sizes, bypass-diode zones coloured by sha
 
 ---
 
+## Settings sidebar
+
+A gear icon button (⚙) at the top-left of the screen opens a settings sidebar. The sidebar is a `position: fixed` overlay on the left edge, with a semi-transparent backdrop that closes it on click. While the sidebar is open the gear button is hidden; the sidebar provides its own close button (✕).
+
+The sidebar contains three collapsible sections:
+
+### Cache management
+
+Lists all entries in both IndexedDB databases. Each entry shows its key parameters and a trash icon for individual deletion. "Delete all" buttons clear each store entirely. Deletions are reflected immediately in the results panel group selector.
+
+The irradiance cache listing is handled by `IrradianceCacheManager` (a dedicated read/delete module) rather than `IrradianceCache` (the get/set provider used by the simulation pipeline). This separation keeps the provider free of UI concerns.
+
+### Export / Import
+
+Placeholder for Phase 6b — full backup export/import with versioned `.solarsim` files.
+
+### Configuration
+
+Placeholder for Phase 6d — in-app JSON configuration editing with schema validation.
+
+---
+
 ## Application layout
 
-Canvas fills `100vw × 100vh`. All UI elements are absolute or fixed overlays.
+Canvas fills `100vw × 100vh`. All UI elements are absolute or fixed overlays:
+
+- `RenderControls` — absolute, top-left. Shifts down by 68px when the gear button is visible.
+- `SimulationControls` — absolute, bottom-left.
+- `DeveloperFooter` — fixed, bottom-right. Displays app version, developer name, Ko-fi link.
+- `SettingsSidebarButton` — absolute, top-left (hidden when sidebar is open).
+- `SettingsSidebar` — fixed overlay, left edge (rendered only when open).
+- `SimulationResultsPanel` — fixed overlay, right edge.
+- `AngleWarningBanner` — absolute, top-centre.
 
 ---
 
@@ -645,10 +656,27 @@ Canvas fills `100vw × 100vh`. All UI elements are absolute or fixed overlays.
 - **Single inclination per setup for POA**: the worker uses the mean inclination across all arrays. Setups with mixed inclinations will have a small systematic error in the diffuse and albedo components.
 - **Rail extensions end in a 90° cut**: a 45° mitre would require custom `BufferGeometry`.
 - **Drag-to-resize is mouse-only**: touch not supported.
+- **Daily charts display UTC hours**: hourly energy data is accumulated in UTC buckets; the interactive daily charts and PDF report do not yet shift hours to the configured installation timezone.
 
 ---
 
 ## Lessons learned
+
+### Fixed overlay panels preserve canvas size
+
+Making both the results panel and the settings sidebar `position: fixed` overlays means the Three.js `<Canvas>` always occupies `100vw × 100vh`. No layout reflow, no canvas resize, no Three.js camera recalculation on panel open/close.
+
+### Separation of provider and manager for cached data
+
+The irradiance get/set API (`IrradianceCache`) and the irradiance list/delete API (`IrradianceCacheManager`) are deliberately split into two modules. The provider module is used in the simulation hot path and must remain free of UI imports. The manager module is imported only by the settings sidebar. If they were merged, any future tree-shaking or worker bundling change could accidentally pull UI code into a non-UI context.
+
+### Shared IndexedDB helper eliminates boilerplate
+
+A single `openDatabase(name, version, onUpgrade)` function replaces two identical `openDb` wrappers. The cost of the abstraction is near zero (one extra function call) and the benefit is that any future change to the Promise-wrapping pattern (e.g. adding telemetry, connection pooling) is applied in one place.
+
+### Compile-time version constant avoids runtime indirection
+
+Reading the app version from `package.json` at build time via Vite's `define` is simpler and more reliable than a runtime fetch of a JSON file or reading from `import.meta.env`. The value is inlined as a string literal in the compiled bundle, with full TypeScript type safety via the ambient declaration in `vite-env.d.ts`.
 
 ### Full POA irradiance is essential for realistic estimates
 
@@ -660,11 +688,11 @@ At 35°C ambient with 1000 W/m² irradiance, a panel with NOCT=45°C reaches ~60
 
 ### NOCT model is accurate enough for residential comparison
 
-The NOCT model (`T_cell = T_ambient + (NOCT−20)/800 × POA`) is a linear approximation that ignores wind speed and mounting configuration. More accurate models (Faiman, Sandia) require additional meteorological inputs. For a tool whose primary goal is comparing setups against each other, the NOCT model provides sufficient relative accuracy.
+The NOCT model (`T_cell = T_ambient + (NOCT−20)/800 × POA`) is a linear approximation that ignores wind speed and mounting configuration. For a tool whose primary goal is comparing setups against each other, the NOCT model provides sufficient relative accuracy.
 
 ### System losses must be applied after string mismatch
 
-Applying inverter and wiring losses before the string mismatch algorithm would understate the bottleneck effect: the least-efficient panel would appear even less efficient, pulling the string further down. The correct order is: shading → bypass diode → string mismatch → system losses.
+Applying inverter and wiring losses before the string mismatch algorithm would understate the bottleneck effect. The correct order is: shading → bypass diode → string mismatch → system losses.
 
 ### Factory pattern for irradiance sources
 
@@ -684,35 +712,15 @@ Static geometry (walls, railings) from the live scene + panel frames built proce
 
 ### IndexedDB schema versioning
 
-Bumping `DB_VERSION` to 2 and dropping the old store in `onupgradeneeded` ensures all clients migrate cleanly. The DNI-only schema is incompatible with the new DNI+DHI+temperature schema, so a clean drop-and-recreate is the right approach rather than an additive migration.
+Bumping `DB_VERSION` to 2 and dropping the old store in `onupgradeneeded` ensures all clients migrate cleanly.
 
 ### No TTL needed when only immutable data is cached
 
 All cached irradiance data covers completed past years — historical reanalysis is immutable. A permanent cache with no expiry is correct and simpler.
 
-### Year restriction communicates API coverage gap
-
-The year selector is restricted to past years when Open-Meteo is selected, because the archive only covers completed years. Fetching a partial current year would leave future hours at 0, producing badly underestimated results.
-
-### Interval and year reset atomically on source change
-
-Changing the irradiance source, clamping the interval, and clamping the year all happen in a single `set((state) => ...)` updater call.
-
-### Unified azimuth sign convention eliminates one source of confusion
-
-0 = South, positive = East, same sign for site and panels throughout the codebase.
-
-### Array axis vectors derived analytically from the Three.js Ry(θ) matrix
-
-`eastDir = (cos az, 0, −sin az)`, `northDir = (−sin az, 0, −cos az)`.
-
 ### Simulation results grouped at display time, not at storage time
 
 IndexedDB stores one entry per setup. Grouping at display time keeps the storage model simple.
-
-### Fixed overlay panel avoids canvas resize
-
-Making the results panel a `position: fixed` overlay means the Three.js `<Canvas>` always occupies `100vw × 100vh`.
 
 ### Physical geometry propagated through simulation pipeline
 

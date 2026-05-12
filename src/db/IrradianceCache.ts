@@ -1,4 +1,5 @@
 import { HourlyWeatherData } from '../irradiance/IrradianceProvider';
+import { openDatabase } from './DbUtils';
 
 const DB_NAME = 'solar-simulator-irradiance';
 const DB_VERSION = 2;
@@ -26,22 +27,14 @@ interface IrradianceCacheEntry {
 }
 
 const openDb = (): Promise<IDBDatabase> =>
-  new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      // Drop the old store on upgrade — the schema has changed (added dhi and
-      // temperature columns). Existing DNI-only entries are invalid and must be
-      // re-fetched anyway.
-      if (db.objectStoreNames.contains(STORE_NAME)) {
-        db.deleteObjectStore(STORE_NAME);
-      }
-      db.createObjectStore(STORE_NAME, { keyPath: 'key' });
-    };
-
-    request.onsuccess = (event) => resolve((event.target as IDBOpenDBRequest).result);
-    request.onerror = (event) => reject((event.target as IDBOpenDBRequest).error);
+  openDatabase(DB_NAME, DB_VERSION, (db) => {
+    // Drop the old store on upgrade — the schema has changed (added dhi and
+    // temperature columns). Existing DNI-only entries are invalid and must be
+    // re-fetched anyway.
+    if (db.objectStoreNames.contains(STORE_NAME)) {
+      db.deleteObjectStore(STORE_NAME);
+    }
+    db.createObjectStore(STORE_NAME, { keyPath: 'key' });
   });
 
 /**

@@ -17,6 +17,14 @@
   border: 1px solid var(--color-border-dark);
 }
 
+/*
+ * When the gear button is visible it occupies 40px height + 8px gap at the
+ * top-left. This modifier pushes RenderControls below it so they do not overlap.
+ */
+.controls-panel--offset-top {
+  top: 68px;
+}
+
 .simulation-panel {
   top: auto;
   bottom: 20px;
@@ -173,6 +181,11 @@
 
 .developer-footer__separator {
   opacity: 0.4;
+}
+
+.developer-footer__version {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.72rem;
 }
 
 .developer-footer__site-link {

@@ -131,7 +131,7 @@ A lightweight IndexedDB wrapper (no external dependency — the native API is ve
 
 ### Cache management UI
 
-The user can see which cached simulations exist (label, parameters, size, date computed) and delete them individually or all at once. This belongs in the simulation controls panel or a dedicated settings drawer.
+The user can see which cached simulations exist (label, parameters, size, date computed) and delete them individually or all at once. This belongs in the settings sidebar introduced in Phase 6a.
 
 ---
 
@@ -295,117 +295,272 @@ The heat map shows a schematic top-down view of the panel array matching the rea
 
 ## 9. Application layout — splitting the view
 
-### Selected approach: side-by-side split with responsive stacking
+### Selected approach: fixed overlay panel
 
 ```
-Desktop (≥ 1024px):
-┌─────────────────────┬──────────────────────┐
-│                     │                      │
-│   3D Canvas         │   Charts / Reports   │
-│   + 3D controls     │                      │
-│                     │                      │
-└─────────────────────┴──────────────────────┘
-
-Mobile / narrow (< 1024px):
-┌──────────────────────┐
-│   3D Canvas          │
-│   + 3D controls      │
-├──────────────────────┤
-│   Charts / Reports   │
-└──────────────────────┘
+Desktop (all viewport widths):
+┌─────────────────────────────────────┐
+│                                     │
+│   3D Canvas (always 100vw × 100vh)  │
+│   + left control panels (absolute)  │
+│                              ┌──────┤
+│                              │Result│
+│                              │panel │
+│                              │(fixed│
+│                              │overlay│
+└──────────────────────────────┴──────┘
 ```
 
-Implemented with CSS flexbox at the `app-container` level. No additional library needed. The Three.js canvas has a `minWidth`/`minHeight` so it remains usable when the charts panel is open.
-
-The results panel is only rendered when at least one `SetupAnnualResult` exists. Before any simulation has run, the right column shows a prompt to run the calculation.
+Implemented as a `position: fixed` overlay on the right edge. The Three.js canvas always occupies `100vw × 100vh`. A drag handle on the left edge of the results panel lets the user resize it freely between a minimum width and full viewport width. Three icon buttons in the header control panel state: reset width, fullscreen, minimise.
 
 ---
 
 ## 10. Export and import
 
-### Export formats
+### Export formats (Phase 6b)
 
-| Format | Use case                          | Implementation                      |
-|--------|-----------------------------------|-------------------------------------|
-| PNG    | Quick screenshot for reports      | ECharts `getDataURL('png')`         |
-| SVG    | Scalable for print                | ECharts `getDataURL('svg')`         |
-| CSV    | Raw data for spreadsheet analysis | Serialise `panels` to flat CSV rows |
-| JSON   | Reimport into the application     | `JSON.stringify(SetupAnnualResult)` |
+| Format         | Use case                          | Implementation                           |
+|----------------|-----------------------------------|------------------------------------------|
+| `.solarsim`    | Full backup (config + results)    | Gzip-compressed JSON, versioned schema   |
+| PNG / SVG      | Chart screenshots for reports     | ECharts `getDataURL('png'/'svg')`        |
+| PDF            | Printable simulation report       | `jsPDF` + ECharts `getDataURL` + `html2canvas` |
 
-### Import
+### Import (Phase 6b)
 
-A JSON export is re-imported via a file picker (`<input type="file">`). On import the result is validated, stored in IndexedDB under its original cache key, and loaded into the charts immediately. This is also the mechanism for sharing results between users on different machines.
+A `.solarsim` backup is re-imported via a file picker. On import the file is decompressed, parsed, migrated to the current schema version if needed, and applied: config is loaded into the app store (triggering a full scene rebuild) and simulation results are written to IndexedDB. The results panel reloads its group list automatically.
 
 ---
 
 ## 11. Phased implementation plan
 
-### Phase 0 — Viability validation and infrastructure
+### Phase 0 — Viability validation and infrastructure ✅
 
-The primary goal of Phase 0 is to validate every non-obvious technical assumption before any production feature is built on top of it. Each validation produces a small, focused test that either confirms the approach or forces a design revision. Infrastructure code is committed only after all validations pass.
+*(completed — see codebase)*
 
-**Validations:**
+### Phase 1 — Worker simulation loop ✅
 
-1. **BVH serialisation round-trip**: build a `MeshBVH` on the main thread using the project's pinned `three-mesh-bvh` version (`^0.9.9`). Serialise it with `MeshBVH.serialize()`, transfer to a worker via `postMessage` with the `transfer` option, deserialise with `MeshBVH.deserialize()`, cast a ray, and verify the hit result matches the main-thread result. Confirms the API exists, is transferable, and produces correct geometry in this exact version.
+*(completed — see codebase)*
 
-2. **Three.js in a Vite worker**: import `three` inside a `?worker`-suffix worker file in the current Vite config. Create a `Vector3`, apply a `Matrix4`, post the result back. Confirm no module resolution errors and that `three-mesh-bvh` (with the `overrides` in `package.json`) is bundled correctly into the worker chunk without being deduplicated away.
+### Phase 2 — Layout split ✅
 
-3. **SunCalc in a worker**: import `suncalc` inside the same worker, call `getPosition`, post the result back. Confirm no DOM dependency errors.
+*(completed — see codebase)*
 
-4. **IndexedDB round-trip**: write a `SetupAnnualResult`-shaped object to IndexedDB, read it back, confirm integrity. Measure write and read latency for a realistic payload (~700 KB).
+### Phase 3 — Core charts ✅
 
-5. **Worker count heuristic**: log `navigator.hardwareConcurrency` in the browser on the development machine and any other available devices. Confirm the formula `Math.max(1, Math.min(hardwareConcurrency - 1, setups.length))` produces sensible values across different hardware.
+*(completed — see codebase)*
 
-**Infrastructure (committed after validations pass):**
+### Phase 4 — Advanced charts ✅
 
-- `src/utils/HashUtils.ts` — FNV-1a, ~15 lines, no dependencies.
-- `src/db/SimulationCache.ts` — IndexedDB Promise wrapper (get/set/list/delete) with quota-exceeded handling.
-- Extended types in `src/types/simulation.ts`: `PanelAnnualData`, `SetupAnnualResult`, `SimulationCacheKey`.
-- `src/utils/SimulationCacheUtils.ts` — `buildCacheKey()` and `hashCacheKey()`.
-- `src/workers/AnnualSimulation.worker.ts` — scaffolded worker: receives a ping, responds with a pong. No simulation logic yet.
-- No UI changes.
+*(completed — see codebase)*
 
-### Phase 1 — Worker simulation loop
+### Phase 5 — Irradiance integration ✅
 
-- Implement BVH serialisation on the main thread after `useBVH` runs (`useSerializedScene` hook or helper).
-- Implement the full simulation loop in the worker: receive serialised geometry + sample points + params, step through the year, emit progress every 100 steps, return `SetupAnnualResult`.
-- Worker orchestration: spawn N workers per the count formula, dispatch one setup per worker, queue remaining setups, handle completion and re-dispatch.
-- Progress state in the store: `setupsTotal`, `setupsCompleted`, and a `Map<setupId, { completed, total, smoothedRemaining }>`.
-- Update `SimulationControls`: overall setups bar + one bar per active setup with label and ETA.
-- On "Run": check cache for each setup, skip cached ones, dispatch only uncached.
-- "Stop" with confirmation dialog showing per-setup completion percentages.
-- On completion: store in IndexedDB; show `annualTotalKwh` as plain text. No charts yet.
+*(completed with Open-Meteo instead of PVGIS — PVGIS blocks AJAX from browser origins; see Architecture decisions in README)*
 
-### Phase 2 — Layout split
+---
 
-- Two-column flex layout in `App.tsx` and `App.css`.
-- `ResultsPanel` component (placeholder or plain-text results from Phase 1).
-- Responsive breakpoint at 1024px: columns stack vertically.
-- Three.js canvas retains correct sizing in its column at all viewport widths.
+### Phase 6a — Settings sidebar + cache management + shared DB layer
 
-### Phase 3 — Core charts
+The goal of this phase is to give the user a dedicated settings surface, to expose cache management without requiring browser developer tools, and to remove the duplicated IndexedDB boilerplate between `SimulationCache` and `IrradianceCache`.
 
-- Install `echarts` + `echarts-for-react`.
-- Annual total bar chart comparing all setups.
-- Monthly radar chart comparing setups by month.
-- Charts load from IndexedDB when simulation selector changes.
+#### Settings sidebar
 
-### Phase 4 — Advanced charts
+A gear icon button (⚙) is placed above the left-side control panels (above `RenderControls`). Clicking it opens a sidebar that slides in from the left as a `position: fixed` overlay, covering the control panels and part of the 3D canvas. A close button (✕) in the sidebar header dismisses it; the gear icon reappears. The sidebar never resizes the canvas.
 
-- Daily production curve: select month + day, compare setups by hour-of-day.
-- Monthly production curve: select month, compare setups by day.
-- Per-panel shadow heat map: select setup + time range; colour each panel by shadow fraction with tooltip.
+The sidebar contains three sections with clear headings:
 
-### Phase 5 — PVGIS irradiance
+**1. Cache management**
 
-- PVGIS fetch on first use; cache in IndexedDB under `pvgis:{lat}:{lon}:{year}`.
-- Toggle in simulation controls: geometric / PVGIS / Open-Meteo.
-- Pass hourly irradiance array to the worker; apply DNI multiplier per time step.
-- Graceful fallback to geometric model on fetch failure.
+Two sub-sections: *Simulation results* and *Irradiance data (Open-Meteo)*.
 
-### Phase 6 — Export and import
+Each sub-section lists its cached entries. For simulation results, each entry shows: setup label, year, interval, irradiance source, density × threshold, computed-at date, and annual total kWh. For irradiance entries, each shows: source, location (lat/lon), year, and fetched-at date. Every entry has a trash icon (🗑) to delete it individually.
 
-- ECharts PNG and SVG export per chart.
-- CSV and JSON export of `SetupAnnualResult`.
-- JSON import via file picker with shape validation.
-- Cache management UI: list stored simulations, delete individually or all at once.
+A "Delete all" button at the bottom of each sub-section clears all entries of that type. Deleting any simulation result triggers an immediate reload of the results panel group list so stale entries never appear in the selector.
+
+**2. Export / Import** — placeholder heading in this phase; content added in Phase 6b.
+
+**3. Configuration** — placeholder heading in this phase; content added in Phase 6d.
+
+#### Shared IndexedDB helper
+
+`SimulationCache` and `IrradianceCache` both contain an inline `openDb` Promise wrapper. A shared utility is extracted to `src/db/DbUtils.ts`:
+
+```ts
+export const openDatabase = (
+  name: string,
+  version: number,
+  onUpgrade: (db: IDBDatabase, event: IDBVersionChangeEvent) => void,
+): Promise<IDBDatabase>
+```
+
+Both caches delegate to this function. Their public APIs are unchanged — this is a pure internal refactor with no behavioural impact.
+
+#### App version in footer
+
+`package.json` `version` is the single source of truth. Vite exposes it at build time via a `define` entry in `vite.config.ts`:
+
+```ts
+define: {
+  __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
+}
+```
+
+A corresponding ambient declaration in `src/vite-env.d.ts` types the global:
+
+```ts
+declare const __APP_VERSION__: string;
+```
+
+`DeveloperFooter` reads `__APP_VERSION__` and renders it alongside the developer name and Ko-fi link. No runtime fetch or environment variable is needed.
+
+---
+
+### Phase 6b — Export / Import backup
+
+#### Backup format
+
+A single file with the `.solarsim` extension (MIME type `application/json`, gzip-compressed) containing:
+
+```ts
+interface BackupFile {
+  /** Backup schema version. Starts at 1. Increment on any breaking change. */
+  version: number;
+  exportedAt: number;                    // Unix ms
+  config: Config;                        // full config.json content
+  simulationResults: SetupAnnualResult[]; // all cached simulation results
+}
+```
+
+Open-Meteo irradiance data is intentionally excluded: it is derived, immutable for past years, and will be re-fetched automatically on next simulation. Including it would inflate the backup for no practical benefit.
+
+#### Compression
+
+The Compression Streams API (`CompressionStream` / `DecompressionStream`) is used for gzip compression and decompression. It is available natively in all modern browsers with no additional dependency. The pipeline is:
+
+```
+export: JSON.stringify → TextEncoder → ReadableStream → CompressionStream('gzip') → Blob → download
+import: File → ReadableStream → DecompressionStream('gzip') → TextDecoder → JSON.parse
+```
+
+If the browser does not support the Compression Streams API (very old browsers), the export falls back to uncompressed JSON and logs a console warning. Import auto-detects compression by inspecting the first two bytes for the gzip magic number (`0x1f 0x8b`).
+
+#### Format versioning and migrations
+
+```ts
+type Migration = (data: unknown) => unknown;
+
+const migrations: Record<number, Migration> = {
+  1: (data) => data,  // version 1 — identity, no transformation needed
+};
+
+function migrateToCurrentVersion(data: BackupFile): BackupFile {
+  let current = data.version;
+  let payload: unknown = data;
+  while (current < CURRENT_BACKUP_VERSION) {
+    payload = migrations[current](payload);
+    current++;
+  }
+  return payload as BackupFile;
+}
+```
+
+Any future breaking change increments `CURRENT_BACKUP_VERSION` and adds a migration function. The importer always applies all migrations in sequence before validating or consuming the data.
+
+#### Export flow
+
+Triggered by an "Export backup" button in the settings sidebar (Export / Import section). Steps:
+
+1. Read all simulation results from IndexedDB via `SimulationCache.listResults` (full payloads, not just summaries).
+2. Read current config from the app store.
+3. Assemble the `BackupFile` object.
+4. Compress and trigger a browser download with a filename derived from the site location and current date: `solarsim-{lat}-{lon}-{date}.solarsim`.
+
+#### Import flow
+
+Triggered by a "Load backup" file input in the same settings sidebar section. Steps:
+
+1. Read and decompress the file.
+2. Parse JSON and apply version migrations.
+3. Validate basic structure (presence of `version`, `config`, `simulationResults`).
+4. Apply `config` to the app store (same code path as loading `config.json` from the server).
+5. Write each `SetupAnnualResult` to IndexedDB via `SimulationCache.saveResult` (overwrites existing entries with the same `cacheKey`).
+6. Reload the results panel group list.
+7. Show a success message (e.g. "Loaded 3 simulation results") or a descriptive error message if any step fails.
+
+---
+
+### Phase 6c — PDF report generation
+
+#### Trigger
+
+A "Generate report" button is added to the results panel body, positioned between the simulation parameter summary strip and the setup legend. It is only visible when a simulation group is selected (i.e. there is data to report on).
+
+#### Day selection overlay
+
+Clicking "Generate report" opens a modal overlay (centred, with a backdrop). The overlay contains three areas, top to bottom:
+
+**Explanatory text**
+
+> "This report always includes annual and monthly production data and shadow heat maps for all setups. The daily section is optional — add representative days if you want to include hourly production curves for specific dates (e.g. one day per season)."
+
+**Day picker**
+
+- A date input restricted to the simulation year (same control pattern as in `RenderControls`).
+- An "Add day" button. Duplicate days are silently ignored.
+- A tag list below the input: each added day appears as a dismissable chip (`DD MMM YYYY  ✕`). There is no upper limit on the number of days.
+
+**Actions**
+
+- "Generate PDF" button (primary).
+- "Cancel" button (secondary).
+
+#### PDF structure
+
+Generated client-side using `jsPDF`. Charts are captured using ECharts' native `getDataURL('png')` where possible; the panel shadow heat maps (React DOM) are captured using `html2canvas`. All images are embedded in the PDF at a resolution suitable for A4 printing (150–200 DPI equivalent).
+
+Page structure:
+
+1. **Cover page**: installation location (lat/lon), simulation parameters (year, interval, irradiance source, density, threshold), report generation date, app version.
+2. **Annual section**: annual bar chart image + data table (one row per setup: label, annual kWh).
+3. **Monthly section**: radar chart image + table of monthly totals (12 rows × N setups, with column headers per setup label).
+4. **Daily section** (one page per selected day, omitted if no days were selected): date heading, daily total bar chart image, hourly line chart image, hourly data table (24 rows × N setups).
+5. **Shadow heat maps**: one heat map image per setup (full-year aggregate), labelled with setup name and array index.
+
+#### Timezone correction for daily charts
+
+Hourly energy data is accumulated in UTC buckets. For display in the PDF (and in the interactive daily charts in the results panel — a known issue), hours are shifted to the configured installation timezone before rendering. A utility function `shiftHourlyDataToTimezone(energyKwh, timezone, year)` converts the UTC hour indices to local hour indices, handling DST transitions. This correction is applied both in the PDF renderer and retroactively to the interactive daily charts as part of this phase.
+
+---
+
+### Phase 6d — Configuration editing
+
+#### Approach
+
+The Configuration section of the settings sidebar shows the current config as formatted read-only JSON when first opened. An "Edit" button switches the view to an editable `<textarea>` pre-populated with the current config as indented JSON.
+
+#### Validation
+
+Two-level validation is applied on every change (debounced at 300 ms) and on "Apply":
+
+1. **Syntax**: `JSON.parse`. If this fails, a parse error message is shown immediately (e.g. "Invalid JSON at line 14: unexpected token '}'") and schema validation is skipped.
+
+2. **Structure**: a JSON Schema generated at build time from `src/types/config.ts` via a Vite plugin (e.g. `vite-plugin-ts-json-schema` or equivalent). The schema is bundled as a static JSON asset. At runtime, `ajv` validates the parsed object against the schema. Validation errors are mapped to human-readable messages rather than exposing raw `ajv` output (e.g. "site.wallPoints[2]: expected [number, number], got [number, number, number]").
+
+Because the schema is generated from the TypeScript types at build time, changes to `src/types/config.ts` automatically update the schema on the next build with no manual maintenance of a parallel schema definition.
+
+#### Persistence
+
+When the user clicks "Apply":
+
+1. The new config is validated (both levels).
+2. If valid, it is written to the browser's **Origin Private File System (OPFS)** as `config.json`, so it survives page reloads without requiring a server.
+3. The app store's `loadConfig` action is called with the new config, triggering a full scene rebuild (site geometry, active setup, sun state).
+4. The settings sidebar reflects the updated config immediately.
+
+On startup, `App.tsx` checks OPFS for a user-saved `config.json` before fetching the default from the server. If OPFS is unavailable (e.g. in certain private browsing modes), the config change is applied to the store for the current session only, and the user is warned that it will not persist.
+
+"Cancel" discards all unsaved edits and reverts the textarea to the current config.
+
+#### Version tracking
+
+The config format itself does not carry an explicit version field (it is a domain object, not a storage artifact). Version tracking for config changes is handled at the backup level (`BackupFile.version` in Phase 6b). Any future change to the `Config` type that would break existing backup files requires a migration entry in the backup migrations map.

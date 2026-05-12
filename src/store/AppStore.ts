@@ -3,22 +3,25 @@ import { Config } from '../types/config';
 import { ConfigSlice, createConfigSlice } from './slices/ConfigSlice';
 import { RenderSlice, createRenderSlice } from './slices/RenderSlice';
 import { SimulationSlice, createSimulationSlice } from './slices/SimulationSlice';
+import { SettingsSlice, createSettingsSlice } from './slices/SettingsSlice';
 import { SiteFactory } from '../factory/SiteFactory';
 
 /**
- * Unified application store composed from three domain slices:
+ * Unified application store composed from four domain slices:
  *
- *  - ConfigSlice  — raw configuration and derived site geometry (walls, intersections).
- *                   Loaded once on startup; never changes during a session.
+ *  - ConfigSlice      — raw configuration and derived site geometry (walls, intersections).
+ *                       Loaded once on startup; never changes during a session.
  *
- *  - RenderSlice  — everything that drives the 3D interactive view: active setup,
- *                   date/time, timezone, playback, sun position, the sampling
- *                   parameters (renderDensity, renderThreshold, showPoints) and
- *                   the instant production result.
+ *  - RenderSlice      — everything that drives the 3D interactive view: active setup,
+ *                       date/time, timezone, playback, sun position, the sampling
+ *                       parameters (renderDensity, renderThreshold, showPoints) and
+ *                       the instant production result.
  *
- *  - SimulationSlice — annual simulation parameters and lifecycle state. Density and
- *                      threshold here are independent of the render controls and only
- *                      used when launching the worker-based annual simulation.
+ *  - SimulationSlice  — annual simulation parameters and lifecycle state. Density and
+ *                       threshold here are independent of the render controls and only
+ *                       used when launching the worker-based annual simulation.
+ *
+ *  - SettingsSlice    — UI state for the settings sidebar (open/close).
  *
  * The facade pattern means all consumers (components, hooks) import `useAppStore`
  * and select what they need via a selector, with no knowledge of which underlying
@@ -29,12 +32,9 @@ import { SiteFactory } from '../factory/SiteFactory';
  * It is overridden at the facade level to sequence both slice operations in a
  * single logical call, keeping each slice responsible only for its own state.
  */
-type AppStore = ConfigSlice & RenderSlice & SimulationSlice;
+type AppStore = ConfigSlice & RenderSlice & SimulationSlice & SettingsSlice;
 
 export const useAppStore = create<AppStore>((set, get) => {
-  // Zustand's set() accepts both Partial<T> and (state: T) => Partial<T>.
-  // A single cast to the broader union satisfies all slice constructors,
-  // whether they use direct partial updates or functional updaters.
   const typedSet = set as (
     partialOrUpdater:
       | Partial<AppStore>
@@ -46,11 +46,13 @@ export const useAppStore = create<AppStore>((set, get) => {
   const configSlice = createConfigSlice(typedSet);
   const renderSlice = createRenderSlice(typedSet, typedGet);
   const simulationSlice = createSimulationSlice(typedSet);
+  const settingsSlice = createSettingsSlice(typedSet);
 
   return {
     ...configSlice,
     ...renderSlice,
     ...simulationSlice,
+    ...settingsSlice,
 
     /**
      * Overrides the base `loadConfig` from ConfigSlice to also initialise the

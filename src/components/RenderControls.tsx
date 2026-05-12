@@ -7,6 +7,14 @@ const CURRENT_YEAR = dayjs().year();
 
 const ALL_TIMEZONES = TimeUtils.getAllTimezones();
 
+interface RenderControlsProps {
+  /**
+   * When true, adds a top-offset modifier class so the panel clears the
+   * gear button that sits at the same top-left anchor point.
+   */
+  offsetTop: boolean;
+}
+
 /**
  * Top-left control panel for the 3D interactive view.
  *
@@ -25,8 +33,12 @@ const ALL_TIMEZONES = TimeUtils.getAllTimezones();
  * time in the configured timezone — not the browser timezone. This ensures
  * that what the user types in the inputs always matches what is displayed,
  * regardless of the configured timezone or DST transitions.
+ *
+ * The `offsetTop` prop adds a CSS modifier class that shifts the panel down
+ * by the height of the gear button + gap (68px total from viewport top) so
+ * the two elements do not overlap.
  */
-export function RenderControls() {
+export function RenderControls({ offsetTop }: RenderControlsProps) {
   const { t, i18n } = useTranslation();
 
   const date = useAppStore(s => s.date);
@@ -70,8 +82,10 @@ export function RenderControls() {
   const theoreticalPeak = allPanels.reduce((sum, p) => sum + p.peakPower / 1000, 0);
   const maxPointsPerZone = renderDensity * renderDensity;
 
+  const panelClass = `controls-panel render-controls${offsetTop ? ' controls-panel--offset-top' : ''}`;
+
   return (
-    <div className="controls-panel render-controls">
+    <div className={panelClass}>
 
       <div className="control-row">
         <h2 className="controls-title">{t('title')}</h2>

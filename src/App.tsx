@@ -13,6 +13,8 @@ import { SimulationControls } from './components/SimulationControls';
 import { DeveloperFooter } from './components/DeveloperFooter';
 import { AngleWarningBanner } from './components/AngleWarningBanner';
 import { SimulationResultsPanel } from './components/SimulationResultsPanel';
+import { SettingsSidebar } from './components/SettingsSidebar';
+import { SettingsSidebarButton } from './components/SettingsSidebarButton';
 import { Scene } from './components/Scene';
 
 export default function App() {
@@ -26,6 +28,7 @@ export default function App() {
   const showPoints = useAppStore(s => s.showPoints);
   const renderDensity = useAppStore(s => s.renderDensity);
   const renderThreshold = useAppStore(s => s.renderThreshold);
+  const isSidebarOpen = useAppStore(s => s.isSidebarOpen);
   const setInstantProductionResult = useAppStore(s => s.setInstantProductionResult);
   const tickHour = useAppStore(s => s.tickHour);
   const loadConfig = useAppStore(s => s.loadConfig);
@@ -60,13 +63,20 @@ export default function App() {
     <div className="app-container">
       <AngleWarningBanner />
 
-      {/*
-       * Single full-viewport canvas column. The results panel and render/
-       * simulation controls are all fixed/absolute overlays on top of it.
-       */}
+      {/* Settings sidebar — rendered as a fixed overlay when open */}
+      {isSidebarOpen && <SettingsSidebar />}
+
       <div className="app-layout">
         <div className="app-layout__canvas-column">
-          <RenderControls />
+          {/*
+           * The gear button sits at top-left. When the sidebar is open it is
+           * hidden (the sidebar itself occupies the left edge and provides a
+           * close button). RenderControls is pushed down by the gear button
+           * height + gap via the --controls-top-offset custom property.
+           */}
+          {!isSidebarOpen && <SettingsSidebarButton />}
+
+          <RenderControls offsetTop={isSidebarOpen ? false : true} />
           <SimulationControls />
           <DeveloperFooter />
 
