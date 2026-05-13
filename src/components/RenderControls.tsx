@@ -107,9 +107,10 @@ export function RenderControls({ offsetTop }: RenderControlsProps) {
             value={activeSetupIndex ?? 0}
             onChange={e => setActiveSetupIndex(Number(e.target.value))}
             className="setup-select"
+            title={config!.setups[activeSetupIndex ?? 0]?.label}
           >
             {config!.setups.map((s, i) => (
-              <option key={i} value={i}>{s.label}</option>
+              <option key={i} value={i} title={s.label}>{s.label}</option>
             ))}
           </select>
         </div>

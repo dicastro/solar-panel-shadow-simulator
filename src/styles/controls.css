@@ -113,6 +113,10 @@
 
 .setup-select {
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .date-input-group {

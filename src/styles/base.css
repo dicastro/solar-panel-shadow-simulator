@@ -1,3 +1,26 @@
+/* ── Global reset ──────────────────────────────────────────────────────────── */
+
+/*
+ * Remove browser default margins and padding. Without this reset, the default
+ * body margin (8px in most browsers) causes the app container to overflow,
+ * producing unwanted horizontal and vertical scrollbars at the viewport level.
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  /* Prevent scrollbars at the document level. Individual panels (results panel,
+     settings sidebar) manage their own overflow internally. */
+  overflow: hidden;
+  height: 100%;
+}
+
 :root {
   --canvas-min-height: 50vh;
 

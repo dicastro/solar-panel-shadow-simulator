@@ -5,6 +5,20 @@ type PanelState = 'normal' | 'minimised' | 'fullscreen';
 interface UseResizablePanelOptions {
   defaultWidth: number;
   minWidth: number;
+  /**
+   * Controls which direction the drag handle grows the panel.
+   *
+   * 'left'  — the handle is on the LEFT edge of the panel (results panel, right
+   *            side of screen). Dragging left increases width, right decreases it.
+   *            Delta = startX - currentX.
+   *
+   * 'right' — the handle is on the RIGHT edge of the panel (settings sidebar,
+   *            left side of screen). Dragging right increases width, left decreases.
+   *            Delta = currentX - startX.
+   *
+   * Defaults to 'left' to preserve existing behaviour for the results panel.
+   */
+  dragDirection?: 'left' | 'right';
 }
 
 interface UseResizablePanelReturn {
@@ -23,17 +37,14 @@ interface UseResizablePanelReturn {
 /**
  * Manages the width and visibility state of a resizable floating panel.
  *
- * Parametrised via `defaultWidth` and `minWidth` so the same hook can drive
- * both the results panel (right edge, resizes leftward) and the settings
- * sidebar (left edge, resizes rightward). The direction of resizing is
- * controlled by the caller via the `dragHandleProps.onMouseDown` handler,
- * which computes delta from the cursor's distance to the relevant viewport
- * edge.
+ * Parametrised via `defaultWidth`, `minWidth`, and `dragDirection` so the
+ * same hook can drive both the results panel (right edge of screen, handle on
+ * left side of panel — dragDirection 'left') and the settings sidebar (left
+ * edge of screen, handle on right side of panel — dragDirection 'right').
  *
  * The drag handle works by capturing `mousemove` on the document while the
- * button is held, computing the new width from the cursor's distance to the
- * right edge of the viewport. This pattern avoids losing the drag when the
- * cursor moves outside the handle element.
+ * button is held. This pattern avoids losing the drag when the cursor moves
+ * outside the handle element.
  *
  * The `width` value is the rendered CSS width in pixels. When the panel is
  * minimised, the overlay collapses to zero and the restore button appears.
@@ -42,6 +53,7 @@ interface UseResizablePanelReturn {
 export function useResizablePanel({
   defaultWidth,
   minWidth,
+  dragDirection = 'left',
 }: UseResizablePanelOptions): UseResizablePanelReturn {
   const [width, setWidth] = useState(defaultWidth);
   const [panelState, setPanelState] = useState<PanelState>('normal');
@@ -55,10 +67,12 @@ export function useResizablePanel({
   const startWidth = useRef(0);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
-    const delta = startX.current - e.clientX;
+    const delta = dragDirection === 'left'
+      ? startX.current - e.clientX   // results panel: left = grow
+      : e.clientX - startX.current;  // settings sidebar: right = grow
     const newWidth = Math.max(minWidth, Math.min(window.innerWidth, startWidth.current + delta));
     setWidth(newWidth);
-  }, [minWidth]);
+  }, [minWidth, dragDirection]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);

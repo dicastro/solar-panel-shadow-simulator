@@ -83,6 +83,7 @@ export function SimulationResultsPanel() {
   } = useResizablePanel({
     defaultWidth: RESULTS_PANEL_DEFAULT_WIDTH,
     minWidth: RESULTS_PANEL_MIN_WIDTH,
+    dragDirection: 'left',
   });
 
   const hasGroups = groups.length > 0;

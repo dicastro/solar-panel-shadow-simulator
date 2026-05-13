@@ -11,6 +11,15 @@ import { buildSimulationGroups } from '../utils/SimulationGroupUtils';
 const SIDEBAR_DEFAULT_WIDTH = 440;
 const SIDEBAR_MIN_WIDTH = 300;
 
+/**
+ * Persists the sidebar width across open/close cycles within the same browser
+ * session. The sidebar component unmounts when closed, so React state alone
+ * cannot preserve the value. A module-level variable survives remounts but
+ * resets on page refresh — the correct trade-off for UI preference state that
+ * does not need to outlive the session.
+ */
+let persistedSidebarWidth = SIDEBAR_DEFAULT_WIDTH;
+
 type SimulationSummary = Awaited<ReturnType<typeof SimulationCache.listResults>>[number];
 
 const formatDate = (ts: number): string =>
@@ -253,9 +262,13 @@ export function SettingsSidebar() {
   const closeSidebar = useAppStore(s => s.closeSidebar);
 
   const { width, isDragging, dragHandleProps } = useResizablePanel({
-    defaultWidth: SIDEBAR_DEFAULT_WIDTH,
+    defaultWidth: persistedSidebarWidth,
     minWidth: SIDEBAR_MIN_WIDTH,
+    dragDirection: 'right',
   });
+
+  // Keep the module-level variable in sync so the next open restores this width.
+  persistedSidebarWidth = width;
 
   return (
     <>
