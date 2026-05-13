@@ -225,9 +225,21 @@ The gear button (40px height) and `RenderControls` share the same `top: 20px; le
 
 `SimulationCache` and `IrradianceCache` previously duplicated an inline `openDb` Promise wrapper. The shared helper `src/db/DbUtils.ts` exposes a single `openDatabase(name, version, onUpgrade)` function that both modules delegate to. The public APIs of both cache modules are unchanged.
 
+### Simulation group building — shared utility
+
+The logic that groups flat per-setup cache entries into logical simulation runs (by year, interval, irradiance source, density, threshold) lives in `src/utils/SimulationGroupUtils.ts` as `buildSimulationGroups`. Both `useResultsPanel` (results panel dropdown) and `SettingsSidebar` (cache management UI) import it, ensuring the two views always apply the same grouping rules without duplicating logic.
+
+### `useResizablePanel` — parametrised hook
+
+The hook that manages drag-to-resize, minimise, and fullscreen for a floating panel is parametrised with `defaultWidth` and `minWidth` options. This lets it be reused for both the results panel (right edge, 420px default) and the settings sidebar (left edge, 440px default) without any code duplication.
+
 ### Cache management split between provider and manager modules
 
 `IrradianceCache` handles get/set for the simulation pipeline and has no knowledge of the UI. `IrradianceCacheManager` exposes list/delete operations used exclusively by the settings sidebar. This separation keeps the provider module free of UI concerns and avoids coupling the simulation pipeline to display logic.
+
+### Cache UI — two-level grouping for simulation results
+
+The settings sidebar displays simulation results in two levels: simulation run (group header, showing year/interval/irradiance/density/threshold and a delete-group button) and individual setups within that run (each with its own delete button). This mirrors the grouping in the results panel dropdown and lets users delete an entire simulation run in one click rather than deleting each setup individually.
 
 ### App version sourced from package.json at build time
 
@@ -610,11 +622,15 @@ Physical panel grid, proportional cell sizes, bypass-diode zones coloured by sha
 
 A gear icon button (⚙) at the top-left of the screen opens a settings sidebar. The sidebar is a `position: fixed` overlay on the left edge, with a semi-transparent backdrop that closes it on click. While the sidebar is open the gear button is hidden; the sidebar provides its own close button (✕).
 
+The sidebar is user-resizable: a drag handle on its right edge lets the user widen or narrow it freely (minimum 300px). The chosen width persists for the session; refreshing the page resets it to the 440px default. The sidebar body scrolls vertically when content exceeds the viewport height, which is important for future sections (e.g. the configuration editor) that may require substantial vertical space.
+
 The sidebar contains three collapsible sections:
 
 ### Cache management
 
-Lists all entries in both IndexedDB databases. Each entry shows its key parameters and a trash icon for individual deletion. "Delete all" buttons clear each store entirely. Deletions are reflected immediately in the results panel group selector.
+**Simulation results** are shown in two levels. The first level is the simulation run (identified by year, interval, irradiance source, density, and threshold — the same label as in the results panel dropdown), with a trash button to delete the entire run. The second level lists the individual setup entries within that run, each with their own trash button. A "Delete all simulation results" button at the bottom clears everything. Deletions are reflected immediately in the results panel group selector.
+
+**Irradiance data (Open-Meteo)** entries are flat (one row per source/location/year combination), each with an individual delete button and a "Delete all" button.
 
 The irradiance cache listing is handled by `IrradianceCacheManager` (a dedicated read/delete module) rather than `IrradianceCache` (the get/set provider used by the simulation pipeline). This separation keeps the provider free of UI concerns.
 
@@ -625,7 +641,6 @@ Placeholder for Phase 6b — full backup export/import with versioned `.solarsim
 ### Configuration
 
 Placeholder for Phase 6d — in-app JSON configuration editing with schema validation.
-
 ---
 
 ## Application layout

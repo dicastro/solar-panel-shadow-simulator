@@ -1,71 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SimulationCache } from '../db/SimulationCache';
 import { SimulationGroup, SimulationGroupSetup, LoadedSetupResult } from '../types/results';
-
-/**
- * Groups flat per-setup cache entries into logical simulation runs.
- * Entries sharing all parameters (year, interval, irradiance, density,
- * threshold) form one group. Within a group, setups are ordered by
- * annualTotalKwh descending so the ranking is already applied. Groups
- * are ordered by computedAt descending (most recent first).
- */
-const buildGroups = (
-  entries: Awaited<ReturnType<typeof SimulationCache.listResults>>,
-): SimulationGroup[] => {
-  const map = new Map<string, SimulationGroup & { setups: SimulationGroupSetup[] }>();
-
-  for (const entry of entries) {
-    const groupKey = [
-      entry.year,
-      entry.intervalMinutes,
-      entry.irradianceSource,
-      entry.density,
-      entry.threshold,
-    ].join('|');
-
-    const existing = map.get(groupKey);
-    if (existing) {
-      existing.setups.push({
-        cacheKey: entry.cacheKey,
-        setupId: entry.setupId,
-        setupLabel: entry.setupLabel,
-        annualTotalKwh: entry.annualTotalKwh,
-        colourIndex: existing.setups.length,
-      });
-      if (entry.computedAt > existing.computedAt) {
-        (existing as { computedAt: number }).computedAt = entry.computedAt;
-      }
-    } else {
-      map.set(groupKey, {
-        groupKey,
-        year: entry.year,
-        intervalMinutes: entry.intervalMinutes,
-        irradianceSource: entry.irradianceSource,
-        density: entry.density,
-        threshold: entry.threshold,
-        computedAt: entry.computedAt,
-        setups: [{
-          cacheKey: entry.cacheKey,
-          setupId: entry.setupId,
-          setupLabel: entry.setupLabel,
-          annualTotalKwh: entry.annualTotalKwh,
-          colourIndex: 0,
-        }],
-      });
-    }
-  }
-
-  const groups = Array.from(map.values());
-  groups.forEach(g => {
-    g.setups.sort((a, b) => b.annualTotalKwh - a.annualTotalKwh);
-    // Re-assign colour indices after sorting so the best setup is always colour 0.
-    g.setups.forEach((s, i) => {
-      (s as { colourIndex: number }).colourIndex = i;
-    });
-  });
-  groups.sort((a, b) => b.computedAt - a.computedAt);
-  return groups;
-};
+import { buildSimulationGroups } from '../utils/SimulationGroupUtils';
 
 export type ResultsTab = 'annual' | 'monthly' | 'daily';
 
@@ -96,6 +32,9 @@ interface UseResultsPanelReturn {
  *
  * Kept outside SimulationResultsPanel so the panel component stays focused
  * on rendering. The hook is also easier to test in isolation.
+ *
+ * Group construction is delegated to buildSimulationGroups, shared with the
+ * settings sidebar cache management UI.
  */
 export function useResultsPanel(isRunning: boolean): UseResultsPanelReturn {
   const [groups, setGroups] = useState<SimulationGroup[]>([]);
@@ -110,7 +49,7 @@ export function useResultsPanel(isRunning: boolean): UseResultsPanelReturn {
   const reloadGroups = useCallback((autoSelect: boolean) => {
     SimulationCache.listResults()
       .then(entries => {
-        const grouped = buildGroups(entries);
+        const grouped = buildSimulationGroups(entries);
         setGroups(grouped);
         if (grouped.length > 0 && (autoSelect || selectedGroupKey === null)) {
           setSelectedGroupKeyState(grouped[0].groupKey);
@@ -143,10 +82,8 @@ export function useResultsPanel(isRunning: boolean): UseResultsPanelReturn {
       return;
     }
 
-    // Activate all setups by default.
     setActiveSetupIds(new Set(selectedGroup.setups.map(s => s.setupId)));
 
-    // Lazy-load full result data from IndexedDB.
     setIsLoadingResults(true);
     setLoadedResults([]);
 
@@ -180,7 +117,6 @@ export function useResultsPanel(isRunning: boolean): UseResultsPanelReturn {
     setActiveSetupIds(prev => {
       const next = new Set(prev);
       if (next.has(setupId)) {
-        // Never deactivate the last active setup — at least one must remain.
         if (next.size <= 1) return prev;
         next.delete(setupId);
       } else {

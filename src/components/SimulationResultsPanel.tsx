@@ -13,6 +13,9 @@ import iconExpand from '../assets/icons/panel-expand.svg';
 import iconCollapse from '../assets/icons/panel-collapse.svg';
 import iconMinimise from '../assets/icons/panel-minimise.svg';
 
+const RESULTS_PANEL_DEFAULT_WIDTH = 420;
+const RESULTS_PANEL_MIN_WIDTH = 280;
+
 /**
  * Formats a Unix timestamp (ms) as a short locale date+time string.
  */
@@ -42,7 +45,7 @@ const buildGroupLabel = (
  * The results panel floats as a fixed overlay on the right side of the screen,
  * on top of the 3D canvas. The drag handle on the left edge lets the user resize
  * it freely. Three icon buttons in the header control panel state:
- *  - Reset width (double arrow): restores default 420px width
+ *  - Reset width (double arrow): restores default width
  *  - Expand/collapse (corner arrows): toggles fullscreen (100vw)
  *  - Minimise (arrow-to-edge): collapses the panel; a vertical restore button appears
  *
@@ -77,7 +80,10 @@ export function SimulationResultsPanel() {
     restore,
     fullscreen,
     resetWidth,
-  } = useResizablePanel();
+  } = useResizablePanel({
+    defaultWidth: RESULTS_PANEL_DEFAULT_WIDTH,
+    minWidth: RESULTS_PANEL_MIN_WIDTH,
+  });
 
   const hasGroups = groups.length > 0;
   const hasActiveSetups = activeSetupIds.size > 0;
@@ -90,7 +96,6 @@ export function SimulationResultsPanel() {
 
   return (
     <>
-      {/* Restore button — only visible when minimised */}
       {panelState === 'minimised' && (
         <button
           className="results-overlay__restore-btn"
@@ -101,12 +106,10 @@ export function SimulationResultsPanel() {
         </button>
       )}
 
-      {/* Overlay wrapper */}
       <div
         className="results-overlay"
         style={{ width: panelState === 'minimised' ? 0 : width }}
       >
-        {/* Drag handle */}
         {panelState !== 'minimised' && (
           <div
             className={`results-overlay__drag-handle${isDragging ? ' results-overlay__drag-handle--dragging' : ''}`}
@@ -115,11 +118,9 @@ export function SimulationResultsPanel() {
           />
         )}
 
-        {/* Panel body */}
         {panelState !== 'minimised' && (
           <div className="results-overlay__panel">
 
-            {/* ── Header ───────────────────────────────────────────────────── */}
             <div className="results-panel__header">
               <span className="results-panel__header-title">
                 {t('resultsPanel.title')}
@@ -171,7 +172,6 @@ export function SimulationResultsPanel() {
               </div>
             </div>
 
-            {/* ── No data states ────────────────────────────────────────────── */}
             {!hasGroups && (
               <div className="results-panel__empty">
                 {isRunning
@@ -180,10 +180,8 @@ export function SimulationResultsPanel() {
               </div>
             )}
 
-            {/* ── Content when groups exist ──────────────────────────────────── */}
             {hasGroups && selectedGroup && (
               <>
-                {/* Simulation parameter summary */}
                 <div className="results-panel__params">
                   <div className="results-panel__param-row">
                     <span className="results-panel__param-key">{t('simulationResultsPanel.paramYear')}</span>
@@ -215,14 +213,12 @@ export function SimulationResultsPanel() {
                   </div>
                 </div>
 
-                {/* Shared setup legend */}
                 <div className="results-panel__legend">
                   {selectedGroup.setups.map(setup => (
                     <button
                       key={setup.setupId}
-                      className={`results-panel__legend-item${
-                        activeSetupIds.has(setup.setupId) ? '' : ' results-panel__legend-item--inactive'
-                      }`}
+                      className={`results-panel__legend-item${activeSetupIds.has(setup.setupId) ? '' : ' results-panel__legend-item--inactive'
+                        }`}
                       onClick={() => toggleSetup(setup.setupId)}
                       title={setup.setupLabel}
                     >
@@ -235,7 +231,6 @@ export function SimulationResultsPanel() {
                   ))}
                 </div>
 
-                {/* Tab bar */}
                 <div className="results-panel__tabs">
                   {tabLabels.map(({ key, label }) => (
                     <button
@@ -248,7 +243,6 @@ export function SimulationResultsPanel() {
                   ))}
                 </div>
 
-                {/* Tab content */}
                 <div className="results-panel__content">
                   {isLoadingResults ? (
                     <div className="results-panel__loading">

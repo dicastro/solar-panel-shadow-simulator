@@ -196,7 +196,7 @@
       ]
     },
     {
-      "label": "3 filas a 58cm alto 9° (optimizada)",
+      "label": "Sunballast - alto: 58cm - inclinación: 9° - optimizada",
       "panelDefaults": {
         "width": 1,
         "height": 2,
@@ -260,14 +260,14 @@
       ]
     },
     {
-      "label": "3 filas a 58cm alto 9°",
+      "label": "Solarbloc - alto: 10cm - inclinación: 15° - optimizada",
       "panelDefaults": {
         "width": 1,
         "height": 2,
         "peakPower": 415,
         "zones": 2,
         "zonesDisposition": "horizontal",
-        "hasOptimizer": false,
+        "hasOptimizer": true,
         "string": "S1",
         "temperatureCoefficient": -0.004,
         "noct": 45
@@ -279,8 +279,8 @@
             0.8
           ],
           "azimuth": 18.5,
-          "elevation": 0.58,
-          "inclination": 9,
+          "elevation": 0.10,
+          "inclination": 15,
           "rows": 1,
           "columns": 3,
           "spacing": [
@@ -295,8 +295,8 @@
             3.5
           ],
           "azimuth": 18.5,
-          "elevation": 0.58,
-          "inclination": 9,
+          "elevation": 0.10,
+          "inclination": 15,
           "rows": 1,
           "columns": 3,
           "spacing": [
@@ -311,8 +311,72 @@
             6.3
           ],
           "azimuth": 18.5,
-          "elevation": 0.58,
-          "inclination": 9,
+          "elevation": 0.10,
+          "inclination": 15,
+          "rows": 1,
+          "columns": 3,
+          "spacing": [
+            0.005,
+            0.005
+          ],
+          "orientation": "portrait"
+        }
+      ]
+    },
+    {
+      "label": "Solarbloc - alto: 10cm - inclinación: 20° - optimizada",
+      "panelDefaults": {
+        "width": 1,
+        "height": 2,
+        "peakPower": 415,
+        "zones": 2,
+        "zonesDisposition": "horizontal",
+        "hasOptimizer": true,
+        "string": "S1",
+        "temperatureCoefficient": -0.004,
+        "noct": 45
+      },
+      "arrays": [
+        {
+          "position": [
+            0.3,
+            0.8
+          ],
+          "azimuth": 18.5,
+          "elevation": 0.10,
+          "inclination": 20,
+          "rows": 1,
+          "columns": 3,
+          "spacing": [
+            0.005,
+            0.005
+          ],
+          "orientation": "portrait"
+        },
+        {
+          "position": [
+            0.3,
+            3.5
+          ],
+          "azimuth": 18.5,
+          "elevation": 0.10,
+          "inclination": 20,
+          "rows": 1,
+          "columns": 3,
+          "spacing": [
+            0.005,
+            0.005
+          ],
+          "orientation": "portrait"
+        },
+        {
+          "position": [
+            0.3,
+            6.3
+          ],
+          "azimuth": 18.5,
+          "elevation": 0.10,
+          "inclination": 20,
           "rows": 1,
           "columns": 3,
           "spacing": [
