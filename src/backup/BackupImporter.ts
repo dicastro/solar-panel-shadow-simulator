@@ -40,8 +40,11 @@ const isGzip = (bytes: Uint8Array): boolean =>
  * Decompresses a gzip-compressed byte array using the browser's native
  * DecompressionStream API. Throws a descriptive error when the API is
  * unavailable.
+ *
+ * Accepts a Uint8Array backed by a plain ArrayBuffer (not SharedArrayBuffer)
+ * as required by the Streams API writer.
  */
-const decompress = async (bytes: Uint8Array): Promise<string> => {
+const decompress = async (bytes: Uint8Array<ArrayBuffer>): Promise<string> => {
   if (typeof DecompressionStream === 'undefined') {
     throw new Error(
       'This backup is compressed (gzip) but your browser does not support ' +
@@ -91,10 +94,10 @@ export interface ImportResult {
 export const BackupImporter = {
   parse: async (file: File): Promise<ImportResult> => {
     const buffer = await file.arrayBuffer();
-    // Cast via ArrayBuffer to guarantee a non-shared buffer, which is required
-    // by the DecompressionStream writer. file.arrayBuffer() always returns a
-    // plain ArrayBuffer, never a SharedArrayBuffer, so this cast is safe.
-    const bytes = new Uint8Array(buffer as ArrayBuffer);
+    // file.arrayBuffer() always returns a plain ArrayBuffer, never a
+    // SharedArrayBuffer, so this cast is safe. The explicit type annotation
+    // satisfies the DecompressionStream writer which requires ArrayBuffer.
+    const bytes = new Uint8Array(buffer) as Uint8Array<ArrayBuffer>;
 
     let json: string;
     if (isGzip(bytes)) {
