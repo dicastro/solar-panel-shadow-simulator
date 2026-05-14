@@ -17,6 +17,7 @@ import AnnualWorker from '../workers/AnnualSimulation.worker?worker';
 import { MeshFactory } from '../factory/MeshFactory';
 import { PanelMeshFactory } from '../factory/PanelMeshFactory';
 import { createIrradianceProvider } from '../irradiance/IrradianceProvider';
+import { appEvents } from '../events/AppEvents';
 
 /**
  * How many logical CPU cores to use for simulation workers.
@@ -151,12 +152,14 @@ export interface AnnualSimulationCallbacks {
  *  - Builds panel frame meshes procedurally per setup via PanelMeshFactory so
  *    each worker always receives the correct geometry regardless of which setup
  *    is currently displayed in the 3D viewport.
- *  - Spawns up to `maxWorkers()` concurrent workers; queues the rest.
+ *  - Spawns up to maxWorkers() concurrent workers; queues the rest.
  *  - Tracks per-setup progress with EMA-smoothed ETA.
- *  - Persists completed results to IndexedDB.
+ *  - Persists completed results to IndexedDB and emits simulationResultsChanged
+ *    so the results panel reloads without any direct coupling between the
+ *    simulation pipeline and the UI hook.
  *
- * Must be called from inside a `<Canvas>` tree so that `useThree` works.
- * The returned `stop` function terminates all active workers immediately.
+ * Must be called from inside a <Canvas> tree so that useThree works.
+ * The returned stop function terminates all active workers immediately.
  */
 export function useAnnualSimulation() {
   const { scene } = useThree();
@@ -211,6 +214,8 @@ export function useAnnualSimulation() {
       if (cached) {
         callbacks.onResult(setup.id, setup.label, cached.annualTotalKwh);
         callbacks.onSetupComplete(setup.id);
+        // Emit so the results panel reflects the cached result immediately.
+        appEvents.emit('simulationResultsChanged', { autoSelect: true });
       } else {
         uncachedSetups.push({ setup, cacheKey });
       }
@@ -297,6 +302,8 @@ export function useAnnualSimulation() {
             }
             callbacks.onResult(msg.result.setupId, msg.result.setupLabel, msg.result.annualTotalKwh);
             callbacks.onSetupComplete(msg.result.setupId);
+            // Notify the results panel that a new setup result is available.
+            appEvents.emit('simulationResultsChanged', { autoSelect: true });
             onWorkerDone(worker);
           }
 

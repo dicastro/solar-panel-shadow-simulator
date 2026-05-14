@@ -22,7 +22,6 @@ const PAST_YEARS_AVAILABLE = 5;
 export const availableSimulationYears = (source: IrradianceSource = 'geometric'): number[] => {
   const oldestYear = CURRENT_YEAR - PAST_YEARS_AVAILABLE;
   if (source === 'open-meteo') {
-    // Exclude the current year: archive only covers completed past years.
     return Array.from(
       { length: PAST_YEARS_AVAILABLE },
       (_, i) => CURRENT_YEAR - 1 - i,

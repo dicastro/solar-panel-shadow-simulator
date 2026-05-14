@@ -37,7 +37,8 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Supports two irradiance sources: a geometric clear-sky model (no network required) and Open-Meteo (real hourly DNI + DHI + temperature data fetched from a free, CORS-compatible API, cached in IndexedDB). The Open-Meteo model applies full Plane-of-Array irradiance decomposition and panel temperature correction.
 - Applies configurable system losses (inverter efficiency, wiring loss) to the DC output of every time step.
 - Displays annual results in a floating resizable overlay panel with three tabs (Annual, Monthly, Daily), each containing a Production section (ECharts charts) and a Shadows section (per-panel zone heat maps). A shared legend lets the user toggle setups on/off and all charts update accordingly.
-- Provides a settings sidebar (gear icon, top-left) for cache management: cached simulation results and Open-Meteo irradiance data can be listed and deleted individually or in bulk without requiring browser developer tools.
+- Provides a settings sidebar (gear icon, top-left) with cache management (list and delete cached simulation results and Open-Meteo irradiance data) and backup export/import.
+- Exports a complete backup (config + all simulation results) to a gzip-compressed `.solarsim` file and imports it back, fully replacing the active configuration and all cached results while preserving Open-Meteo irradiance data.
 - Validates the wall configuration and displays a prominent warning listing the exact config-space coordinate triples that form non-90° or non-180° angles.
 - Displays the application version in the footer, sourced from `package.json` at build time.
 
@@ -64,16 +65,16 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 
 ```
 src/
-├── App.tsx                        # Root: loads config, full-viewport canvas + overlay panels
-├── i18n.ts                        # i18next initialisation
+├── App.tsx
+├── i18n.ts
 │
-├── assets/icons/                  # SVG icon files for the results panel header buttons
+├── assets/icons/
 │   ├── panel-reset-width.svg
 │   ├── panel-expand.svg
 │   ├── panel-collapse.svg
 │   └── panel-minimise.svg
 │
-├── styles/                        # CSS modules (imported via styles/index.css)
+├── styles/
 │   ├── index.css
 │   ├── base.css
 │   ├── layout.css
@@ -111,6 +112,12 @@ src/
 │   ├── GeometricIrradianceProvider.ts
 │   └── OpenMeteoIrradianceProvider.ts
 │
+├── backup/
+│   ├── BackupConstants.ts         # File extension, MIME type, version, filename encoder
+│   ├── BackupTypes.ts             # BackupFile interface
+│   ├── BackupExporter.ts          # Serialise → compress → download
+│   └── BackupImporter.ts          # Read → decompress → parse → migrate → validate
+│
 ├── converter/
 │   ├── ThreeConverter.ts
 │   └── SolarPanelConverter.ts
@@ -120,21 +127,21 @@ src/
 │   └── slices/
 │       ├── ConfigSlice.ts
 │       ├── RenderSlice.ts
-│       ├── SimulationSlice.ts
-│       └── SettingsSlice.ts       # Settings sidebar open/close state
+│       ├── SimulationSlice.ts     # resultsVersion counter added
+│       └── SettingsSlice.ts
 │
 ├── hooks/
 │   ├── useBVH.ts
 │   ├── useShadowSampler.ts
 │   ├── useAnnualSimulation.ts
-│   ├── useResultsPanel.ts
+│   ├── useResultsPanel.ts         # subscribes to resultsVersion for post-import reload
 │   └── useResizablePanel.ts
 │
 ├── db/
-│   ├── DbUtils.ts                 # Shared openDatabase helper (used by all cache modules)
-│   ├── SimulationCache.ts
+│   ├── DbUtils.ts
+│   ├── SimulationCache.ts         # getAllResults and replaceAllResults added
 │   ├── IrradianceCache.ts
-│   └── IrradianceCacheManager.ts  # List/delete operations for the settings sidebar UI
+│   └── IrradianceCacheManager.ts
 │
 ├── workers/
 │   └── AnnualSimulation.worker.ts
@@ -146,7 +153,8 @@ src/
     ├── PointXZUtils.ts
     ├── RailingUtils.ts
     ├── ThreeUtils.ts
-    └── TimeUtils.ts
+    ├── TimeUtils.ts
+    └── SimulationGroupUtils.ts
 
 └── components/
     ├── Scene.tsx
@@ -160,8 +168,8 @@ src/
     ├── AnnualSimulationProgress.tsx
     ├── AngleWarningBanner.tsx
     ├── DeveloperFooter.tsx
-    ├── SettingsSidebar.tsx        # Settings sidebar with cache management
-    ├── SettingsSidebarButton.tsx  # Gear icon button that opens the sidebar
+    ├── SettingsSidebar.tsx
+    ├── SettingsSidebarButton.tsx
     └── results/
         ├── AnnualTab.tsx
         ├── MonthlyTab.tsx
@@ -208,7 +216,7 @@ Four domain slices composed behind a single `useAppStore` facade:
 
 - `ConfigSlice` — raw config and site geometry.
 - `RenderSlice` — 3D view state (date, timezone, active setup, sun, density, threshold).
-- `SimulationSlice` — annual simulation parameters and lifecycle.
+- `SimulationSlice` — annual simulation parameters and lifecycle. Also holds `resultsVersion`, a monotonically increasing counter incremented after a backup import so that `useResultsPanel` reloads its data without a full page refresh.
 - `SettingsSlice` — settings sidebar open/close state.
 
 Each slice is a pure function. Slices never import each other.
@@ -244,6 +252,46 @@ The settings sidebar displays simulation results in two levels: simulation run (
 ### App version sourced from package.json at build time
 
 `vite.config.ts` defines `__APP_VERSION__` as a compile-time constant populated from `process.env.npm_package_version` (set by npm at build time). `DeveloperFooter` reads this global directly. No runtime fetch, environment variable lookup, or separate version file is needed. The ambient declaration in `src/vite-env.d.ts` gives TypeScript full type safety for the global.
+
+### Backup export/import — `src/backup/`
+
+All backup-related logic lives in a dedicated `src/backup/` module with four files:
+
+- **`BackupConstants.ts`**: the backup file extension (`.solarsim`), MIME type, current schema version, and filename-encoding helpers. All values that appear in more than one place (extension, version) are defined here as named constants so a single edit propagates everywhere.
+- **`BackupTypes.ts`**: the `BackupFile` interface — version number, export timestamp, config, and simulation results.
+- **`BackupExporter.ts`**: reads all simulation results from IndexedDB via `SimulationCache.getAllResults`, assembles the `BackupFile`, serialises it to JSON, compresses it with the native `CompressionStream` API (gzip), and triggers a browser download. Falls back to uncompressed JSON when `CompressionStream` is unavailable.
+- **`BackupImporter.ts`**: reads the file, auto-detects gzip by inspecting the magic bytes (`0x1f 0x8b`), decompresses with the native `DecompressionStream` API, parses JSON, applies version migrations, and validates the required fields. Returns a plain `ImportResult` object; the caller is responsible for applying it to the store and IndexedDB.
+
+### Backup filename encoding
+
+Latitude and longitude values are encoded into a filename-safe string to avoid dots, signs, and other special characters:
+
+- Sign: `+` → `p` (positive), `-` → `n` (negative)
+- Decimal point: `.` → `d`
+
+A UTC timestamp (`YYYYMMDDHHMMSS`) is appended after the coordinates so that multiple backups from the same installation on the same day produce distinct filenames without requiring manual renaming.
+
+Example: `40.6252, -4.0141` at `2026-05-13 14:30:22 UTC` → `solarsim-p40d6252-n4d0141-20260513143022.solarsim`
+
+### Event bus — `src/events/AppEvents.ts`
+
+Cross-component communication between parts of the app that do not share a direct parent-child relationship is handled via `mitt`, a minimal typed event emitter (200 bytes). The single event is:
+
+- **`simulationResultsChanged`** `{ autoSelect: boolean }` — emitted whenever IndexedDB simulation results change. `autoSelect: true` causes `useResultsPanel` to select the first available group after reloading (used after a simulation completes or a backup is imported). `autoSelect: false` preserves the current selection if it still exists (used after individual cache deletions).
+
+Emitters:
+- `useAnnualSimulation` — emits after each setup result is persisted (including cache hits), with `autoSelect: true`.
+- `SettingsSidebar` (cache delete / clear all / backup import) — emits after each IndexedDB mutation with the appropriate `autoSelect` value.
+
+Subscribers:
+- `useResultsPanel` — reloads the group list and optionally auto-selects the first group.
+- `SimulationCacheSection` inside `SettingsSidebar` — reloads its local group list so the cache management UI stays in sync without requiring the sidebar to be closed and reopened.
+
+Using an event bus instead of a store value means events represent things that *happen* rather than state that *is*, which is the correct semantic for one-shot notifications.
+
+### Backup schema versioning
+
+`BackupFile.version` starts at 1. `CURRENT_BACKUP_VERSION` in `BackupConstants.ts` is the single source of truth. The importer maintains a `migrations` map (key = version to migrate FROM, value = transformation function) and applies all applicable migrations in sequence before consuming the data. Importing a backup with a version higher than `CURRENT_BACKUP_VERSION` throws a descriptive error instructing the user to update the app.
 
 ### Panel world-space positioning pipeline
 
@@ -622,7 +670,7 @@ Physical panel grid, proportional cell sizes, bypass-diode zones coloured by sha
 
 A gear icon button (⚙) at the top-left of the screen opens a settings sidebar. The sidebar is a `position: fixed` overlay on the left edge, with a semi-transparent backdrop that closes it on click. While the sidebar is open the gear button is hidden; the sidebar provides its own close button (✕).
 
-The sidebar is user-resizable: a drag handle on its right edge lets the user widen or narrow it freely (minimum 300px). The chosen width persists for the session; refreshing the page resets it to the 440px default. The sidebar body scrolls vertically when content exceeds the viewport height, which is important for future sections (e.g. the configuration editor) that may require substantial vertical space.
+The sidebar is user-resizable: a drag handle on its right edge lets the user widen or narrow it freely (minimum 300px). The chosen width persists for the session; refreshing the page resets it to the 440px default. The sidebar body scrolls vertically when content exceeds the viewport height.
 
 The sidebar contains three collapsible sections:
 
@@ -632,15 +680,29 @@ The sidebar contains three collapsible sections:
 
 **Irradiance data (Open-Meteo)** entries are flat (one row per source/location/year combination), each with an individual delete button and a "Delete all" button.
 
-The irradiance cache listing is handled by `IrradianceCacheManager` (a dedicated read/delete module) rather than `IrradianceCache` (the get/set provider used by the simulation pipeline). This separation keeps the provider free of UI concerns.
-
 ### Export / Import
 
-Placeholder for Phase 6b — full backup export/import with versioned `.solarsim` files.
+The Export/Import section provides two actions:
+
+**Export backup**: reads the current config from the store and all simulation results from IndexedDB, serialises them into a `BackupFile` JSON structure, compresses with gzip (native `CompressionStream` API, falls back to uncompressed if unavailable), and triggers a browser download. The filename encodes the installation coordinates and a timestamp (date + time) in a human-readable, filesystem-safe format:
+
+```
+solarsim-p40d6252-n4d0141-20260513143022.solarsim
+```
+
+where `p`/`n` indicate positive/negative, `d` represents the decimal point, and the timestamp is `YYYYMMDDHHMMSS` in UTC. Including the time component allows multiple backups to be created on the same day without filename collisions.
+
+**Load backup**: opens a file picker restricted to `.solarsim` files. The selected file is auto-detected as gzip or plain JSON (magic bytes check), decompressed if needed, parsed, migrated to the current schema version, and validated. On success:
+1. All simulation results in IndexedDB are replaced with those from the backup (in a single transaction).
+2. The config from the backup is applied to the store via `loadConfig`, which rebuilds the 3D scene, the active setup, and the sun state.
+3. `invalidateResults()` increments `resultsVersion` in `SimulationSlice`, causing `useResultsPanel` to reload the results panel group list from the updated IndexedDB.
+
+Open-Meteo irradiance data in IndexedDB is not affected by either operation.
 
 ### Configuration
 
-Placeholder for Phase 6d — in-app JSON configuration editing with schema validation.
+Placeholder for a future in-app config editor.
+
 ---
 
 ## Application layout
@@ -671,7 +733,7 @@ Canvas fills `100vw × 100vh`. All UI elements are absolute or fixed overlays:
 - **Single inclination per setup for POA**: the worker uses the mean inclination across all arrays. Setups with mixed inclinations will have a small systematic error in the diffuse and albedo components.
 - **Rail extensions end in a 90° cut**: a 45° mitre would require custom `BufferGeometry`.
 - **Drag-to-resize is mouse-only**: touch not supported.
-- **Daily charts display UTC hours**: hourly energy data is accumulated in UTC buckets; the interactive daily charts and PDF report do not yet shift hours to the configured installation timezone.
+- **Daily charts display UTC hours**: hourly energy data is accumulated in UTC buckets; the interactive daily charts do not yet shift hours to the configured installation timezone.
 
 ---
 
@@ -683,27 +745,27 @@ Making both the results panel and the settings sidebar `position: fixed` overlay
 
 ### Separation of provider and manager for cached data
 
-The irradiance get/set API (`IrradianceCache`) and the irradiance list/delete API (`IrradianceCacheManager`) are deliberately split into two modules. The provider module is used in the simulation hot path and must remain free of UI imports. The manager module is imported only by the settings sidebar. If they were merged, any future tree-shaking or worker bundling change could accidentally pull UI code into a non-UI context.
+The irradiance get/set API (`IrradianceCache`) and the irradiance list/delete API (`IrradianceCacheManager`) are deliberately split into two modules. The provider module is used in the simulation hot path and must remain free of UI imports. The manager module is imported only by the settings sidebar.
 
 ### Shared IndexedDB helper eliminates boilerplate
 
-A single `openDatabase(name, version, onUpgrade)` function replaces two identical `openDb` wrappers. The cost of the abstraction is near zero (one extra function call) and the benefit is that any future change to the Promise-wrapping pattern (e.g. adding telemetry, connection pooling) is applied in one place.
+A single `openDatabase(name, version, onUpgrade)` function replaces two identical `openDb` wrappers. The cost of the abstraction is near zero (one extra function call) and the benefit is that any future change to the Promise-wrapping pattern is applied in one place.
 
 ### Compile-time version constant avoids runtime indirection
 
-Reading the app version from `package.json` at build time via Vite's `define` is simpler and more reliable than a runtime fetch of a JSON file or reading from `import.meta.env`. The value is inlined as a string literal in the compiled bundle, with full TypeScript type safety via the ambient declaration in `vite-env.d.ts`.
+Reading the app version from `package.json` at build time via Vite's `define` is simpler and more reliable than a runtime fetch of a JSON file or reading from `import.meta.env`.
 
 ### Full POA irradiance is essential for realistic estimates
 
-Using only DNI (direct beam on a perpendicular surface) severely underestimates production because it ignores the diffuse sky component, which can represent 20–35% of annual yield — especially in winter and on partly cloudy days. The isotropic sky model adds DHI and albedo components with minimal complexity: two view-factor multiplications per time step.
+Using only DNI severely underestimates production because it ignores the diffuse sky component, which can represent 20–35% of annual yield. The isotropic sky model adds DHI and albedo components with minimal complexity.
 
 ### Temperature correction is significant in summer
 
-At 35°C ambient with 1000 W/m² irradiance, a panel with NOCT=45°C reaches ~60°C, giving a ~14% loss for γ=−0.004/°C. Omitting temperature correction causes systematic overestimation of summer production.
+At 35°C ambient with 1000 W/m² irradiance, a panel with NOCT=45°C reaches ~60°C, giving a ~14% loss for γ=−0.004/°C.
 
 ### NOCT model is accurate enough for residential comparison
 
-The NOCT model (`T_cell = T_ambient + (NOCT−20)/800 × POA`) is a linear approximation that ignores wind speed and mounting configuration. For a tool whose primary goal is comparing setups against each other, the NOCT model provides sufficient relative accuracy.
+The NOCT model is a linear approximation that ignores wind speed and mounting configuration. For a tool whose primary goal is comparing setups, the NOCT model provides sufficient relative accuracy.
 
 ### System losses must be applied after string mismatch
 
@@ -731,7 +793,7 @@ Bumping `DB_VERSION` to 2 and dropping the old store in `onupgradeneeded` ensure
 
 ### No TTL needed when only immutable data is cached
 
-All cached irradiance data covers completed past years — historical reanalysis is immutable. A permanent cache with no expiry is correct and simpler.
+All cached irradiance data covers completed past years — historical reanalysis is immutable.
 
 ### Simulation results grouped at display time, not at storage time
 
@@ -740,6 +802,18 @@ IndexedDB stores one entry per setup. Grouping at display time keeps the storage
 ### Physical geometry propagated through simulation pipeline
 
 Carrying `orientation`, `actualWidth`, `actualHeight`, `zones`, `zonesDisposition` from `SolarPanel` through `SimulationPanelData` into `PanelAnnualData` means the results panel can render proportionally correct heat maps without access to the original config.
+
+### Native browser APIs for compression
+
+`CompressionStream` / `DecompressionStream` are available in all modern browsers without any additional dependency. Auto-detecting gzip by inspecting magic bytes (`0x1f 0x8b`) makes the importer robust to backups created by older app versions that fell back to uncompressed export.
+
+### resultsVersion counter decouples import from useResultsPanel
+
+Incrementing a version counter in the store after a backup import is a minimal, targeted signal. `useResultsPanel` subscribes to it and reloads, with no need for the importer to know about the hook's internal state or call any hook directly.
+
+### Backup filename encoding preserves human readability
+
+Encoding latitude/longitude as `p40d6252` (positive 40.6252) and `n4d0141` (negative 4.0141) avoids filesystem-unsafe characters while remaining immediately interpretable. A purely numeric encoding (`406252`) would lose the sign and make it harder to correlate filenames with installation locations.
 
 ### SVG icons as files, not inline or Unicode
 

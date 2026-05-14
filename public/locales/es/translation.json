@@ -134,7 +134,16 @@
     },
     "exportImport": {
       "sectionTitle": "Exportar / Importar",
-      "placeholder": "La exportación e importación de copias de seguridad estará disponible en una próxima actualización."
+      "exportBtn": "Exportar copia de seguridad",
+      "exportTitle": "Exportar todos los resultados de simulación y la configuración a un fichero de copia de seguridad",
+      "exportingBtn": "Exportando…",
+      "exportSuccess": "Copia de seguridad exportada correctamente.",
+      "exportError": "Error al exportar: {{message}}",
+      "importBtn": "Cargar copia de seguridad",
+      "importTitle": "Cargar un fichero de copia de seguridad para restaurar la configuración y los resultados de simulación",
+      "importSuccess": "Copia de seguridad cargada: {{count}} resultado(s) de simulación restaurados.",
+      "importError": "Error al importar: {{message}}",
+      "importDescription": "Cargar una copia de seguridad reemplaza la configuración actual y todos los resultados de simulación. Los datos de irradiancia de Open-Meteo en caché local se conservan."
     },
     "configuration": {
       "sectionTitle": "Configuración",

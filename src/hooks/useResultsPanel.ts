@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SimulationCache } from '../db/SimulationCache';
 import { SimulationGroup, SimulationGroupSetup, LoadedSetupResult } from '../types/results';
 import { buildSimulationGroups } from '../utils/SimulationGroupUtils';
+import { appEvents } from '../events/AppEvents';
 
 export type ResultsTab = 'annual' | 'monthly' | 'daily';
 
@@ -21,9 +22,6 @@ interface UseResultsPanelReturn {
   /** Full result data loaded from IndexedDB for the selected group. */
   loadedResults: LoadedSetupResult[];
   isLoadingResults: boolean;
-
-  /** Reload groups from IndexedDB and optionally auto-select the newest. */
-  reloadGroups: (autoSelect: boolean) => void;
 }
 
 /**
@@ -31,20 +29,23 @@ interface UseResultsPanelReturn {
  * legend toggle, tab navigation, and lazy loading of full result data.
  *
  * Kept outside SimulationResultsPanel so the panel component stays focused
- * on rendering. The hook is also easier to test in isolation.
+ * on rendering.
  *
  * Group construction is delegated to buildSimulationGroups, shared with the
  * settings sidebar cache management UI.
+ *
+ * The hook reloads its data in response to the simulationResultsChanged event
+ * emitted via the application event bus (mitt). Any component that modifies
+ * IndexedDB simulation results emits this event. The autoSelect payload
+ * controls whether the first available group should be selected after reloading.
  */
-export function useResultsPanel(isRunning: boolean): UseResultsPanelReturn {
+export function useResultsPanel(): UseResultsPanelReturn {
   const [groups, setGroups] = useState<SimulationGroup[]>([]);
   const [selectedGroupKey, setSelectedGroupKeyState] = useState<string | null>(null);
   const [activeSetupIds, setActiveSetupIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<ResultsTab>('annual');
   const [loadedResults, setLoadedResults] = useState<LoadedSetupResult[]>([]);
   const [isLoadingResults, setIsLoadingResults] = useState(false);
-
-  const prevIsRunning = useRef(isRunning);
 
   const reloadGroups = useCallback((autoSelect: boolean) => {
     SimulationCache.listResults()
@@ -53,6 +54,8 @@ export function useResultsPanel(isRunning: boolean): UseResultsPanelReturn {
         setGroups(grouped);
         if (grouped.length > 0 && (autoSelect || selectedGroupKey === null)) {
           setSelectedGroupKeyState(grouped[0].groupKey);
+        } else if (grouped.length === 0) {
+          setSelectedGroupKeyState(null);
         }
       })
       .catch(err => console.warn('useResultsPanel: failed to load cache', err));
@@ -64,13 +67,16 @@ export function useResultsPanel(isRunning: boolean): UseResultsPanelReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload and auto-select when a simulation run completes.
+  // Subscribe to the application event bus. Any part of the app that modifies
+  // IndexedDB simulation results emits simulationResultsChanged so this hook
+  // reloads without polling or artificial state dependencies.
   useEffect(() => {
-    if (prevIsRunning.current && !isRunning) {
-      reloadGroups(true);
-    }
-    prevIsRunning.current = isRunning;
-  }, [isRunning, reloadGroups]);
+    const handler = ({ autoSelect }: { autoSelect: boolean }) => {
+      reloadGroups(autoSelect);
+    };
+    appEvents.on('simulationResultsChanged', handler);
+    return () => appEvents.off('simulationResultsChanged', handler);
+  }, [reloadGroups]);
 
   const selectedGroup = groups.find(g => g.groupKey === selectedGroupKey) ?? null;
 
@@ -137,6 +143,5 @@ export function useResultsPanel(isRunning: boolean): UseResultsPanelReturn {
     setActiveTab,
     loadedResults,
     isLoadingResults,
-    reloadGroups,
   };
 }

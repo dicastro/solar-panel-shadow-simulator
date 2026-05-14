@@ -134,7 +134,16 @@
     },
     "exportImport": {
       "sectionTitle": "Export / Import",
-      "placeholder": "Export and import of backups will be available in a future update."
+      "exportBtn": "Export backup",
+      "exportTitle": "Export all simulation results and configuration to a backup file",
+      "exportingBtn": "Exporting…",
+      "exportSuccess": "Backup exported successfully.",
+      "exportError": "Export failed: {{message}}",
+      "importBtn": "Load backup",
+      "importTitle": "Load a backup file to restore configuration and simulation results",
+      "importSuccess": "Backup loaded: {{count}} simulation result(s) restored.",
+      "importError": "Import failed: {{message}}",
+      "importDescription": "Loading a backup replaces the current configuration and all simulation results. Open-Meteo irradiance data in the local cache is preserved."
     },
     "configuration": {
       "sectionTitle": "Configuration",

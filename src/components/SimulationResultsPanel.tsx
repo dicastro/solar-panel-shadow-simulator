@@ -53,6 +53,10 @@ const buildGroupLabel = (
  * selected simulation run (year, interval, irradiance, density, threshold).
  * Below that, the shared setup legend lets the user toggle individual setups
  * on/off across all charts simultaneously.
+ *
+ * The panel reacts to changes in IndexedDB simulation results via the
+ * simulationResultsChanged event on the application event bus, handled inside
+ * useResultsPanel. It does not need to observe isRunning directly.
  */
 export function SimulationResultsPanel() {
   const { t } = useTranslation();
@@ -69,7 +73,7 @@ export function SimulationResultsPanel() {
     setActiveTab,
     loadedResults,
     isLoadingResults,
-  } = useResultsPanel(isRunning);
+  } = useResultsPanel();
 
   const {
     width,

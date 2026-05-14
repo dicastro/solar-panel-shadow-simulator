@@ -84,6 +84,47 @@ export const SimulationCache = {
   },
 
   /**
+   * Returns all stored results in full (including per-panel data).
+   * Used by the backup exporter to include complete result payloads.
+   */
+  getAllResults: async (): Promise<SetupAnnualResult[]> => {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.getAll();
+      request.onsuccess = (event) =>
+        resolve((event.target as IDBRequest<SetupAnnualResult[]>).result);
+      request.onerror = (event) => reject((event.target as IDBRequest).error);
+    });
+  },
+
+  /**
+   * Replaces all stored simulation results with the provided array.
+   * Clears the store first, then writes each result. Used by the backup
+   * importer to restore a complete result set atomically within one
+   * IndexedDB transaction.
+   */
+  replaceAllResults: async (results: SetupAnnualResult[]): Promise<void> => {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const clearReq = store.clear();
+      clearReq.onerror = (event) => reject((event.target as IDBRequest).error);
+      clearReq.onsuccess = () => {
+        if (results.length === 0) { resolve(); return; }
+        let pending = results.length;
+        for (const result of results) {
+          const putReq = store.put(result);
+          putReq.onerror = (event) => reject((event.target as IDBRequest).error);
+          putReq.onsuccess = () => { if (--pending === 0) resolve(); };
+        }
+      };
+    });
+  },
+
+  /**
    * Deletes the result stored under `cacheKey`. Resolves silently if the key
    * does not exist.
    */

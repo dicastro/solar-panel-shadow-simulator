@@ -74,7 +74,6 @@
   pointer-events: all;
   flex-shrink: 0;
   order: 1;
-  /* rendered after the sidebar body so it appears on the right */
 }
 
 .settings-sidebar__drag-handle:hover,
@@ -134,7 +133,6 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  /* Ensure vertical scrollbar stays inside the sidebar, not the overlay */
   min-height: 0;
 }
 
@@ -199,10 +197,6 @@
 
 /* ── Simulation group (two-level cache display) ────────────────────────────── */
 
-/*
- * A simulation group card wraps the group header (label + delete-group button)
- * and the list of setup entries beneath it.
- */
 .sim-group {
   background: #1e1e1e;
   border: 1px solid #2e2e2e;
@@ -374,6 +368,57 @@
 .settings-danger-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/* ── Action button (export / import) ───────────────────────────────────────── */
+
+.settings-action-btn {
+  width: 100%;
+  padding: 8px 14px;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  background: #2a2a2a;
+  color: #ddd;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: sans-serif;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.settings-action-btn:hover:not(:disabled) {
+  background: #333;
+  border-color: #555;
+  color: #fff;
+}
+
+.settings-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Feedback messages (success / error) ───────────────────────────────────── */
+
+.settings-feedback {
+  font-size: 0.75rem;
+  font-family: sans-serif;
+  line-height: 1.4;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+.settings-feedback--success {
+  background: rgba(46, 204, 113, 0.12);
+  border: 1px solid rgba(46, 204, 113, 0.3);
+  color: #2ecc71;
+}
+
+.settings-feedback--error {
+  background: rgba(231, 76, 60, 0.12);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  color: #e74c3c;
 }
 
 /* ── Coming-soon placeholder ───────────────────────────────────────────────── */

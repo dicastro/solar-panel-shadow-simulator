@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TFunction } from 'i18next';
 import { useAppStore } from '../store/AppStore';
@@ -7,6 +7,10 @@ import { SimulationCache } from '../db/SimulationCache';
 import { IrradianceCacheManager, IrradianceCacheEntryMeta } from '../db/IrradianceCacheManager';
 import { SimulationGroup } from '../types/results';
 import { buildSimulationGroups } from '../utils/SimulationGroupUtils';
+import { BackupExporter } from '../backup/BackupExporter';
+import { BackupImporter } from '../backup/BackupImporter';
+import { BACKUP_FILE_EXTENSION } from '../backup/BackupConstants';
+import { appEvents } from '../events/AppEvents';
 
 const SIDEBAR_DEFAULT_WIDTH = 440;
 const SIDEBAR_MIN_WIDTH = 300;
@@ -43,7 +47,7 @@ const buildGroupLabel = (g: SimulationGroup, t: TFunction): string =>
 
 /**
  * Collapsible section within the settings sidebar.
- * Starts open when `defaultOpen` is true.
+ * Starts open when defaultOpen is true.
  */
 function SidebarSection({
   title,
@@ -73,13 +77,12 @@ function SidebarSection({
  * Cache management sub-section for simulation results.
  *
  * Entries are displayed in two levels:
- *  - Level 1: simulation group (year, interval, irradiance, density, threshold)
- *             with a button to delete the entire group.
+ *  - Level 1: simulation group with a button to delete the entire group.
  *  - Level 2: individual setup rows within that group, each with their own
- *             delete button.
+ *    delete button.
  *
- * After any mutation the list is reloaded so the results panel group selector
- * stays in sync.
+ * After any mutation the local list reloads and simulationResultsChanged is
+ * emitted so the results panel reacts consistently.
  */
 function SimulationCacheSection() {
   const { t } = useTranslation();
@@ -96,9 +99,17 @@ function SimulationCacheSection() {
 
   useEffect(() => { reload(); }, [reload]);
 
+  // Reload when any external operation modifies IndexedDB simulation results
+  // (backup import, deletions from another part of the UI).
+  useEffect(() => {
+    appEvents.on('simulationResultsChanged', reload);
+    return () => appEvents.off('simulationResultsChanged', reload);
+  }, [reload]);
+
   const handleDeleteSetup = async (cacheKey: string) => {
     await SimulationCache.deleteResult(cacheKey).catch(() => null);
     reload();
+    appEvents.emit('simulationResultsChanged', { autoSelect: false });
   };
 
   const handleDeleteGroup = async (group: SimulationGroup) => {
@@ -106,11 +117,13 @@ function SimulationCacheSection() {
       group.setups.map(s => SimulationCache.deleteResult(s.cacheKey).catch(() => null)),
     );
     reload();
+    appEvents.emit('simulationResultsChanged', { autoSelect: false });
   };
 
   const handleClearAll = async () => {
     await SimulationCache.clearAllResults().catch(() => null);
     reload();
+    appEvents.emit('simulationResultsChanged', { autoSelect: false });
   };
 
   const totalEntries = groups.reduce((sum, g) => sum + g.setups.length, 0);
@@ -173,8 +186,7 @@ function SimulationCacheSection() {
 
 /**
  * Cache management sub-section for Open-Meteo irradiance data.
- * Each entry is a flat row (no grouping needed — entries are already
- * distinct by source, location, and year).
+ * Each entry is a flat row distinct by source, location, and year.
  */
 function IrradianceCacheSection() {
   const { t } = useTranslation();
@@ -244,6 +256,140 @@ function IrradianceCacheSection() {
 }
 
 /**
+ * Export/Import sub-section within the settings sidebar.
+ *
+ * Export: reads all simulation results from IndexedDB and the current config
+ * from the store, serialises them into a gzip-compressed backup file, and
+ * triggers a browser download.
+ *
+ * Import: opens a file picker restricted to the backup extension, parses the
+ * selected file, replaces all simulation results in IndexedDB, calls loadConfig
+ * to replace the in-memory config and rebuild the 3D scene, then emits
+ * simulationResultsChanged so the results panel reloads automatically.
+ */
+function ExportImportSection() {
+  const { t } = useTranslation();
+  const config = useAppStore(s => s.config);
+  const loadConfig = useAppStore(s => s.loadConfig);
+
+  const [exportStatus, setExportStatus] = useState<'idle' | 'exporting' | 'success' | 'error'>('idle');
+  const [exportError, setExportError] = useState('');
+  const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [importMessage, setImportMessage] = useState('');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = async () => {
+    if (!config) return;
+    setExportStatus('exporting');
+    setExportError('');
+    try {
+      await BackupExporter.export(config);
+      setExportStatus('success');
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err));
+      setExportStatus('error');
+    }
+  };
+
+  const handleImportClick = () => {
+    setImportStatus('idle');
+    setImportMessage('');
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset so selecting the same file again triggers onChange.
+    e.target.value = '';
+    if (!file) return;
+
+    try {
+      const { config: importedConfig, simulationResults } = await BackupImporter.parse(file);
+
+      // Replace all simulation results in IndexedDB.
+      await SimulationCache.replaceAllResults(simulationResults);
+
+      // Replace the in-memory config and rebuild the 3D scene.
+      loadConfig(importedConfig);
+
+      // Notify the results panel to reload from the updated IndexedDB.
+      appEvents.emit('simulationResultsChanged', { autoSelect: true });
+
+      setImportStatus('success');
+      setImportMessage(
+        t('settings.exportImport.importSuccess', { count: simulationResults.length }),
+      );
+    } catch (err) {
+      setImportStatus('error');
+      setImportMessage(
+        t('settings.exportImport.importError', {
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <p className="settings-placeholder" style={{ fontStyle: 'normal', color: '#aaa' }}>
+        {t('settings.exportImport.importDescription')}
+      </p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <button
+          className="settings-action-btn"
+          onClick={handleExport}
+          disabled={!config || exportStatus === 'exporting'}
+          title={t('settings.exportImport.exportTitle')}
+        >
+          {exportStatus === 'exporting'
+            ? t('settings.exportImport.exportingBtn')
+            : t('settings.exportImport.exportBtn')}
+        </button>
+        {exportStatus === 'success' && (
+          <p className="settings-feedback settings-feedback--success">
+            {t('settings.exportImport.exportSuccess')}
+          </p>
+        )}
+        {exportStatus === 'error' && (
+          <p className="settings-feedback settings-feedback--error">
+            {t('settings.exportImport.exportError', { message: exportError })}
+          </p>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={BACKUP_FILE_EXTENSION}
+          style={{ display: 'none' }}
+          onChange={handleFileSelected}
+        />
+        <button
+          className="settings-action-btn"
+          onClick={handleImportClick}
+          title={t('settings.exportImport.importTitle')}
+        >
+          {t('settings.exportImport.importBtn')}
+        </button>
+        {importStatus === 'success' && (
+          <p className="settings-feedback settings-feedback--success">
+            {importMessage}
+          </p>
+        )}
+        {importStatus === 'error' && (
+          <p className="settings-feedback settings-feedback--error">
+            {importMessage}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Full-height settings sidebar rendered as a fixed overlay on the left edge
  * of the viewport. The sidebar width is user-resizable by dragging the right
  * edge handle, and its body scrolls vertically when content exceeds the
@@ -254,8 +400,8 @@ function IrradianceCacheSection() {
  *
  * Three collapsible sections:
  *  1. Cache management — simulation results (two-level) and irradiance data.
- *  2. Export / Import — placeholder for Phase 6b.
- *  3. Configuration — placeholder for Phase 6d.
+ *  2. Export / Import — export to and import from a compressed backup file.
+ *  3. Configuration — placeholder for a future in-app config editor.
  */
 export function SettingsSidebar() {
   const { t } = useTranslation();
@@ -267,7 +413,6 @@ export function SettingsSidebar() {
     dragDirection: 'right',
   });
 
-  // Keep the module-level variable in sync so the next open restores this width.
   persistedSidebarWidth = width;
 
   return (
@@ -293,8 +438,8 @@ export function SettingsSidebar() {
               <IrradianceCacheSection />
             </SidebarSection>
 
-            <SidebarSection title={t('settings.exportImport.sectionTitle')}>
-              <p className="settings-placeholder">{t('settings.exportImport.placeholder')}</p>
+            <SidebarSection title={t('settings.exportImport.sectionTitle')} defaultOpen>
+              <ExportImportSection />
             </SidebarSection>
 
             <SidebarSection title={t('settings.configuration.sectionTitle')}>
@@ -303,7 +448,6 @@ export function SettingsSidebar() {
           </div>
         </div>
 
-        {/* Drag handle on the right edge of the sidebar */}
         <div
           className={`settings-sidebar__drag-handle${isDragging ? ' settings-sidebar__drag-handle--dragging' : ''}`}
           {...dragHandleProps}
