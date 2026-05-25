@@ -114,7 +114,7 @@ export const buildAnnualBarOption = (results: LoadedSetupResult[]): EChartsOptio
   series: [{
     type: 'bar',
     barMaxWidth: 28,
-    data: results.map((r, i) => ({
+    data: results.map((r, _) => ({
       value: parseFloat(r.result.annualTotalKwh.toFixed(1)),
       itemStyle: { color: SetupColoursUtils.getSetupColour(r.colourIndex) },
     })),
@@ -175,7 +175,7 @@ export const buildDailyBarOption = (
   series: [{
     type: 'bar',
     barMaxWidth: 22,
-    data: results.map((r, i) => ({
+    data: results.map((r, _) => ({
       value: parseFloat(
         r.result.panels
           .reduce((s, p) => s + p.energyKwh[month][day].reduce((a, b) => a + b, 0), 0)
