@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TFunction } from 'i18next';
 import { useAppStore } from '../store/AppStore';
@@ -7,6 +8,8 @@ import { SetupColoursUtils } from '../utils/SetupColoursUtils';
 import { AnnualTab } from './results/AnnualTab';
 import { MonthlyTab } from './results/MonthlyTab';
 import { DailyTab } from './results/DailyTab';
+import { ReportModal } from './results/ReportModal';
+import { generatePdfReport, ReportDay, PdfLabels } from '../pdf/PdfReportGenerator';
 
 import iconResetWidth from '../assets/icons/panel-reset-width.svg';
 import iconExpand from '../assets/icons/panel-expand.svg';
@@ -16,19 +19,12 @@ import iconMinimise from '../assets/icons/panel-minimise.svg';
 const RESULTS_PANEL_DEFAULT_WIDTH = 420;
 const RESULTS_PANEL_MIN_WIDTH = 280;
 
-/**
- * Formats a Unix timestamp (ms) as a short locale date+time string.
- */
 const formatComputedAt = (ts: number): string =>
   new Date(ts).toLocaleString(undefined, {
     month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
 
-/**
- * Builds the compact label shown in the simulation run selector dropdown.
- * Format: "2026 · 60 min · Geometric · 16p1t · 3 setup(s)"
- */
 const buildGroupLabel = (
   g: { year: number; intervalMinutes: number; irradianceSource: string; density: number; threshold: number; setups: { setupId: string }[] },
   t: TFunction,
@@ -42,25 +38,76 @@ const buildGroupLabel = (
   });
 
 /**
- * The results panel floats as a fixed overlay on the right side of the screen,
- * on top of the 3D canvas. The drag handle on the left edge lets the user resize
- * it freely. Three icon buttons in the header control panel state:
- *  - Reset width (double arrow): restores default width
- *  - Expand/collapse (corner arrows): toggles fullscreen (100vw)
- *  - Minimise (arrow-to-edge): collapses the panel; a vertical restore button appears
+ * Builds the compact simulation code embedded in the PDF filename.
+ * Example: "2025-60m-openmeteo-16p1t-4s"
+ */
+const buildSimulationCode = (
+  g: { year: number; intervalMinutes: number; irradianceSource: string; density: number; threshold: number; setups: { setupId: string }[] },
+): string => {
+  const src = g.irradianceSource === 'open-meteo' ? 'openmeteo' : g.irradianceSource;
+  return `${g.year}-${g.intervalMinutes}m-${src}-${g.density * g.density}p${g.threshold}t-${g.setups.length}s`;
+};
+
+/**
+ * Resolves all strings the PDF generator needs from i18next, so the pure-TS
+ * generator has no React or i18next dependency.
+ */
+const buildPdfLabels = (t: TFunction): PdfLabels => ({
+  title: t('report.pdfTitle'),
+  subtitle: t('report.pdfSubtitle'),
+  appName: t('title'),
+  labelLocation: t('report.labelLocation'),
+  labelTimezone: t('report.labelTimezone'),
+  labelYear: t('simulationResultsPanel.paramYear'),
+  labelInterval: t('simulationResultsPanel.paramInterval'),
+  labelIrradiance: t('simulationResultsPanel.paramIrradiance'),
+  labelPointsPerZone: t('simulationResultsPanel.paramDensity'),
+  labelThreshold: t('simulationResultsPanel.paramThreshold'),
+  labelSetupsCompared: t('report.labelSetupsCompared'),
+  labelComputedAt: t('simulationResultsPanel.paramComputedAt'),
+  sectionAnnual: t('resultsPanel.tabAnnual'),
+  sectionMonthly: t('resultsPanel.tabMonthly'),
+  sectionDaily: t('resultsPanel.tabDaily'),
+  sectionHeatmaps: t('report.sectionHeatmaps'),
+  subLegend: t('report.subLegend'),
+  subAnnualTotals: t('report.subAnnualTotals'),
+  subMonthlyTotals: t('report.subMonthlyTotals'),
+  subHourlyProduction: t('report.subHourlyProduction'),
+  subHourlyData: t('report.subHourlyData'),
+  subDailyTotals: t('report.subDailyTotals'),
+  colHour: t('report.colHour'),
+  colSetup: t('report.colSetup'),
+  monthsShort: t('months.short', { returnObjects: true }) as string[],
+  unitMin: t('report.unitMin'),
+  irradianceGeometric: t('simulationResultsPanel.irradiance_geometric'),
+  irradianceOpenMeteo: t('simulationResultsPanel.irradiance_open-meteo'),
+  zeroSymbol: '—',
+});
+
+/**
+ * Report generation state:
+ *  idle       — nothing happening; button is enabled
+ *  modal      — ReportModal open; user selecting optional days
+ *  generating — generatePdfReport running; button disabled with feedback
+ */
+type ReportState = 'idle' | 'modal' | 'generating';
+
+/**
+ * The results panel floats as a fixed overlay on the right side of the screen.
  *
- * Below the header a parameter summary row shows the key attributes of the
- * selected simulation run (year, interval, irradiance, density, threshold).
- * Below that, the shared setup legend lets the user toggle individual setups
- * on/off across all charts simultaneously.
+ * Report generation flow:
+ *  1. User clicks "Generate PDF Report" → state = modal
+ *  2. User confirms (optionally with selected days) → state = generating
+ *  3. generatePdfReport (async, uses ECharts SSR + svg2pdf) runs → state = idle
  *
- * The panel reacts to changes in IndexedDB simulation results via the
- * simulationResultsChanged event on the application event bus, handled inside
- * useResultsPanel. It does not need to observe isRunning directly.
+ * All chart rendering happens inside generatePdfReport via ECharts SSR —
+ * no React chart components are mounted for capture.
  */
 export function SimulationResultsPanel() {
   const { t } = useTranslation();
   const isRunning = useAppStore(s => s.isRunning);
+  const timezone = useAppStore(s => s.timezone);
+  const config = useAppStore(s => s.config);
 
   const {
     groups,
@@ -90,8 +137,47 @@ export function SimulationResultsPanel() {
     dragDirection: 'left',
   });
 
+  const [reportState, setReportState] = useState<ReportState>('idle');
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  const handleReportClick = () => {
+    setReportError(null);
+    setReportState('modal');
+  };
+
+  const handleModalCancel = () => setReportState('idle');
+
+  const handleModalGenerate = async (days: ReportDay[]) => {
+    if (!selectedGroup || !config) return;
+    setReportState('generating');
+    setReportError(null);
+    try {
+      await generatePdfReport({
+        results: loadedResults,
+        year: selectedGroup.year,
+        intervalMinutes: selectedGroup.intervalMinutes,
+        irradianceSource: selectedGroup.irradianceSource,
+        density: selectedGroup.density,
+        threshold: selectedGroup.threshold,
+        latitude: config.site.location.latitude,
+        longitude: config.site.location.longitude,
+        timezone,
+        appVersion: __APP_VERSION__,
+        computedAt: selectedGroup.computedAt,
+        selectedDays: days,
+        labels: buildPdfLabels(t),
+        simulationCode: buildSimulationCode(selectedGroup),
+      });
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReportState('idle');
+    }
+  };
+
   const hasGroups = groups.length > 0;
   const hasActiveSetups = activeSetupIds.size > 0;
+  const canGenerateReport = loadedResults.length > 0 && !isLoadingResults && reportState === 'idle';
 
   const tabLabels: { key: typeof activeTab; label: string }[] = [
     { key: 'annual', label: t('resultsPanel.tabAnnual') },
@@ -101,6 +187,14 @@ export function SimulationResultsPanel() {
 
   return (
     <>
+      {reportState === 'modal' && selectedGroup && (
+        <ReportModal
+          year={selectedGroup.year}
+          onGenerate={handleModalGenerate}
+          onCancel={handleModalCancel}
+        />
+      )}
+
       {panelState === 'minimised' && (
         <button
           className="results-overlay__restore-btn"
@@ -216,14 +310,29 @@ export function SimulationResultsPanel() {
                     <span className="results-panel__param-key">{t('simulationResultsPanel.paramComputedAt')}</span>
                     <span className="results-panel__param-value">{formatComputedAt(selectedGroup.computedAt)}</span>
                   </div>
+
+                  {canGenerateReport && (
+                    <button
+                      className="results-panel__report-btn"
+                      onClick={handleReportClick}
+                      title={t('report.generateTitle')}
+                    >
+                      {t('report.generateBtn')}
+                    </button>
+                  )}
+                  {reportState === 'generating' && (
+                    <p className="results-panel__report-status">{t('report.generating')}</p>
+                  )}
+                  {reportError && (
+                    <p className="results-panel__report-error">{reportError}</p>
+                  )}
                 </div>
 
                 <div className="results-panel__legend">
                   {selectedGroup.setups.map(setup => (
                     <button
                       key={setup.setupId}
-                      className={`results-panel__legend-item${activeSetupIds.has(setup.setupId) ? '' : ' results-panel__legend-item--inactive'
-                        }`}
+                      className={`results-panel__legend-item${activeSetupIds.has(setup.setupId) ? '' : ' results-panel__legend-item--inactive'}`}
                       onClick={() => toggleSetup(setup.setupId)}
                       title={setup.setupLabel}
                     >
@@ -267,7 +376,11 @@ export function SimulationResultsPanel() {
                         <MonthlyTab results={loadedResults} activeSetupIds={activeSetupIds} />
                       )}
                       {activeTab === 'daily' && (
-                        <DailyTab results={loadedResults} activeSetupIds={activeSetupIds} />
+                        <DailyTab
+                          results={loadedResults}
+                          activeSetupIds={activeSetupIds}
+                          timezone={timezone}
+                        />
                       )}
                     </>
                   )}

@@ -14,26 +14,18 @@ interface Props {
   day: number | null;
 }
 
-/** Maximum size in pixels for a single panel cell (longer axis). */
 const MAX_PANEL_PX = 88;
 
-/**
- * Interpolates between green (0% shade) → yellow (50%) → red (100%).
- */
 const shadeToColour = (fraction: number): string => {
   const clamped = Math.max(0, Math.min(1, fraction));
   if (clamped < 0.5) {
     const t = clamped * 2;
     return `rgb(${Math.round(46 + 195 * t)},${Math.round(204 - 8 * t)},${Math.round(113 - 98 * t)})`;
-  } else {
-    const t = (clamped - 0.5) * 2;
-    return `rgb(${Math.round(241 - 10 * t)},${Math.round(196 - 120 * t)},${Math.round(15 + 45 * t)})`;
   }
+  const t = (clamped - 0.5) * 2;
+  return `rgb(${Math.round(241 - 10 * t)},${Math.round(196 - 120 * t)},${Math.round(15 + 45 * t)})`;
 };
 
-/**
- * Computes the average shade fraction for one zone over the selected time window.
- */
 const zoneAvgShade = (
   zoneShadeFraction: number[][][][],
   zIdx: number,
@@ -54,10 +46,6 @@ const zoneAvgShade = (
   return count > 0 ? total / count : 0;
 };
 
-/**
- * Returns CSS layout (top/left/width/height as percentage strings) for each
- * zone within a panel cell, matching the physical zone disposition.
- */
 const zoneCssLayouts = (
   zones: number,
   disposition: ZonesDisposition,
@@ -73,6 +61,7 @@ interface PanelGroup {
   arrayIndex: number;
   rows: number;
   cols: number;
+  /** grid[row][col], row 0 = southernmost */
   grid: (PanelAnnualData | null)[][];
 }
 
@@ -102,18 +91,18 @@ function PanelCell({ panel, month, day }: {
   month: number | null;
   day: number | null;
 }) {
-  // Derive cell pixel size from actual panel proportions, capped at MAX_PANEL_PX.
   const { actualWidth: w, actualHeight: h } = panel;
   const scale = MAX_PANEL_PX / Math.max(w, h);
   const cellW = Math.round(w * scale);
   const cellH = Math.round(h * scale);
-
   const layouts = zoneCssLayouts(panel.zones, panel.zonesDisposition);
 
   return (
     <div
-      style={{ width: cellW, height: cellH, position: 'relative', borderRadius: 2,
-        overflow: 'hidden', flexShrink: 0, border: '1px solid rgba(0,0,0,0.18)' }}
+      style={{
+        width: cellW, height: cellH, position: 'relative', borderRadius: 2,
+        overflow: 'hidden', flexShrink: 0, border: '1px solid rgba(0,0,0,0.18)',
+      }}
       title={panel.panelId}
     >
       {layouts.map((layout, zIdx) => {
@@ -127,10 +116,12 @@ function PanelCell({ panel, month, day }: {
               position: 'absolute', top: layout.top, left: layout.left,
               width: layout.width, height: layout.height,
               background: shadeToColour(fraction), boxSizing: 'border-box',
-              borderBottom: panel.zones > 1 && panel.zonesDisposition === 'horizontal' && zIdx < panel.zones - 1
-                ? '0.5px solid rgba(0,0,0,0.12)' : undefined,
-              borderRight: panel.zones > 1 && panel.zonesDisposition === 'vertical' && zIdx < panel.zones - 1
-                ? '0.5px solid rgba(0,0,0,0.12)' : undefined,
+              borderBottom:
+                panel.zones > 1 && panel.zonesDisposition === 'horizontal' && zIdx < panel.zones - 1
+                  ? '0.5px solid rgba(0,0,0,0.12)' : undefined,
+              borderRight:
+                panel.zones > 1 && panel.zonesDisposition === 'vertical' && zIdx < panel.zones - 1
+                  ? '0.5px solid rgba(0,0,0,0.12)' : undefined,
               display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
             }}
             title={`${zoneId} — ${pct}% shaded`}
@@ -162,21 +153,30 @@ function SingleHeatmap({ result, month, day }: {
   );
   const setupColour = SetupColoursUtils.getSetupColour(result.colourIndex);
 
+  // Arrays rendered in reverse order: highest arrayIndex at top, array 0 at bottom.
+  const reversedGroups = [...groups].reverse();
+
   return (
     <div className="heatmap-container" style={{ borderTop: `3px solid ${setupColour}` }}>
-      <div style={{ fontFamily: 'sans-serif', fontSize: '0.75rem', fontWeight: 700,
+      <div style={{
+        fontFamily: 'sans-serif', fontSize: '0.75rem', fontWeight: 700,
         color: setupColour, marginBottom: 4, maxWidth: '144px', whiteSpace: 'nowrap',
-        overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${result.result.setupLabel}`}>
+        overflow: 'hidden', textOverflow: 'ellipsis',
+      }} title={result.result.setupLabel}>
         {result.result.setupLabel}
       </div>
 
-      {groups.map(group => (
+      {reversedGroups.map(group => (
         <div key={group.arrayIndex} className="heatmap-array">
           <div className="heatmap-array__label">
             {t('resultsPanel.array')} {group.arrayIndex}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {Array.from({ length: group.rows }, (_, rowIdx) => (
+            {/*
+             * Rows rendered in reverse: highest rowIdx at top (northernmost),
+             * rowIdx 0 at bottom (southernmost), matching physical orientation.
+             */}
+            {Array.from({ length: group.rows }, (_, i) => group.rows - 1 - i).map(rowIdx => (
               <div key={rowIdx} style={{ display: 'flex', gap: 3 }}>
                 {Array.from({ length: group.cols }, (_, colIdx) => {
                   const panel = group.grid[rowIdx][colIdx];
@@ -200,10 +200,11 @@ function SingleHeatmap({ result, month, day }: {
 }
 
 /**
- * Renders one heat map per active setup. Each panel cell reflects the physical
- * panel proportions (portrait vs landscape, capped at MAX_PANEL_PX). Each zone
- * within the panel is a distinct coloured sub-cell using `zoneShadeFraction`
- * data from the simulation result. Arrays are labelled with their 0-based index.
+ * Renders one heat map per active setup.
+ *
+ * Array ordering: highest arrayIndex at top, array 0 at bottom.
+ * Row ordering within each array: highest rowIdx at top (northernmost panels),
+ * row 0 at bottom (southernmost panels), matching the physical installation.
  */
 export function PanelShadowHeatmap({ results, activeSetupIds, month, day }: Props) {
   const visible = results.filter(r => activeSetupIds.has(r.setupId));

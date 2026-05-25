@@ -11,7 +11,6 @@
   pointer-events: none;
 }
 
-/* Drag handle */
 .results-overlay__drag-handle {
   width: 6px;
   height: 100%;
@@ -29,7 +28,6 @@
   background: rgba(76, 175, 80, 0.5);
 }
 
-/* Panel body */
 .results-overlay__panel {
   background: var(--color-bg-panel-light);
   height: 100%;
@@ -168,13 +166,55 @@
   text-align: right;
 }
 
+/* ── Generate report button ────────────────────────────────────────────────── */
+
+.results-panel__report-btn {
+  margin-top: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--color-accent-green-dark);
+  border-radius: 6px;
+  background: var(--color-accent-green-dark);
+  color: #fff;
+  cursor: pointer;
+  font-family: sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.15s ease;
+  align-self: stretch;
+}
+
+.results-panel__report-btn:hover:not(:disabled) {
+  background: #388e3c;
+  border-color: #388e3c;
+}
+
+.results-panel__report-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.results-panel__report-status {
+  margin: 2px 0 0;
+  font-family: sans-serif;
+  font-size: 0.75rem;
+  color: var(--color-accent-green-dark);
+  font-style: italic;
+}
+
+.results-panel__report-error {
+  margin: 2px 0 0;
+  font-family: sans-serif;
+  font-size: 0.75rem;
+  color: #c62828;
+  background: rgba(198, 40, 40, 0.08);
+  border: 1px solid rgba(198, 40, 40, 0.25);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
 /* ── Setup legend ──────────────────────────────────────────────────────────── */
 
-/*
- * The legend uses min-height instead of a fixed height so it expands
- * gracefully when multiple rows are needed. Vertical padding ensures the
- * content never touches the top or bottom border even with one or more rows.
- */
 .results-panel__legend {
   min-height: var(--results-panel-legend-height);
   display: flex;
@@ -310,7 +350,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Section headings within tabs ──────────────────────────────────────────── */
@@ -343,7 +385,7 @@
   overflow: hidden;
 }
 
-/* ── Time selectors row (month / day pickers with nav buttons) ─────────────── */
+/* ── Time selectors row ────────────────────────────────────────────────────── */
 
 .results-selector-row {
   display: flex;
@@ -370,10 +412,6 @@
   cursor: pointer;
 }
 
-/*
- * Prev / next navigation buttons flanking the month and day selectors.
- * Uses a larger click area than the icon size to improve usability.
- */
 .results-nav-btn {
   width: 26px;
   height: 26px;
@@ -425,7 +463,6 @@
   text-transform: uppercase;
 }
 
-/* Scale bar shown below each heat map */
 .heatmap-scale {
   display: flex;
   align-items: center;
@@ -440,4 +477,159 @@
   height: 8px;
   border-radius: 4px;
   background: linear-gradient(to right, #2ecc71, #f1c40f, #e74c3c);
+}
+
+/* ── Report generation modal ───────────────────────────────────────────────── */
+
+.report-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.report-modal {
+  background: #fff;
+  border-radius: 12px;
+  padding: 28px;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+  font-family: sans-serif;
+}
+
+.report-modal__title {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #1a1a1a;
+  font-weight: 700;
+}
+
+.report-modal__description {
+  font-size: 0.85rem;
+  color: #555;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.report-modal__day-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-modal__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #444;
+  white-space: nowrap;
+}
+
+.report-modal__day-picker select {
+  padding: 5px 8px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background: #fff;
+  font-size: 0.8rem;
+  color: #222;
+  cursor: pointer;
+}
+
+.report-modal__add-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--color-accent-green-dark);
+  border-radius: 5px;
+  background: var(--color-accent-green-dark);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.report-modal__add-btn:hover {
+  background: #388e3c;
+}
+
+.report-modal__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.report-modal__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: #e8f5e9;
+  border: 1px solid #a5d6a7;
+  font-size: 0.78rem;
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+.report-modal__chip-remove {
+  border: none;
+  background: transparent;
+  color: #2e7d32;
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.1s ease;
+}
+
+.report-modal__chip-remove:hover {
+  opacity: 1;
+}
+
+.report-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.report-modal__btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-family: sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.report-modal__btn--secondary {
+  border: 1px solid #ccc;
+  background: #f5f5f5;
+  color: #444;
+}
+
+.report-modal__btn--secondary:hover {
+  background: #e8e8e8;
+  border-color: #bbb;
+}
+
+.report-modal__btn--primary {
+  border: 1px solid var(--color-accent-green-dark);
+  background: var(--color-accent-green-dark);
+  color: #fff;
+}
+
+.report-modal__btn--primary:hover {
+  background: #388e3c;
+  border-color: #388e3c;
 }

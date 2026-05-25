@@ -17,11 +17,12 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 9. [Shadow detection — Raycasting + BVH](#shadow-detection--raycasting--bvh)
 10. [Annual simulation](#annual-simulation)
 11. [Results panel](#results-panel)
-12. [Settings sidebar](#settings-sidebar)
-13. [Application layout](#application-layout)
-14. [Timezone and DST](#timezone-and-dst)
-15. [Known limitations](#known-limitations)
-16. [Lessons learned](#lessons-learned)
+12. [PDF report generation](#pdf-report-generation)
+13. [Settings sidebar](#settings-sidebar)
+14. [Application layout](#application-layout)
+15. [Timezone and DST](#timezone-and-dst)
+16. [Known limitations](#known-limitations)
+17. [Lessons learned](#lessons-learned)
 
 ---
 
@@ -37,9 +38,12 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Supports two irradiance sources: a geometric clear-sky model (no network required) and Open-Meteo (real hourly DNI + DHI + temperature data fetched from a free, CORS-compatible API, cached in IndexedDB). The Open-Meteo model applies full Plane-of-Array irradiance decomposition and panel temperature correction.
 - Applies configurable system losses (inverter efficiency, wiring loss) to the DC output of every time step.
 - Displays annual results in a floating resizable overlay panel with three tabs (Annual, Monthly, Daily), each containing a Production section (ECharts charts) and a Shadows section (per-panel zone heat maps). A shared legend lets the user toggle setups on/off and all charts update accordingly.
-- Provides a settings sidebar (gear icon, top-left) with cache management (list and delete cached simulation results and Open-Meteo irradiance data) and backup export/import.
-- Exports a complete backup (config + all simulation results) to a gzip-compressed `.solarsim` file and imports it back, fully replacing the active configuration and all cached results while preserving Open-Meteo irradiance data.
-- Validates the wall configuration and displays a prominent warning listing the exact config-space coordinate triples that form non-90° or non-180° angles.
+- Daily hourly charts display hours in the installation's local timezone (DST-aware) rather than UTC.
+- Shadow heat maps display arrays and rows in physical orientation: highest array index at top, array 0 at bottom; within each array, highest row index at top (northernmost), row 0 at bottom (southernmost).
+- Generates a downloadable PDF report from any simulation run, including annual totals, monthly grouped bar chart, optional per-day hourly charts, and panel shadow heat maps drawn directly in the PDF.
+- Provides a settings sidebar (gear icon, top-left) with cache management and backup export/import.
+- Exports a complete backup (config + all simulation results) to a gzip-compressed `.solarsim` file and imports it back.
+- Validates the wall configuration and displays a prominent warning for non-90°/non-180° angles.
 - Displays the application version in the footer, sourced from `package.json` at build time.
 
 ---
@@ -56,6 +60,7 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 | Date handling        | `dayjs` + UTC/timezone plugins  | Timezone-aware date arithmetic           |
 | Global state         | `zustand`                       | Minimal, selector-based store            |
 | Charts               | `echarts` + `echarts-for-react` | Bar, radar, line charts; interactive tooltips |
+| PDF generation       | `jspdf` + `svg2pdf.js`          | Client-side PDF with ECharts SSR charts and drawn primitives |
 | i18n                 | `i18next` + `react-i18next`     | EN/ES support, lazy-loaded JSON          |
 | Build                | Vite                            | Fast HMR, static output for GitHub Pages |
 
@@ -113,10 +118,19 @@ src/
 │   └── OpenMeteoIrradianceProvider.ts
 │
 ├── backup/
-│   ├── BackupConstants.ts         # File extension, MIME type, version, filename encoder
-│   ├── BackupTypes.ts             # BackupFile interface
-│   ├── BackupExporter.ts          # Serialise → compress → download
-│   └── BackupImporter.ts          # Read → decompress → parse → migrate → validate
+│   ├── BackupConstants.ts
+│   ├── BackupTypes.ts
+│   ├── BackupExporter.ts
+│   └── BackupImporter.ts
+│
+├── pdf/
+│   ├── PdfTypes.ts           # ReportDay, PdfLabels, GenerateReportOptions
+│   ├── PdfLayout.ts          # Cursor, page geometry constants, colour palette, font helper
+│   ├── PdfPrimitives.ts      # drawSectionHeading, drawSubHeading, drawLegend, drawTable, drawScaleBar
+│   ├── PdfCharts.ts          # ECharts SSR, svg2pdf embedding, timezone helpers, option builders
+│   ├── PdfHeatmap.ts         # drawSetupHeatmap, shade colour helpers, zone average
+│   ├── PdfSections.ts        # drawCover, drawAnnualSection, drawHeatmapsSection, drawMonthlySection, drawDailySection
+│   └── PdfReportGenerator.ts # Public entry point: generatePdfReport, footer, filename
 │
 ├── converter/
 │   ├── ThreeConverter.ts
@@ -127,24 +141,27 @@ src/
 │   └── slices/
 │       ├── ConfigSlice.ts
 │       ├── RenderSlice.ts
-│       ├── SimulationSlice.ts     # resultsVersion counter added
+│       ├── SimulationSlice.ts
 │       └── SettingsSlice.ts
 │
 ├── hooks/
 │   ├── useBVH.ts
 │   ├── useShadowSampler.ts
 │   ├── useAnnualSimulation.ts
-│   ├── useResultsPanel.ts         # subscribes to resultsVersion for post-import reload
+│   ├── useResultsPanel.ts
 │   └── useResizablePanel.ts
 │
 ├── db/
 │   ├── DbUtils.ts
-│   ├── SimulationCache.ts         # getAllResults and replaceAllResults added
+│   ├── SimulationCache.ts
 │   ├── IrradianceCache.ts
 │   └── IrradianceCacheManager.ts
 │
 ├── workers/
 │   └── AnnualSimulation.worker.ts
+│
+├── events/
+│   └── AppEvents.ts
 │
 └── utils/
     ├── HashUtils.ts
@@ -177,8 +194,9 @@ src/
         ├── AnnualBarChart.tsx
         ├── MonthlyRadarChart.tsx
         ├── MonthlyLineChart.tsx
-        ├── DailyLineChart.tsx
-        └── PanelShadowHeatmap.tsx
+        ├── DailyLineChart.tsx       # UTC→local timezone correction on X axis
+        ├── PanelShadowHeatmap.tsx   # Array N at top, array 0 at bottom; row N at top, row 0 at bottom
+        └── ReportModal.tsx
 ```
 
 ---
@@ -191,15 +209,7 @@ All domain objects are plain immutable value objects created by dedicated factor
 
 ### Pre-computed render data with discriminated unions
 
-Railing shapes use a discriminated union (`kind: 'square' | 'cylinder' | 'half-cylinder'`). The factory computes the exact Three.js geometry args for each shape and stores them in the render data. `Scene.tsx` switches on `kind` to render the correct geometry without any cast.
-
-### CylinderGeometry for half-cylinders
-
-Three.js `CylinderGeometry` constructor signature:
-```
-(radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength)
-```
-A half-cylinder uses `openEnded=true` and `thetaLength=Math.PI`.
+Railing shapes use a discriminated union (`kind: 'square' | 'cylinder' | 'half-cylinder'`). The factory computes the exact Three.js geometry args for each shape.
 
 ### Density changes do not rebuild panel geometry
 
@@ -207,168 +217,104 @@ A half-cylinder uses `openEnded=true` and `thetaLength=Math.PI`.
 
 ### Two independent density/threshold parameters
 
-- `renderDensity` / `renderThreshold` — live in `RenderSlice`. Control the 3D view and instant production readout.
-- `simulationDensity` / `simulationThreshold` — live in `SimulationSlice`. Used exclusively when launching an annual simulation run.
+- `renderDensity` / `renderThreshold` — `RenderSlice`. Control the 3D view and instant production readout.
+- `simulationDensity` / `simulationThreshold` — `SimulationSlice`. Used exclusively for annual simulation runs.
 
 ### Store architecture — slice pattern with facade
 
-Four domain slices composed behind a single `useAppStore` facade:
+Four domain slices: `ConfigSlice`, `RenderSlice`, `SimulationSlice`, `SettingsSlice`. Composed behind a single `useAppStore` facade. Slices never import each other.
 
-- `ConfigSlice` — raw config and site geometry.
-- `RenderSlice` — 3D view state (date, timezone, active setup, sun, density, threshold).
-- `SimulationSlice` — annual simulation parameters and lifecycle. Also holds `resultsVersion`, a monotonically increasing counter incremented after a backup import so that `useResultsPanel` reloads its data without a full page refresh.
-- `SettingsSlice` — settings sidebar open/close state.
+### Settings sidebar and results panel as fixed overlays
 
-Each slice is a pure function. Slices never import each other.
-
-### Settings sidebar as a fixed overlay
-
-The settings sidebar is a `position: fixed` overlay on the left edge, consistent with the results panel on the right. The Three.js canvas always fills `100vw × 100vh` — no layout reflow occurs when the sidebar opens or closes. A semi-transparent backdrop covers the rest of the viewport; clicking it closes the sidebar. The gear button disappears while the sidebar is open (the sidebar provides its own close button), preventing a visual overlap.
-
-### RenderControls top offset when gear button is visible
-
-The gear button (40px height) and `RenderControls` share the same `top: 20px; left: 20px` anchor. When the sidebar is closed and the gear button is visible, `RenderControls` receives an `offsetTop` prop that applies the `.controls-panel--offset-top` CSS modifier, shifting the panel 68px from the top (button height + 8px gap). When the sidebar is open the gear button is hidden and `RenderControls` returns to its default position.
+Both are `position: fixed` overlays. The Three.js canvas always fills `100vw × 100vh`. No layout reflow on open/close.
 
 ### Shared IndexedDB helper
 
-`SimulationCache` and `IrradianceCache` previously duplicated an inline `openDb` Promise wrapper. The shared helper `src/db/DbUtils.ts` exposes a single `openDatabase(name, version, onUpgrade)` function that both modules delegate to. The public APIs of both cache modules are unchanged.
+`SimulationCache` and `IrradianceCache` both delegate to `src/db/DbUtils.ts`.
 
 ### Simulation group building — shared utility
 
-The logic that groups flat per-setup cache entries into logical simulation runs (by year, interval, irradiance source, density, threshold) lives in `src/utils/SimulationGroupUtils.ts` as `buildSimulationGroups`. Both `useResultsPanel` (results panel dropdown) and `SettingsSidebar` (cache management UI) import it, ensuring the two views always apply the same grouping rules without duplicating logic.
+`src/utils/SimulationGroupUtils.ts` → `buildSimulationGroups`. Used by both `useResultsPanel` and `SettingsSidebar`.
 
 ### `useResizablePanel` — parametrised hook
 
-The hook that manages drag-to-resize, minimise, and fullscreen for a floating panel is parametrised with `defaultWidth` and `minWidth` options. This lets it be reused for both the results panel (right edge, 420px default) and the settings sidebar (left edge, 440px default) without any code duplication.
-
-### Cache management split between provider and manager modules
-
-`IrradianceCache` handles get/set for the simulation pipeline and has no knowledge of the UI. `IrradianceCacheManager` exposes list/delete operations used exclusively by the settings sidebar. This separation keeps the provider module free of UI concerns and avoids coupling the simulation pipeline to display logic.
-
-### Cache UI — two-level grouping for simulation results
-
-The settings sidebar displays simulation results in two levels: simulation run (group header, showing year/interval/irradiance/density/threshold and a delete-group button) and individual setups within that run (each with its own delete button). This mirrors the grouping in the results panel dropdown and lets users delete an entire simulation run in one click rather than deleting each setup individually.
-
-### App version sourced from package.json at build time
-
-`vite.config.ts` defines `__APP_VERSION__` as a compile-time constant populated from `process.env.npm_package_version` (set by npm at build time). `DeveloperFooter` reads this global directly. No runtime fetch, environment variable lookup, or separate version file is needed. The ambient declaration in `src/vite-env.d.ts` gives TypeScript full type safety for the global.
+Manages drag-to-resize, minimise, and fullscreen. Parametrised with `defaultWidth`, `minWidth`, `dragDirection`. Used for both the results panel and the settings sidebar.
 
 ### Backup export/import — `src/backup/`
 
-All backup-related logic lives in a dedicated `src/backup/` module with four files:
-
-- **`BackupConstants.ts`**: the backup file extension (`.solarsim`), MIME type, current schema version, and filename-encoding helpers. All values that appear in more than one place (extension, version) are defined here as named constants so a single edit propagates everywhere.
-- **`BackupTypes.ts`**: the `BackupFile` interface — version number, export timestamp, config, and simulation results.
-- **`BackupExporter.ts`**: reads all simulation results from IndexedDB via `SimulationCache.getAllResults`, assembles the `BackupFile`, serialises it to JSON, compresses it with the native `CompressionStream` API (gzip), and triggers a browser download. Falls back to uncompressed JSON when `CompressionStream` is unavailable.
-- **`BackupImporter.ts`**: reads the file, auto-detects gzip by inspecting the magic bytes (`0x1f 0x8b`), decompresses with the native `DecompressionStream` API, parses JSON, applies version migrations, and validates the required fields. Returns a plain `ImportResult` object; the caller is responsible for applying it to the store and IndexedDB.
-
-### Backup filename encoding
-
-Latitude and longitude values are encoded into a filename-safe string to avoid dots, signs, and other special characters:
-
-- Sign: `+` → `p` (positive), `-` → `n` (negative)
-- Decimal point: `.` → `d`
-
-A UTC timestamp (`YYYYMMDDHHMMSS`) is appended after the coordinates so that multiple backups from the same installation on the same day produce distinct filenames without requiring manual renaming.
-
-Example: `40.6252, -4.0141` at `2026-05-13 14:30:22 UTC` → `solarsim-p40d6252-n4d0141-20260513143022.solarsim`
+`BackupExporter` + `BackupImporter`. Native `CompressionStream`/`DecompressionStream` for gzip, auto-detected on import via magic bytes.
 
 ### Event bus — `src/events/AppEvents.ts`
 
-Cross-component communication between parts of the app that do not share a direct parent-child relationship is handled via `mitt`, a minimal typed event emitter (200 bytes). The single event is:
+`mitt`-based typed event bus. `simulationResultsChanged` event decouples IndexedDB mutations from UI reloads.
 
-- **`simulationResultsChanged`** `{ autoSelect: boolean }` — emitted whenever IndexedDB simulation results change. `autoSelect: true` causes `useResultsPanel` to select the first available group after reloading (used after a simulation completes or a backup is imported). `autoSelect: false` preserves the current selection if it still exists (used after individual cache deletions).
+### PDF report — `src/pdf/` module
 
-Emitters:
-- `useAnnualSimulation` — emits after each setup result is persisted (including cache hits), with `autoSelect: true`.
-- `SettingsSidebar` (cache delete / clear all / backup import) — emits after each IndexedDB mutation with the appropriate `autoSelect` value.
+The PDF module is split into seven focused files with clear single responsibilities:
 
-Subscribers:
-- `useResultsPanel` — reloads the group list and optionally auto-selects the first group.
-- `SimulationCacheSection` inside `SettingsSidebar` — reloads its local group list so the cache management UI stays in sync without requiring the sidebar to be closed and reopened.
+| File | Responsibility |
+|------|---------------|
+| `PdfTypes.ts` | Public interfaces (`ReportDay`, `PdfLabels`, `GenerateReportOptions`) |
+| `PdfLayout.ts` | `Cursor` class, page geometry constants, colour palette, `font` helper, `setupLetter` |
+| `PdfPrimitives.ts` | `drawSectionHeading`, `drawSubHeading`, `drawLegend`, `drawTable`, `drawScaleBar` |
+| `PdfCharts.ts` | ECharts SSR init/dispose, `embedSvg` (svg2pdf), timezone helpers, all option builders |
+| `PdfHeatmap.ts` | `drawSetupHeatmap`, shade colour interpolation, zone average computation |
+| `PdfSections.ts` | `drawCover`, `drawAnnualSection`, `drawHeatmapsSection`, `drawMonthlySection`, `drawDailySection` |
+| `PdfReportGenerator.ts` | Public entry point: `generatePdfReport`, footer rendering, filename encoding |
 
-Using an event bus instead of a store value means events represent things that *happen* rather than state that *is*, which is the correct semantic for one-shot notifications.
+External callers import only from `PdfReportGenerator.ts`, which re-exports the public types. The internal sub-modules are implementation details.
 
-### Backup schema versioning
+**Generation flow** is controlled by a three-state machine in `SimulationResultsPanel`:
 
-`BackupFile.version` starts at 1. `CURRENT_BACKUP_VERSION` in `BackupConstants.ts` is the single source of truth. The importer maintains a `migrations` map (key = version to migrate FROM, value = transformation function) and applies all applicable migrations in sequence before consuming the data. Importing a backup with a version higher than `CURRENT_BACKUP_VERSION` throws a descriptive error instructing the user to update the app.
+```
+idle → modal → generating → idle
+```
+
+`generatePdfReport` is called directly as an `async` function — no React components are mounted for chart capture.
+
+### Charts in PDF — ECharts SSR + svg2pdf.js
+
+ECharts v5.3+ supports SSR rendering: `echarts.init(null, null, { renderer: 'svg', ssr: true })` produces an SVG string without any DOM or canvas dependency. `svg2pdf.js` converts that SVG string into native jsPDF vector content. This combination is fully synchronous on the ECharts side (SSR) and Promise-based on the pdf side (svg2pdf).
+
+### Heat maps in PDF — jsPDF primitives
+
+Panel shadow heat maps are drawn directly as `doc.rect()` calls with computed fill colours — no DOM capture, no `html2canvas`. The colour computation is a pure function of the shade fraction, identical to the web UI. Each zone cell shows the zone ID in the upper half and the shade percentage (bold, larger font) in the lower half, both scaled proportionally to the cell size.
+
+### Heat map physical orientation
+
+Both the web UI (`PanelShadowHeatmap.tsx`) and the PDF (`PdfHeatmap.ts`) display arrays and rows in physical order:
+- **Arrays**: highest index at top, array 0 at bottom (southernmost).
+- **Rows within an array**: highest row index at top (northernmost), row 0 at bottom (southernmost).
+
+### Daily chart timezone correction
+
+Energy data is stored in UTC hour buckets. `DailyLineChart` and the PDF daily section both:
+1. Compute `offsetHours` using `Intl.DateTimeFormat` at noon UTC on the selected date (DST-safe).
+2. Derive `startUtc = (-offsetHours + 24) % 24` — the UTC hour corresponding to local midnight.
+3. Use sequential local labels `00:00–23:00` on the X axis.
+4. Map each X position `i` to UTC bucket `(startUtc + i) % 24`.
+
+This means `data[i]` = production at local hour `i`, so 08:00–20:00 local always shows correctly regardless of timezone or DST.
+
+### PDF multilingual support
+
+All strings (section headings, table headers, parameter labels, month abbreviations) are resolved by `SimulationResultsPanel` via `t()` and passed to `generatePdfReport` as a `PdfLabels` object. The generator has no i18next dependency and is trivially testable.
+
+### PDF filename convention
+
+```
+solarsim-{lat}-{lon}-sim-{simulationCode}-{YYYYMMDDHHMMSS}.pdf
+```
+
+`{simulationCode}` mirrors the results panel run selector label in compact form, e.g. `2025-60m-openmeteo-16p4t-4s`. Coordinates use the same `p`/`n`/`d` encoding as `.solarsim` backup filenames.
 
 ### Panel world-space positioning pipeline
 
-Panels are rendered outside the site `<group>` (which carries the site azimuth rotation) so their raycasting sample points are already in absolute world space. The positioning pipeline is:
-
-1. **`SiteFactory`** computes `swCornerX`, `swCornerZ` and `azimuthRad`. These are stored on the `Site` domain object alongside the system loss parameters.
-
-2. **`SolarPanelArrayFactory`** converts the array's config-space position into Three.js world space.
-
-3. **`SolarPanelFactory`** places each panel relative to the array SW corner using axis vectors derived from the array's own azimuth. `temperatureCoefficient` and `noct` are resolved by preferring the array-level value over the setup-level `panelDefaults` value, following the same override pattern used for `peakPower`, `zones`, etc.
-
-4. **`ThreeConverter`** applies `order: 'YXZ'` Euler rotations so that inclination is always around the panel's own East-West axis.
-
-### Azimuth sign convention — unified across site and panels
-
-Both the site azimuth and panel array azimuths follow the same convention: 0 = South, positive = East, negative = West.
+Panels are rendered outside the site `<group>` so raycasting sample points are already in absolute world space. `temperatureCoefficient` and `noct` are resolved with defaults in `SolarPanelConverter`.
 
 ### Irradiance provider — Strategy pattern
 
-The `IrradianceProvider` interface (`src/irradiance/IrradianceProvider.ts`) defines a single method:
-
-```ts
-getHourlyWeatherData(lat, lon, year): Promise<HourlyWeatherData | null>
-```
-
-`HourlyWeatherData` carries three parallel `Float32Array` arrays indexed by UTC hour-of-year:
-- `dni` — Direct Normal Irradiance (W/m²)
-- `dhi` — Diffuse Horizontal Irradiance (W/m²)
-- `temperature` — ambient temperature at 2 m (°C), or null when unavailable
-
-Concrete implementations:
-
-- `GeometricIrradianceProvider` — returns `null` immediately. The worker uses the geometric clear-sky model.
-- `OpenMeteoIrradianceProvider` — fetches all three variables from Open-Meteo in a single request, caches in IndexedDB (DB version 2), returns a `HourlyWeatherData` object.
-
-Adding a new source requires only a new module and a new `case` in the factory — the worker, store, and simulation engine are unaffected.
-
-### Irradiance data — main thread fetch, not worker fetch
-
-Fetching on the main thread and distributing via `postMessage` is simpler and avoids one fetch per worker. Each worker receives its own `slice()` copy of each `Float32Array` so zero-copy buffer transfer does not detach the shared array.
-
-### Open-Meteo — why this API
-
-- Free for non-commercial use, no API key, no registration.
-- Explicit CORS support from browser origins — hard requirement for a static GitHub Pages app.
-- Single call returns a full year of hourly DNI, DHI, and temperature data.
-- Data goes back to 1940 via the historical archive endpoint.
-
-PVGIS was evaluated and rejected: its API explicitly blocks AJAX requests from browser origins. A proxy or backend would be required, which contradicts the no-backend constraint.
-
-### Irradiance cache — DB version 2, permanent, no TTL
-
-`IrradianceCache` uses `DB_VERSION = 2`. The upgrade handler drops the old store (which contained only DNI) and creates a fresh one. Historical reanalysis data is immutable, so no TTL is needed. Store size is bounded by distinct (source, location, year) combinations.
-
-### Panel-level temperature and NOCT — resolved with defaults in SolarPanelConverter
-
-`SolarPanel` carries `temperatureCoefficient` and `noct` as optional fields. `SolarPanelConverter.toSimulationPanelData` resolves them with well-known defaults (−0.004 /°C and 45°C) when absent. This keeps the domain model free of hard-coded fallback knowledge — the factory chain simply passes through whatever the config provides.
-
-### System losses applied after string mismatch
-
-`SystemLossParams` (inverter efficiency, wiring loss, ground albedo) is built from `Site` in `useAnnualSimulation` and transferred in the worker payload as a constant object. The combined loss factor `inverterEfficiency × (1 − wiringLoss)` is computed once at the start of `runSimulation` and applied to each panel's effective power after the string mismatch algorithm, matching the physical order of DC→AC conversion.
-
-### Panel shadow heat map — zone-level cells
-
-Panels grouped by `arrayIndex`, sized proportionally to `actualWidth × actualHeight`, with zone sub-cells coloured by `zoneShadeFraction`.
-
-### Physical geometry in `PanelAnnualData`
-
-Carries `orientation`, `actualWidth`, `actualHeight`, `zones`, `zonesDisposition` so the results panel can render correct heat maps without the original config.
-
-### Results panel — floating resizable overlay
-
-The results panel is a `position: fixed` overlay that sits on top of the 3D canvas. The canvas always fills `100vw × 100vh`.
-
-### CSS fragmentation into modules
-
-`src/styles/index.css` is a barrel import of six focused files: `base.css`, `layout.css`, `controls.css`, `simulation.css`, `results-panel.css`, and `settings-sidebar.css`.
+`IrradianceProvider` interface with two implementations: `GeometricIrradianceProvider` (returns null) and `OpenMeteoIrradianceProvider` (fetches DNI, DHI, temperature; caches in IndexedDB v2).
 
 ---
 
@@ -398,36 +344,22 @@ West ─────┼───── East (+X)
 
 | Value | Meaning |
 |-------|---------|
-| 0     | Panel face / site orientation points due South |
-| > 0   | Rotated toward East (clockwise from South, viewed from above) |
-| < 0   | Rotated toward West (anticlockwise from South, viewed from above) |
-
-### Array position reference point
-
-`position: [x, z]` is the offset of the SW corner of the array from the SW corner of the site, measured in the site's rotated reference frame.
+| 0     | South-facing |
+| > 0   | Rotated toward East |
+| < 0   | Rotated toward West |
 
 ### Panel indexing within an array
 
-| Index | Axis      | 0 = …             | Increases toward … |
-|-------|-----------|-------------------|--------------------|
-| `row` | North–South | southernmost row | North (up the slope) |
-| `col` | West–East   | westernmost column | East |
+| Index | 0 = … | Increases toward … |
+|-------|-------|--------------------|
+| `row` | southernmost row | North |
+| `col` | westernmost column | East |
 
 ---
 
 ## 2D geometry — normals, dot product, cross product
 
-### Unit normal to a segment
-
-```
-n = (-dz, dx) / |d|    (left-hand perpendicular)
-```
-
-### Cross product (2D)
-
-```
-cross(a, b) = a.x·b.z − a.z·b.x
-```
+Unit normal to a segment: `n = (-dz, dx) / |d|` (left-hand perpendicular).
 
 ---
 
@@ -465,102 +397,55 @@ cross(a, b) = a.x·b.z − a.z·b.x
 
 ### Site-level physical properties
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `groundAlbedo` | number (0–1) | 0.20 | Fraction of GHI reflected by the ground toward the panels. Typical: 0.20 concrete, 0.25 light gravel, 0.10 dark membrane. |
-| `inverterEfficiency` | number (0–1) | 0.97 | Rated DC/AC conversion efficiency of the inverter. |
-| `wiringLoss` | number (0–1) | 0.02 | Fraction of DC power lost in cables between panels and inverter. |
+| Field | Default | Description |
+|-------|---------|-------------|
+| `groundAlbedo` | 0.20 | Fraction of GHI reflected toward panels |
+| `inverterEfficiency` | 0.97 | DC/AC conversion efficiency |
+| `wiringLoss` | 0.02 | DC cable loss fraction |
 
-All three default to industry-standard values when omitted, so existing `config.json` files without these fields continue to work correctly.
+### Panel-level physical properties
 
-### Panel-level physical properties (in `panelDefaults` and `arrays[*]`)
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `temperatureCoefficient` | number (per °C) | −0.004 | Relative change in peak power per °C above 25°C. Available in the panel datasheet as "Pmax temperature coefficient". |
-| `noct` | number (°C) | 45 | Nominal Operating Cell Temperature. Used to estimate cell temperature from ambient temperature and POA. Available in the panel datasheet. |
-
-Both can be set at the `panelDefaults` level and overridden per `arrays[*]` entry, following the same pattern as `peakPower`, `zones`, etc. A setup-level override (`setup.temperatureCoefficient`) is also supported to apply a uniform value across all arrays without editing each entry.
-
-### `azimuth` — site and panel arrays
-
-- `0` = South-facing
-- Positive = rotated toward **East** (clockwise from South, viewed from above)
-- Negative = rotated toward **West**
-
-### `position` — panel array placement
-
-`position: [x, z]` is the distance in metres from the SW corner of the site to the SW corner of the array, measured in the site's rotated frame.
-
-### `arraysSettings` — per-panel overrides
-
-Each entry targets one specific panel by its `array` / `row` / `col` address (all 0-based) and overrides `hasOptimizer` and/or `string`.
+| Field | Default | Description |
+|-------|---------|-------------|
+| `temperatureCoefficient` | −0.004 /°C | Relative change in peak power per °C above 25°C |
+| `noct` | 45°C | Nominal Operating Cell Temperature |
 
 ---
 
 ## Solar production model
 
-### 1. Sun position
-
-`suncalc.getPosition(date, lat, lon)` → altitude and azimuth → Three.js direction vector.
-
-### 2. Geometric model (no weather data)
+### 1. Geometric model
 
 ```
 incidenceFactor = max(0, dot(sunDirection, panelNormal))
 basePower (kW)  = peakPower (Wp) / 1000 × incidenceFactor
 ```
 
-This is the clear-sky model used when the irradiance source is set to "Geometric". It produces an upper-bound estimate because it assumes perfect clear-sky conditions at all times with no temperature penalty.
-
-### 3. POA irradiance model (Open-Meteo source)
-
-When real weather data is available, the worker computes Plane-of-Array (POA) irradiance using the isotropic sky decomposition model:
+### 2. POA irradiance model (Open-Meteo)
 
 ```
 POA_direct  = DNI × cos(angle_of_incidence)
 POA_diffuse = DHI × (1 + cos(tilt)) / 2
 POA_albedo  = GHI × groundAlbedo × (1 − cos(tilt)) / 2
-
-GHI = DNI × cos(solar_zenith) + DHI
-
-basePower (kW) = peakPower (Wp) / 1000 × (POA / 1000)
+GHI         = DNI × cos(solar_zenith) + DHI
+basePower   = peakPower / 1000 × (POA / 1000)
 ```
 
-where 1000 W/m² is the Standard Test Condition (STC) reference irradiance. The isotropic sky model treats diffuse irradiance as uniform across the sky hemisphere — a well-established simplification that is accurate enough for residential comparison purposes.
-
-### 4. Temperature correction (Open-Meteo source)
-
-When ambient temperature data is available, a temperature factor is applied to `basePower`:
+### 3. Temperature correction
 
 ```
-T_cell = T_ambient + (NOCT − 20) / 800 × POA
-temperatureFactor = max(0, 1 + γ × (T_cell − 25))
-
-basePower_corrected = basePower × temperatureFactor
+T_cell         = T_ambient + (NOCT − 20) / 800 × POA
+tempFactor     = max(0, 1 + γ × (T_cell − 25))
+basePower_corr = basePower × tempFactor
 ```
 
-where:
-- `NOCT` = Nominal Operating Cell Temperature (°C), from the panel datasheet
-- `γ` = temperature coefficient of maximum power (per °C, negative for Si panels)
-- 25°C = STC reference temperature
-- 800 W/m² = NOCT reference irradiance
+### 4. Panel output with bypass diodes and string mismatch
 
-### 5. Panel output with bypass diodes
+Without optimizers: `basePower × (n−k)/n × 0.9` (10% mismatch penalty for k shaded zones out of n).
+With optimizer: `basePower × (n−k)/n` (proportional, no penalty).
+String mismatch: efficiency limited by the least-efficient panel in the string (unless any panel has an optimizer).
 
-| Shaded zones | Without optimizer                                   | With optimizer        |
-|--------------|-----------------------------------------------------|-----------------------|
-| 0            | `basePower`                                         | `basePower`           |
-| k out of n   | `basePower × (n−k)/n × 0.9` (10% mismatch penalty) | `basePower × (n−k)/n` |
-| all          | 0                                                   | 0                     |
-
-### 6. String mismatch
-
-Without optimizers, string efficiency is limited by the least-efficient panel (series current constraint). With at least one optimizer in the string, every panel is treated as independent.
-
-### 7. System losses
-
-After string mismatch, a system loss factor is applied to all panel powers simultaneously:
+### 5. System losses
 
 ```
 systemLossFactor = inverterEfficiency × (1 − wiringLoss)
@@ -571,258 +456,148 @@ effectivePower   = stringPower × systemLossFactor
 
 ## Shadow detection — Raycasting + BVH
 
-### Why BVH?
-
-`three-mesh-bvh` pre-organises each geometry into a Bounding Volume Hierarchy. A ray tests O(log n) nodes instead of O(n) triangles.
-
-### How it is set up
-
-1. Patch Three.js once (`useBVH.ts`).
-2. Build the BVH (`useBVH` hook): rebuilt only when `rebuildKey` changes.
-3. Cast rays (`useShadowSampler` hook): `firstHitOnly = true`.
-4. Avoid GC pressure: all scratch objects allocated once at module scope.
-
-### `three-mesh-bvh` override
-
-`package.json` contains `"overrides": { "three-mesh-bvh": "^0.9.9" }`.
+`three-mesh-bvh` pre-organises each geometry into a BVH. `firstHitOnly = true` stops traversal after the first hit. All scratch `Vector3`/`Matrix4` objects allocated once at module scope.
 
 ---
 
 ## Annual simulation
 
-### Overview
-
-Steps through every N-minute interval of a full year for all setups simultaneously. Accumulates energy and shade fractions per panel broken down by month, day-of-month, and hour-of-day.
-
 ### Irradiance sources
 
-| Source | Description | Network | Variables | Interval support | Year support |
-|--------|-------------|---------|-----------|-----------------|--------------|
-| `geometric` | Clear-sky model, sun geometry only | None | — | 15, 30, 60 min | Current + past 5 years |
-| `open-meteo` | POA model with DNI, DHI, temperature | Required | DNI, DHI, T_ambient | 60 min only | Past 5 years only |
-
-### Weather data flow
-
-```
-Main thread                              Worker
-────────────────────────────────────     ─────────────────────────────────────
-createIrradianceProvider(source)
-  → getHourlyWeatherData(lat, lon, year) receives weatherData: {dni, dhi, temperature} | null
-  → HourlyWeatherData {                  per time step:
-      dni: Float32Array,                   hourIdx = utcHourOfYear(date, year)
-      dhi: Float32Array,                   POA = direct + diffuse + albedo
-      temperature: Float32Array            T_cell from NOCT model
-    }                                      temperatureFactor = 1 + γ(T_cell − 25)
-  → slice() per worker copy               basePower × (POA/1000) × tempFactor
-  → zero-copy postMessage                 × systemLossFactor
-```
-
-### IndexedDB — two independent databases
-
-| Database | Version | Store | Key | Contents |
-|----------|---------|-------|-----|----------|
-| `solar-simulator` | 1 | `simulation-results` | `cacheKey` hash | Full `SetupAnnualResult` |
-| `solar-simulator-irradiance` | 2 | `irradiance-cache` | `{source}:{lat4dp}:{lon4dp}:{year}` | DNI + DHI + temperature arrays |
-
-Both databases use the shared `openDatabase` helper from `src/db/DbUtils.ts`.
-
-### Worker architecture
-
-**Worker pool:** `max(1, hardwareConcurrency − 1)` concurrent workers.
-
-**Progress reporting:** every 100 steps, EMA-smoothed ETA.
-
-### Cache key and hashing
-
-Keyed by `SimulationCacheKey` (setup geometry hash, density, threshold, interval, location, year, irradiance source). FNV-1a 32-bit hash.
+| Source | Network | Interval | Year support |
+|--------|---------|----------|--------------|
+| `geometric` | None | 15, 30, 60 min | Current + past 5 years |
+| `open-meteo` | Required | 60 min only | Past 5 years only |
 
 ### Output data model
 
 ```
-PanelAnnualData.energyKwh         [month][dayOfMonth][hourOfDay]
+PanelAnnualData.energyKwh         [month][dayOfMonth][hourOfDay]   (UTC)
 PanelAnnualData.shadeFraction     [month][dayOfMonth][hourOfDay]
 PanelAnnualData.zoneShadeFraction [zone][month][dayOfMonth][hourOfDay]
 ```
+
+All hour indices are UTC. The UI converts to local time using `Intl.DateTimeFormat`.
+
+### IndexedDB
+
+| Database | Version | Store | Key |
+|----------|---------|-------|-----|
+| `solar-simulator` | 1 | `simulation-results` | `cacheKey` hash |
+| `solar-simulator-irradiance` | 2 | `irradiance-cache` | `{source}:{lat4dp}:{lon4dp}:{year}` |
 
 ---
 
 ## Results panel
 
-### Layout and interaction
+Fixed overlay, right edge. Drag handle resizes between 280px and 100vw. Three icon buttons: reset width, fullscreen, minimise.
 
-Fixed overlay on the right edge. Drag handle resizes between 280px and 100vw. Three icon buttons: reset width, fullscreen, minimise.
+### Daily chart timezone
 
-### Content organisation
+`DailyLineChart` derives `startUtc = (-offsetHours + 24) % 24` via `Intl.DateTimeFormat` at noon UTC on the selected date. Sequential local labels `00:00–23:00` are used on the X axis; data is rotated so `data[i]` = production at local hour `i`.
 
-Parameter summary strip → setup legend → three tabs (Annual, Monthly, Daily). Each tab has a Production section and a Shadows section.
+### Heat map physical orientation
 
-### Setup colour consistency
+Arrays: highest index at top, array 0 at bottom. Rows within each array: highest row index at top, row 0 at bottom. Both the web UI and the PDF heat maps use this convention.
 
-`src/utils/SetupColoursUtils.ts` — fixed eight-colour palette, assigned by rank within the simulation group.
+---
 
-### Panel shadow zone heat map
+## PDF report generation
 
-Physical panel grid, proportional cell sizes, bypass-diode zones coloured by shade fraction (green → yellow → red). Zone IDs match the 3D view labels.
+### Trigger and flow
+
+"Generate PDF Report" button in the results panel parameter strip → `ReportModal` (optional day selection) → `generatePdfReport` (async).
+
+State machine: `idle → modal → generating → idle`.
+
+### Module structure — `src/pdf/`
+
+Seven files with single responsibilities (see Architecture decisions above). External callers import only from `PdfReportGenerator.ts`.
+
+### Document structure
+
+| Pages | Content |
+|-------|---------|
+| 1 | Cover: simulation parameters, computed-at date |
+| 2 | Annual: legend + horizontal bar chart (ECharts SSR) + totals table |
+| 3..N | Heat maps: one page per setup, arrays highest-index-first, rows highest-index-first |
+| N+1 | Monthly: legend + grouped bar chart (ECharts SSR) + monthly totals table |
+| N+2..M | Daily (one pair per selected day): page 1 = charts, page 2 = hourly table |
+
+### Charts — ECharts SSR + svg2pdf.js
+
+`echarts.init(null, null, { renderer: 'svg', ssr: true })` → `renderToSVGString()` → `doc.svg(svgEl, {...})`. No DOM, no canvas, no timing dependencies.
+
+### Heat maps — jsPDF primitives
+
+`doc.rect()` with shade-interpolated fill colours. Zone cells show zone ID (upper half, smaller font) and shade percentage (lower half, bold larger font), both scaled to cell size.
+
+### PDF filename
+
+```
+solarsim-{lat}-{lon}-sim-{year}-{interval}m-{source}-{density}p{threshold}t-{setups}s-{YYYYMMDDHHMMSS}.pdf
+```
+
+### Multilingual support
+
+All strings resolved via `t()` in `SimulationResultsPanel` and passed as `PdfLabels`. The generator has no i18next dependency.
 
 ---
 
 ## Settings sidebar
 
-A gear icon button (⚙) at the top-left of the screen opens a settings sidebar. The sidebar is a `position: fixed` overlay on the left edge, with a semi-transparent backdrop that closes it on click. While the sidebar is open the gear button is hidden; the sidebar provides its own close button (✕).
-
-The sidebar is user-resizable: a drag handle on its right edge lets the user widen or narrow it freely (minimum 300px). The chosen width persists for the session; refreshing the page resets it to the 440px default. The sidebar body scrolls vertically when content exceeds the viewport height.
-
-The sidebar contains three collapsible sections:
-
-### Cache management
-
-**Simulation results** are shown in two levels. The first level is the simulation run (identified by year, interval, irradiance source, density, and threshold — the same label as in the results panel dropdown), with a trash button to delete the entire run. The second level lists the individual setup entries within that run, each with their own trash button. A "Delete all simulation results" button at the bottom clears everything. Deletions are reflected immediately in the results panel group selector.
-
-**Irradiance data (Open-Meteo)** entries are flat (one row per source/location/year combination), each with an individual delete button and a "Delete all" button.
+Three collapsible sections: Cache management, Export / Import, Configuration (placeholder).
 
 ### Export / Import
 
-The Export/Import section provides two actions:
-
-**Export backup**: reads the current config from the store and all simulation results from IndexedDB, serialises them into a `BackupFile` JSON structure, compresses with gzip (native `CompressionStream` API, falls back to uncompressed if unavailable), and triggers a browser download. The filename encodes the installation coordinates and a timestamp (date + time) in a human-readable, filesystem-safe format:
-
-```
-solarsim-p40d6252-n4d0141-20260513143022.solarsim
-```
-
-where `p`/`n` indicate positive/negative, `d` represents the decimal point, and the timestamp is `YYYYMMDDHHMMSS` in UTC. Including the time component allows multiple backups to be created on the same day without filename collisions.
-
-**Load backup**: opens a file picker restricted to `.solarsim` files. The selected file is auto-detected as gzip or plain JSON (magic bytes check), decompressed if needed, parsed, migrated to the current schema version, and validated. On success:
-1. All simulation results in IndexedDB are replaced with those from the backup (in a single transaction).
-2. The config from the backup is applied to the store via `loadConfig`, which rebuilds the 3D scene, the active setup, and the sun state.
-3. `invalidateResults()` increments `resultsVersion` in `SimulationSlice`, causing `useResultsPanel` to reload the results panel group list from the updated IndexedDB.
-
-Open-Meteo irradiance data in IndexedDB is not affected by either operation.
-
-### Configuration
-
-Placeholder for a future in-app config editor.
+Export: gzip-compressed `.solarsim` backup (config + simulation results). Import: replaces config and results, preserves irradiance cache.
 
 ---
 
 ## Application layout
 
-Canvas fills `100vw × 100vh`. All UI elements are absolute or fixed overlays:
-
-- `RenderControls` — absolute, top-left. Shifts down by 68px when the gear button is visible.
-- `SimulationControls` — absolute, bottom-left.
-- `DeveloperFooter` — fixed, bottom-right. Displays app version, developer name, Ko-fi link.
-- `SettingsSidebarButton` — absolute, top-left (hidden when sidebar is open).
-- `SettingsSidebar` — fixed overlay, left edge (rendered only when open).
-- `SimulationResultsPanel` — fixed overlay, right edge.
-- `AngleWarningBanner` — absolute, top-centre.
+Canvas fills `100vw × 100vh`. All UI elements are fixed or absolute overlays. `ReportModal` uses z-index 200 (above all other overlays).
 
 ---
 
 ## Timezone and DST
 
-`makeDateInTimezone(year, month, day, hour, minute, timezone)` uses `dayjs.tz(isoString, timezone)`. The annual simulation worker uses UTC timestamps directly via `Date.UTC()`.
+`makeDateInTimezone` uses `dayjs.tz`. The worker uses `Date.UTC()`. The UI converts UTC hour buckets to local time using `Intl.DateTimeFormat` at noon UTC on the selected date — a DST-safe reference point.
 
 ---
 
 ## Known limitations
 
 - **90° wall angles only**: non-right angles produce incorrect post placement.
-- **Open-Meteo resolution is hourly**: sub-hourly intervals are only available with the geometric model.
-- **Isotropic sky model**: the diffuse component assumes uniform sky radiance. More accurate models (Perez, Hay-Davies) require additional inputs not available from Open-Meteo's free tier.
-- **Single inclination per setup for POA**: the worker uses the mean inclination across all arrays. Setups with mixed inclinations will have a small systematic error in the diffuse and albedo components.
-- **Rail extensions end in a 90° cut**: a 45° mitre would require custom `BufferGeometry`.
+- **Open-Meteo resolution is hourly**: sub-hourly intervals only available with geometric model.
+- **Isotropic sky model**: diffuse component assumes uniform sky radiance.
+- **Single inclination per setup for POA**: worker uses mean inclination across all arrays.
 - **Drag-to-resize is mouse-only**: touch not supported.
-- **Daily charts display UTC hours**: hourly energy data is accumulated in UTC buckets; the interactive daily charts do not yet shift hours to the configured installation timezone.
 
 ---
 
 ## Lessons learned
 
-### Fixed overlay panels preserve canvas size
+### PDF module decomposition
 
-Making both the results panel and the settings sidebar `position: fixed` overlays means the Three.js `<Canvas>` always occupies `100vw × 100vh`. No layout reflow, no canvas resize, no Three.js camera recalculation on panel open/close.
+An 800-line monolithic generator file is replaced by seven focused modules. The split follows natural seams: types, layout primitives, drawing primitives, chart rendering, heat map drawing, section composition, and the public entry point. Each file is independently readable and the dependency graph is a strict DAG with no cycles.
 
-### Separation of provider and manager for cached data
+### ECharts SSR eliminates timing and DOM dependencies
 
-The irradiance get/set API (`IrradianceCache`) and the irradiance list/delete API (`IrradianceCacheManager`) are deliberately split into two modules. The provider module is used in the simulation hot path and must remain free of UI imports. The manager module is imported only by the settings sidebar.
+`echarts.init(null, null, { renderer: 'svg', ssr: true })` works in any JavaScript context without a DOM. Combined with `svg2pdf.js`, it produces crisp vector charts in the PDF without any timing hacks or off-screen React components.
 
-### Shared IndexedDB helper eliminates boilerplate
+### UTC array rotation for timezone-correct hourly display
 
-A single `openDatabase(name, version, onUpgrade)` function replaces two identical `openDb` wrappers. The cost of the abstraction is near zero (one extra function call) and the benefit is that any future change to the Promise-wrapping pattern is applied in one place.
+Rotating the 24-element UTC array by `startUtc = (-offset + 24) % 24` positions and pairing it with sequential local labels `00:00–23:00` is both correct and simple. The key insight: the X axis always shows local hours sequentially; it is the data that is rotated, not the labels. Using `Intl.DateTimeFormat` at noon UTC (not midnight) as the DST reference avoids ambiguity during clock changes.
 
-### Compile-time version constant avoids runtime indirection
+### Heat map physical orientation
 
-Reading the app version from `package.json` at build time via Vite's `define` is simpler and more reliable than a runtime fetch of a JSON file or reading from `import.meta.env`.
+Inverting both the array order (highest index first) and the row order within each array (highest index first) gives the correct physical orientation: the observer sees the installation from the south, with the southernmost panels (row 0, array 0) at the bottom. A single `.reverse()` on the array list and an `Array.from({length: rows}, (_, i) => rows-1-i)` index mapping for rows achieves both without any coordinate transformation.
 
-### Full POA irradiance is essential for realistic estimates
+### PdfLabels interface decouples generator from i18next
 
-Using only DNI severely underestimates production because it ignores the diffuse sky component, which can represent 20–35% of annual yield. The isotropic sky model adds DHI and albedo components with minimal complexity.
+Resolving all strings in the React layer and passing them as a plain object means the PDF generator is pure TypeScript with no framework dependency. It can be tested with a simple mock object.
 
-### Temperature correction is significant in summer
+### Cursor top-convention eliminates layout overlaps
 
-At 35°C ambient with 1000 W/m² irradiance, a panel with NOCT=45°C reaches ~60°C, giving a ~14% loss for γ=−0.004/°C.
-
-### NOCT model is accurate enough for residential comparison
-
-The NOCT model is a linear approximation that ignores wind speed and mounting configuration. For a tool whose primary goal is comparing setups, the NOCT model provides sufficient relative accuracy.
-
-### System losses must be applied after string mismatch
-
-Applying inverter and wiring losses before the string mismatch algorithm would understate the bottleneck effect. The correct order is: shading → bypass diode → string mismatch → system losses.
-
-### Factory pattern for irradiance sources
-
-The Strategy pattern via an `IrradianceProvider` interface keeps the simulation worker and engine completely agnostic of how irradiance data is obtained. Adding a new source is a two-file change.
-
-### Fetch once on the main thread, distribute to workers
-
-Resolving weather data centrally before worker launch avoids duplicate network requests and keeps the worker free of I/O concerns.
-
-### Zero-copy buffer transfer with per-worker copies
-
-`Float32Array.slice()` produces an independent copy for each worker. Without this, the first `postMessage` with `transfer` would detach the shared buffer, corrupting subsequent workers.
-
-### Panel geometry for simulation must be independent of the active viewport
-
-Static geometry (walls, railings) from the live scene + panel frames built procedurally per setup from `SimulationPanelData`. `userData.isPanelFrame = true` on rendered panel frames allows clean exclusion from the static batch.
-
-### IndexedDB schema versioning
-
-Bumping `DB_VERSION` to 2 and dropping the old store in `onupgradeneeded` ensures all clients migrate cleanly.
-
-### No TTL needed when only immutable data is cached
-
-All cached irradiance data covers completed past years — historical reanalysis is immutable.
-
-### Simulation results grouped at display time, not at storage time
-
-IndexedDB stores one entry per setup. Grouping at display time keeps the storage model simple.
-
-### Physical geometry propagated through simulation pipeline
-
-Carrying `orientation`, `actualWidth`, `actualHeight`, `zones`, `zonesDisposition` from `SolarPanel` through `SimulationPanelData` into `PanelAnnualData` means the results panel can render proportionally correct heat maps without access to the original config.
-
-### Native browser APIs for compression
-
-`CompressionStream` / `DecompressionStream` are available in all modern browsers without any additional dependency. Auto-detecting gzip by inspecting magic bytes (`0x1f 0x8b`) makes the importer robust to backups created by older app versions that fell back to uncompressed export.
-
-### resultsVersion counter decouples import from useResultsPanel
-
-Incrementing a version counter in the store after a backup import is a minimal, targeted signal. `useResultsPanel` subscribes to it and reloads, with no need for the importer to know about the hook's internal state or call any hook directly.
-
-### Backup filename encoding preserves human readability
-
-Encoding latitude/longitude as `p40d6252` (positive 40.6252) and `n4d0141` (negative 4.0141) avoids filesystem-unsafe characters while remaining immediately interpretable. A purely numeric encoding (`406252`) would lose the sign and make it harder to correlate filenames with installation locations.
-
-### SVG icons as files, not inline or Unicode
-
-Icon SVGs live in `src/assets/icons/` and are imported as URLs by Vite.
-
-### Zone ID scheme: 0-based throughout
-
-Zone IDs follow `a{arr}-r{row}-c{col}-z{zone}` using 0-based indices everywhere.
-
-### `arraysSettings` applied after geometry, not during construction
-
-Per-panel overrides are applied in `PanelSetupFactory.create` as a post-processing pass over the fully built arrays.
+Defining `cursor.y` as the top of the next block (not a text baseline) makes every drawing call composable: receive top, draw downward, advance by exact height. There is no arithmetic between baseline offsets and block heights, which was the root cause of the table header overlap bug.
