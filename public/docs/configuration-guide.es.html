@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guía de configuración — Solar Panel Shadow Simulator</title>
+  <style>
+    :root {
+      --green: #2e7d32;
+      --green-light: #4caf50;
+      --green-bg: #f1f8f1;
+      --border: #ddd;
+      --code-bg: #f5f5f5;
+      --warn-bg: #fff8e1;
+      --warn-border: #f9a825;
+      --note-bg: #e3f2fd;
+      --note-border: #1565c0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #222;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    .page { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+    h1 { font-size: 2rem; color: var(--green); border-bottom: 3px solid var(--green-light); padding-bottom: 12px; }
+    h2 { font-size: 1.4rem; color: var(--green); margin-top: 56px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    h3 { font-size: 1.1rem; margin-top: 32px; color: #333; }
+    a { color: var(--green); }
+    code { font-family: 'Courier New', monospace; font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+    pre {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 16px 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.84em;
+      line-height: 1.6;
+    }
+    pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+    .note { background: var(--note-bg); border-left: 4px solid var(--note-border); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+    .warn { background: var(--warn-bg); border-left: 4px solid var(--warn-border); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+    .note p, .warn p { margin: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; }
+    th { background: var(--green-bg); color: var(--green); text-align: left; padding: 8px 12px; border: 1px solid var(--border); }
+    td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .toc { background: var(--green-bg); border: 1px solid #c8e6c9; border-radius: 8px; padding: 16px 24px; margin: 32px 0; }
+    .toc h2 { margin-top: 0; font-size: 1rem; border: none; padding: 0; }
+    .toc ol { margin: 0; padding-left: 20px; }
+    .toc li { margin: 4px 0; }
+    .example-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 16px 0; }
+    @media (max-width: 640px) { .example-grid { grid-template-columns: 1fr; } }
+    .example-card { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .example-card__title { background: var(--green-bg); padding: 8px 14px; font-weight: 600; font-size: 0.85rem; color: var(--green); border-bottom: 1px solid #c8e6c9; }
+    .example-card__body { padding: 12px; }
+    .svg-caption { text-align: center; font-size: 0.82rem; color: #666; margin-top: 6px; }
+    svg text { font-family: -apple-system, sans-serif; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Guía de configuración</h1>
+  <p>Esta guía explica cada sección del fichero <code>config.json</code> utilizado por el Solar Panel Shadow Simulator. Puedes editar la configuración directamente en la aplicación desde <strong>Ajustes → Configuración</strong>.</p>
+
+  <div class="toc">
+    <h2>Contenido</h2>
+    <ol>
+      <li><a href="#location">Ubicación de la instalación</a></li>
+      <li><a href="#azimuth">Azimut de la instalación</a></li>
+      <li><a href="#wall-points">Perímetro de la instalación (puntos de muro)</a></li>
+      <li><a href="#wall-defaults">Configuración predeterminada de muros</a></li>
+      <li><a href="#wall-overrides">Sobreescritura de muros individuales</a></li>
+      <li><a href="#railing">Barandillas</a></li>
+      <li><a href="#system-losses">Pérdidas del sistema</a></li>
+      <li><a href="#setups">Configuraciones (setups)</a></li>
+      <li><a href="#panel-defaults">Propiedades predeterminadas de paneles</a></li>
+      <li><a href="#arrays">Arrays de paneles</a></li>
+      <li><a href="#panel-overrides">Sobreescritura de paneles individuales</a></li>
+      <li><a href="#full-example">Ejemplo completo</a></li>
+    </ol>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="location">1. Ubicación de la instalación</h2>
+
+  <p>El objeto <code>location</code> define las coordenadas GPS de la instalación. Se utilizan para calcular la posición del sol (altitud y acimut) en cada paso de tiempo simulado.</p>
+
+  <pre><code>"location": {
+  "latitude": 40.6252,
+  "longitude": -4.0141
+}</code></pre>
+
+  <table>
+    <tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr>
+    <tr><td><code>latitude</code></td><td>número</td><td>Grados decimales. Positivo = Norte, negativo = Sur. Rango −90 a 90.</td></tr>
+    <tr><td><code>longitude</code></td><td>número</td><td>Grados decimales. Positivo = Este, negativo = Oeste. Rango −180 a 180.</td></tr>
+  </table>
+
+  <p>Define también el campo <code>timezone</code> con el identificador de zona horaria IANA correspondiente a la instalación:</p>
+
+  <pre><code>"timezone": "Europe/Madrid"</code></pre>
+
+  <p>Puedes encontrar tu identificador de zona horaria en la <a href="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones" target="_blank">lista de zonas horarias de la base de datos TZ de Wikipedia</a>. Ejemplos habituales: <code>Europe/Madrid</code>, <code>Europe/London</code>, <code>America/New_York</code>, <code>Asia/Tokyo</code>.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="azimuth">2. Azimut de la instalación</h2>
+
+  <p>El <code>azimuth</code> de la instalación rota todo el conjunto (muros, barandillas, paneles) en el plano horizontal. Representa la dirección hacia la que apunta la <strong>cara frontal de la terraza</strong>, medida en grados desde el Sur.</p>
+
+  <table>
+    <tr><th>Valor</th><th>Significado</th></tr>
+    <tr><td><code>0</code></td><td>Orientación sur (sin rotación)</td></tr>
+    <tr><td><code>+45</code></td><td>Rotado 45° hacia el Este (orientación Sur-Este)</td></tr>
+    <tr><td><code>-45</code></td><td>Rotado 45° hacia el Oeste (orientación Sur-Oeste)</td></tr>
+    <tr><td><code>90</code></td><td>Orientación Este</td></tr>
+    <tr><td><code>-90</code></td><td>Orientación Oeste</td></tr>
+    <tr><td><code>180</code> o <code>-180</code></td><td>Orientación Norte</td></tr>
+  </table>
+
+  <div class="example-grid">
+    <div class="example-card">
+      <div class="example-card__title">Orientación sur — azimuth: 0</div>
+      <div class="example-card__body">
+        <svg viewBox="0 0 160 160" width="100%" xmlns="http://www.w3.org/2000/svg">
+          <rect x="55" y="55" width="50" height="50" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+          <text x="80" y="85" text-anchor="middle" font-size="10" fill="#2e7d32">Terraza</text>
+          <line x1="80" y1="55" x2="80" y2="20" stroke="#e53935" stroke-width="2" marker-end="url(#arr)"/>
+          <text x="80" y="14" text-anchor="middle" font-size="10" fill="#e53935">Sur</text>
+          <text x="80" y="150" text-anchor="middle" font-size="9" fill="#888">Paneles orientados al Sur</text>
+          <defs><marker id="arr" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#e53935"/></marker></defs>
+        </svg>
+      </div>
+    </div>
+    <div class="example-card">
+      <div class="example-card__title">Orientación Sur-Este — azimuth: 45</div>
+      <div class="example-card__body">
+        <svg viewBox="0 0 160 160" width="100%" xmlns="http://www.w3.org/2000/svg">
+          <g transform="rotate(45,80,80)">
+            <rect x="55" y="55" width="50" height="50" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+            <text x="80" y="85" text-anchor="middle" font-size="10" fill="#2e7d32">Terraza</text>
+          </g>
+          <line x1="80" y1="80" x2="108" y2="38" stroke="#e53935" stroke-width="2" marker-end="url(#arr2)"/>
+          <text x="112" y="34" text-anchor="middle" font-size="9" fill="#e53935">SE</text>
+          <text x="80" y="150" text-anchor="middle" font-size="9" fill="#888">Paneles orientados al Sur-Este</text>
+          <defs><marker id="arr2" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#e53935"/></marker></defs>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="warn">
+    <p><strong>El azimut de los paneles es absoluto, no relativo al azimut de la instalación.</strong> Cada array de paneles tiene su propio campo <code>azimuth</code> dentro de <code>arrays[]</code>, y utiliza la misma convención (grados desde el Sur). Si tu instalación está orientada al Sur-Este (<code>site.azimuth: 45</code>) y quieres que los paneles también apunten al Sur-Este, define <code>array.azimuth: 45</code>. Si quieres que los paneles apunten al Sur independientemente de la orientación de la instalación, define <code>array.azimuth: 0</code>.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="wall-points">3. Perímetro de la instalación (puntos de muro)</h2>
+
+  <p>El array <code>wallPoints</code> define el perímetro de la terraza como una secuencia de coordenadas de esquinas en metros. El sistema de coordenadas es:</p>
+  <ul>
+    <li><strong>+X = Este</strong>, <strong>+Z = Norte</strong> (antes de cualquier rotación de la instalación)</li>
+    <li>El origen <code>[0, 0]</code> puede colocarse en cualquier punto — lo que importa son las posiciones relativas</li>
+    <li>Recorre el perímetro en sentido <strong>antihorario</strong> empezando por la esquina Sur-Oeste</li>
+  </ul>
+
+  <div class="warn">
+    <p><strong>Solo se soportan ángulos de 90° y 180°.</strong> Los ángulos no rectos producirán una geometría de muros incorrecta y aparecerá un aviso en la aplicación.</p>
+  </div>
+
+  <h3>Ejemplo: terraza rectangular (4m × 6m)</h3>
+
+  <div class="example-grid">
+    <div class="example-card">
+      <div class="example-card__title">Configuración</div>
+      <div class="example-card__body">
+        <pre><code>"wallPoints": [
+  [0, 0],
+  [4, 0],
+  [4, 6],
+  [0, 6]
+]</code></pre>
+      </div>
+    </div>
+    <div class="example-card">
+      <div class="example-card__title">Diagrama (vista superior, Norte = arriba)</div>
+      <div class="example-card__body">
+        <svg viewBox="0 0 200 220" width="100%" xmlns="http://www.w3.org/2000/svg">
+          <rect x="50" y="40" width="100" height="150" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+          <text x="50" y="195" font-size="10" fill="#555">[0,0] SO</text>
+          <text x="130" y="195" font-size="10" fill="#555">[4,0] SE</text>
+          <text x="130" y="52" font-size="10" fill="#555">[4,6] NE</text>
+          <text x="50" y="52" font-size="10" fill="#555">[0,6] NO</text>
+          <text x="100" y="122" text-anchor="middle" font-size="11" fill="#2e7d32">4m × 6m</text>
+          <text x="100" y="16" text-anchor="middle" font-size="10" fill="#888">↑ Norte</text>
+          <path d="M58,188 L138,188" stroke="#e53935" stroke-width="1.5" fill="none" marker-end="url(#arrR)"/>
+          <path d="M148,185 L148,50" stroke="#e53935" stroke-width="1.5" fill="none" marker-end="url(#arrR)"/>
+          <path d="M138,44 L58,44" stroke="#e53935" stroke-width="1.5" fill="none" marker-end="url(#arrR)"/>
+          <path d="M50,48 L50,185" stroke="#e53935" stroke-width="1.5" fill="none" marker-end="url(#arrR)"/>
+          <defs><marker id="arrR" markerWidth="5" markerHeight="5" refX="3" refY="2.5" orient="auto"><path d="M0,0 L5,2.5 L0,5 Z" fill="#e53935"/></marker></defs>
+        </svg>
+        <p class="svg-caption">Las flechas rojas muestran el orden de recorrido antihorario</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Ejemplo: terraza en forma de L</h3>
+
+  <p>Una forma en L requiere 6 puntos. Todos los ángulos interiores deben ser de 90°.</p>
+
+  <div class="example-grid">
+    <div class="example-card">
+      <div class="example-card__title">Configuración</div>
+      <div class="example-card__body">
+        <pre><code>"wallPoints": [
+  [0, 0],
+  [6, 0],
+  [6, 4],
+  [3, 4],
+  [3, 8],
+  [0, 8]
+]</code></pre>
+      </div>
+    </div>
+    <div class="example-card">
+      <div class="example-card__title">Diagrama (vista superior, Norte = arriba)</div>
+      <div class="example-card__body">
+        <svg viewBox="0 0 220 240" width="100%" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="20,200 170,200 170,100 95,100 95,0 20,0" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2" transform="translate(0,20)"/>
+          <text x="20" y="232" font-size="9" fill="#555">[0,0]</text>
+          <text x="155" y="232" font-size="9" fill="#555">[6,0]</text>
+          <text x="158" y="135" font-size="9" fill="#555">[6,4]</text>
+          <text x="91" y="135" font-size="9" fill="#555">[3,4]</text>
+          <text x="91" y="30" font-size="9" fill="#555">[3,8]</text>
+          <text x="0" y="30" font-size="9" fill="#555">[0,8]</text>
+          <text x="80" y="180" text-anchor="middle" font-size="10" fill="#2e7d32" transform="translate(0,20)">6m</text>
+          <text x="110" y="8" text-anchor="middle" font-size="10" fill="#888">↑ Norte</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <p>La esquina Sur-Oeste es el mínimo X y el mínimo Z de todos los puntos. Las posiciones de los arrays de paneles (<code>arrays[].position</code>) se miden en metros desde esta esquina.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="wall-defaults">4. Configuración predeterminada de muros</h2>
+
+  <p>El objeto <code>wallDefaults</code> define la altura y el grosor aplicados a todos los muros salvo que se sobreescriban individualmente.</p>
+
+  <pre><code>"wallDefaults": {
+  "height": 0.72,
+  "thickness": 0.145
+}</code></pre>
+
+  <table>
+    <tr><th>Campo</th><th>Unidad</th><th>Descripción</th></tr>
+    <tr><td><code>height</code></td><td>metros</td><td>Altura del muro sobre el suelo de la terraza.</td></tr>
+    <tr><td><code>thickness</code></td><td>metros</td><td>Grosor del muro. Afecta tanto al renderizado como a la geometría de sombras.</td></tr>
+  </table>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="wall-overrides">5. Sobreescritura de muros individuales</h2>
+
+  <p>Los muros individuales pueden sobreescribir los valores predeterminados mediante <code>wallsSettings</code>. Cada entrada apunta a un muro por su <strong>índice basado en 0</strong> — el índice del punto de inicio de ese segmento en <code>wallPoints</code>. El muro 0 va de <code>wallPoints[0]</code> a <code>wallPoints[1]</code>, el muro 1 de <code>wallPoints[1]</code> a <code>wallPoints[2]</code>, y así sucesivamente.</p>
+
+  <pre><code>"wallsSettings": [
+  {
+    "wall": 2,
+    "override": {
+      "height": 1.2
+    }
+  }
+]</code></pre>
+
+  <p>Esto eleva el muro 2 (el tercer lado del perímetro) a 1,2 m mientras todos los demás muros mantienen la altura predeterminada. Puedes sobreescribir <code>height</code> y/o la configuración de barandilla de cualquier muro individual.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="railing">6. Barandillas</h2>
+
+  <p>Las barandillas se colocan sobre los muros. El objeto <code>railingDefaults</code> define el estilo global de barandilla; los muros individuales pueden sobreescribirlo mediante <code>wallsSettings[].override.railing</code>.</p>
+
+  <pre><code>"railingDefaults": {
+  "active": true,
+  "heightOffset": 0.185,
+  "shape": { "kind": "cylinder", "radius": 0.025 },
+  "support": {
+    "shape": { "kind": "cylinder", "radius": 0.008 },
+    "count": 3,
+    "edgeDistance": 0.22
+  },
+  "extendAtStart": true,
+  "extendAtEnd": true,
+  "extensionGap": 0.04
+}</code></pre>
+
+  <table>
+    <tr><th>Campo</th><th>Tipo / valores</th><th>Descripción</th></tr>
+    <tr><td><code>active</code></td><td>booleano</td><td>Si se renderiza barandilla en este muro.</td></tr>
+    <tr><td><code>heightOffset</code></td><td>metros</td><td>Distancia desde la parte superior del muro hasta el centro del pasamanos.</td></tr>
+    <tr><td><code>shape</code></td><td>ver más abajo</td><td>Sección transversal del pasamanos.</td></tr>
+    <tr><td><code>support</code></td><td>ver más abajo</td><td>Balaustres que sostienen el pasamanos.</td></tr>
+    <tr><td><code>extendAtStart</code> / <code>extendAtEnd</code></td><td>booleano</td><td>Si el pasamanos se extiende sobre el poste de esquina en cada extremo, para un encuentro de esquina a ras.</td></tr>
+    <tr><td><code>extensionGap</code></td><td>metros</td><td>Separación entre dos extensiones de pasamanos que se encuentran en un poste de esquina.</td></tr>
+  </table>
+
+  <h3>Formas del pasamanos</h3>
+
+  <div class="example-grid">
+    <div class="example-card">
+      <div class="example-card__title">Cilindro (barra redonda)</div>
+      <div class="example-card__body">
+        <pre><code>"shape": {
+  "kind": "cylinder",
+  "radius": 0.025
+}</code></pre>
+      </div>
+    </div>
+    <div class="example-card">
+      <div class="example-card__title">Cuadrado (barra plana)</div>
+      <div class="example-card__body">
+        <pre><code>"shape": {
+  "kind": "square",
+  "width": 0.04,
+  "height": 0.008
+}</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="example-grid">
+    <div class="example-card">
+      <div class="example-card__title">Sin barandilla en un muro concreto</div>
+      <div class="example-card__body">
+        <pre><code>"wallsSettings": [{
+  "wall": 0,
+  "override": {
+    "railing": { "active": false }
+  }
+}]</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <h3>Configuración de balaustres</h3>
+
+  <table>
+    <tr><th>Campo</th><th>Descripción</th></tr>
+    <tr><td><code>shape</code></td><td>Sección transversal: <code>cylinder</code> (con <code>radius</code>) o <code>square</code> (con <code>width</code> y <code>depth</code>).</td></tr>
+    <tr><td><code>count</code></td><td>Número de balaustres por muro. Mínimo 2.</td></tr>
+    <tr><td><code>edgeDistance</code></td><td>Distancia desde cada extremo del muro hasta el balaustre más cercano. Si se omite, los balaustres se distribuyen uniformemente.</td></tr>
+  </table>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="system-losses">7. Pérdidas del sistema</h2>
+
+  <p>Estos tres campos opcionales en <code>site</code> modelan las pérdidas de energía reales entre los paneles y el punto de conexión a la red.</p>
+
+  <pre><code>"groundAlbedo": 0.20,
+"inverterEfficiency": 0.97,
+"wiringLoss": 0.02</code></pre>
+
+  <table>
+    <tr><th>Campo</th><th>Valor por defecto</th><th>Descripción</th></tr>
+    <tr><td><code>groundAlbedo</code></td><td>0.20</td><td>Fracción de la irradiancia global horizontal reflejada por el suelo hacia la cara inferior del panel. 0.20 = hormigón/asfalto. 0.25 = grava clara. 0.10 = membrana de cubierta oscura.</td></tr>
+    <tr><td><code>inverterEfficiency</code></td><td>0.97</td><td>Eficiencia de conversión CC/CA del inversor. Inversores de cadena modernos típicos: 0.96–0.98.</td></tr>
+    <tr><td><code>wiringLoss</code></td><td>0.02</td><td>Fracción de potencia CC perdida en el cableado entre paneles e inversor. Instalaciones residenciales típicas: 0.01–0.03.</td></tr>
+  </table>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="setups">8. Configuraciones (setups)</h2>
+
+  <p>Una <strong>configuración</strong> (setup) es un conjunto completo de paneles a simular. Puedes definir varias configuraciones en el array <code>setups</code> para comparar distintos diseños, orientaciones o equipos.</p>
+
+  <pre><code>"setups": [
+  { "label": "Instalación actual", ... },
+  { "label": "Con optimizadores en fila 1", ... }
+]</code></pre>
+
+  <p>Cada configuración tiene un <code>label</code> (mostrado en la interfaz y en los informes), un bloque <code>panelDefaults</code> y uno o más <code>arrays</code>.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="panel-defaults">9. Propiedades predeterminadas de paneles</h2>
+
+  <p>El objeto <code>panelDefaults</code> define las características físicas y eléctricas de los paneles utilizados en todos los arrays de esta configuración, salvo sobreescritura a nivel de array.</p>
+
+  <pre><code>"panelDefaults": {
+  "width": 1.134,
+  "height": 2.094,
+  "peakPower": 415,
+  "zones": 3,
+  "zonesDisposition": "horizontal",
+  "hasOptimizer": false,
+  "string": "S1",
+  "temperatureCoefficient": -0.0036,
+  "noct": 44
+}</code></pre>
+
+  <table>
+    <tr><th>Campo</th><th>Unidad / valores</th><th>Descripción</th></tr>
+    <tr><td><code>width</code></td><td>metros</td><td>Anchura del panel según la ficha técnica.</td></tr>
+    <tr><td><code>height</code></td><td>metros</td><td>Altura del panel según la ficha técnica.</td></tr>
+    <tr><td><code>peakPower</code></td><td>Wp</td><td>Potencia pico en Condiciones de Test Estándar (1000 W/m², 25°C).</td></tr>
+    <tr><td><code>zones</code></td><td>entero ≥ 1</td><td>Número de zonas con diodo de bypass. La mayoría de paneles residenciales tienen 2 o 3 zonas.</td></tr>
+    <tr><td><code>zonesDisposition</code></td><td><code>horizontal</code> / <code>vertical</code></td><td>Cómo se dividen las zonas en la cara del panel. <code>horizontal</code> = apiladas de arriba a abajo (lo más habitual). <code>vertical</code> = una al lado de la otra.</td></tr>
+    <tr><td><code>hasOptimizer</code></td><td>booleano</td><td>Si el panel lleva un optimizador de potencia CC (p.ej. SolarEdge). Los optimizadores eliminan la penalización por desajuste de string.</td></tr>
+    <tr><td><code>string</code></td><td>cadena</td><td>Identificador del string al que pertenece este panel. Todos los paneles del mismo string comparten la misma limitación de corriente en serie. Ejemplo: <code>"S1"</code>, <code>"S2"</code>.</td></tr>
+    <tr><td><code>temperatureCoefficient</code></td><td>/°C</td><td>Variación relativa de la potencia pico por grado por encima de 25°C. Se encuentra en la ficha técnica como coeficiente de temperatura de Pmax. Valor típico: −0.004 /°C. Valor por defecto si se omite: −0.004.</td></tr>
+    <tr><td><code>noct</code></td><td>°C</td><td>Temperatura Nominal de Operación de la Célula. Se encuentra en la ficha técnica. Se usa para estimar la temperatura real de la célula a partir de la temperatura ambiente y la irradiancia. Valor por defecto si se omite: 45.</td></tr>
+  </table>
+
+  <h3>Zonas y diodos de bypass</h3>
+
+  <p>Un diodo de bypass protege una zona. Cuando una zona queda completamente sombreada, su diodo se activa y esa zona produce cero potencia, pero el resto del panel continúa funcionando. La simulación cuenta cuántos puntos de muestreo de cada zona están sombreados y aplica un umbral configurable para decidir si la zona se considera bloqueada.</p>
+
+  <p><code>zonesDisposition: "horizontal"</code> es la disposición más habitual — el panel se divide en bandas horizontales que recorren su anchura. Esto coincide con cómo están físicamente cableados con diodos de bypass la mayoría de los paneles.</p>
+
+  <svg viewBox="0 0 400 160" width="100%" xmlns="http://www.w3.org/2000/svg" style="max-width:400px;display:block;margin:16px auto">
+    <rect x="20" y="10" width="160" height="140" rx="4" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+    <line x1="20" y1="57" x2="180" y2="57" stroke="#2e7d32" stroke-width="1" stroke-dasharray="4,3"/>
+    <line x1="20" y1="103" x2="180" y2="103" stroke="#2e7d32" stroke-width="1" stroke-dasharray="4,3"/>
+    <text x="100" y="38" text-anchor="middle" font-size="11" fill="#2e7d32">Zona 0</text>
+    <text x="100" y="84" text-anchor="middle" font-size="11" fill="#2e7d32">Zona 1</text>
+    <text x="100" y="130" text-anchor="middle" font-size="11" fill="#2e7d32">Zona 2</text>
+    <text x="100" y="155" text-anchor="middle" font-size="9" fill="#888">horizontal, 3 zonas</text>
+    <rect x="230" y="10" width="160" height="140" rx="4" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+    <line x1="283" y1="10" x2="283" y2="150" stroke="#2e7d32" stroke-width="1" stroke-dasharray="4,3"/>
+    <line x1="337" y1="10" x2="337" y2="150" stroke="#2e7d32" stroke-width="1" stroke-dasharray="4,3"/>
+    <text x="256" y="84" text-anchor="middle" font-size="11" fill="#2e7d32">Z0</text>
+    <text x="310" y="84" text-anchor="middle" font-size="11" fill="#2e7d32">Z1</text>
+    <text x="364" y="84" text-anchor="middle" font-size="11" fill="#2e7d32">Z2</text>
+    <text x="310" y="155" text-anchor="middle" font-size="9" fill="#888">vertical, 3 zonas</text>
+  </svg>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="arrays">10. Arrays de paneles</h2>
+
+  <p>Cada configuración contiene uno o más <code>arrays</code>. Un array es una cuadrícula rectangular de paneles idénticos en una posición, inclinación y acimut fijos.</p>
+
+  <pre><code>"arrays": [
+  {
+    "position": [1.5, 1.0],
+    "azimuth": 0,
+    "elevation": 0.10,
+    "inclination": 20,
+    "rows": 3,
+    "columns": 2,
+    "spacing": [0.02, 0.04],
+    "orientation": "portrait"
+  }
+]</code></pre>
+
+  <table>
+    <tr><th>Campo</th><th>Unidad / valores</th><th>Descripción</th></tr>
+    <tr><td><code>position</code></td><td>[metros Este, metros Norte]</td><td>Distancia desde la esquina SO de la instalación hasta la esquina SO de este array.</td></tr>
+    <tr><td><code>azimuth</code></td><td>grados</td><td>Acimut absoluto de los paneles (0 = Sur, +Este, −Oeste). Independiente del acimut de la instalación.</td></tr>
+    <tr><td><code>elevation</code></td><td>metros</td><td>Altura del borde inferior del array sobre el suelo de la terraza.</td></tr>
+    <tr><td><code>inclination</code></td><td>grados</td><td>Ángulo de inclinación respecto a la horizontal. 0° = plano. 90° = vertical. Residencial típico: 10–35°.</td></tr>
+    <tr><td><code>rows</code></td><td>entero</td><td>Número de filas de paneles. La fila 0 es la más al Sur; las filas aumentan hacia el Norte.</td></tr>
+    <tr><td><code>columns</code></td><td>entero</td><td>Número de columnas. La columna 0 es la más al Oeste; las columnas aumentan hacia el Este.</td></tr>
+    <tr><td><code>spacing</code></td><td>[horizontal m, vertical m]</td><td>Separación entre paneles adyacentes. Opcional; por defecto [0.02, 0.02].</td></tr>
+    <tr><td><code>orientation</code></td><td><code>portrait</code> / <code>landscape</code></td><td>Si los paneles se montan más altos que anchos o más anchos que altos. Opcional; por defecto <code>portrait</code>.</td></tr>
+  </table>
+
+  <p>Las sobreescrituras a nivel de array — <code>width</code>, <code>height</code>, <code>peakPower</code>, <code>zones</code>, <code>zonesDisposition</code>, <code>hasOptimizer</code>, <code>string</code>, <code>temperatureCoefficient</code>, <code>noct</code> — pueden definirse directamente en el objeto del array para sobreescribir los <code>panelDefaults</code> de la configuración.</p>
+
+  <h3>Ejemplo: dos arrays en diferentes strings</h3>
+
+  <pre><code>"arrays": [
+  {
+    "position": [0.5, 1.0],
+    "azimuth": 0, "elevation": 0.10, "inclination": 18,
+    "rows": 2, "columns": 3,
+    "string": "S1"
+  },
+  {
+    "position": [0.5, 4.5],
+    "azimuth": 0, "elevation": 0.10, "inclination": 18,
+    "rows": 1, "columns": 3,
+    "string": "S2"
+  }
+]</code></pre>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="panel-overrides">11. Sobreescritura de paneles individuales</h2>
+
+  <p>Los paneles individuales dentro de un array pueden sobreescribirse mediante <code>arraysSettings</code>. Cada entrada apunta a un panel concreto por su índice de array, fila y columna.</p>
+
+  <pre><code>"arraysSettings": [
+  {
+    "array": 0,
+    "row": 0,
+    "col": 2,
+    "hasOptimizer": true,
+    "string": "S2"
+  }
+]</code></pre>
+
+  <p>Esto mueve el panel del array 0, fila 0, columna 2 al string S2 y le añade un optimizador. El resto de propiedades se heredan de los valores predeterminados del array. Se pueden listar varias entradas para sobreescribir varios paneles.</p>
+
+  <div class="note">
+    <p>Los paneles con optimizador se muestran en <strong>verde</strong> en la vista 3D; los paneles sin optimizador se muestran en azul oscuro.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="full-example">12. Ejemplo completo</h2>
+
+  <p>Configuración completa para una instalación de ejemplo: terraza rectangular de 5m × 8m en Madrid, un array de 2 filas × 4 columnas, orientación Sur, inclinación 20°, paneles de 415 Wp con 3 zonas horizontales de bypass.</p>
+
+  <pre><code>{
+  "site": {
+    "location": { "latitude": 40.4168, "longitude": -3.7038 },
+    "azimuth": 0,
+    "timezone": "Europe/Madrid",
+    "groundAlbedo": 0.20,
+    "inverterEfficiency": 0.97,
+    "wiringLoss": 0.02,
+    "wallPoints": [
+      [0, 0], [5, 0], [5, 8], [0, 8]
+    ],
+    "wallDefaults": { "height": 0.72, "thickness": 0.145 },
+    "railingDefaults": {
+      "active": true,
+      "heightOffset": 0.185,
+      "shape": { "kind": "cylinder", "radius": 0.025 },
+      "support": {
+        "shape": { "kind": "cylinder", "radius": 0.008 },
+        "count": 3,
+        "edgeDistance": 0.22
+      },
+      "extendAtStart": true,
+      "extendAtEnd": true,
+      "extensionGap": 0.04
+    }
+  },
+  "setups": [
+    {
+      "label": "Sur 20grados 2x4",
+      "panelDefaults": {
+        "width": 1.134,
+        "height": 2.094,
+        "peakPower": 415,
+        "zones": 3,
+        "zonesDisposition": "horizontal",
+        "hasOptimizer": false,
+        "string": "S1",
+        "temperatureCoefficient": -0.0036,
+        "noct": 44
+      },
+      "arrays": [
+        {
+          "position": [0.5, 2.0],
+          "azimuth": 0,
+          "elevation": 0.12,
+          "inclination": 20,
+          "rows": 2,
+          "columns": 4,
+          "spacing": [0.02, 0.04],
+          "orientation": "portrait"
+        }
+      ]
+    }
+  ]
+}</code></pre>
+
+</div>
+</body>
+</html>

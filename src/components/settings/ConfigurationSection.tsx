@@ -114,10 +114,12 @@ function ConfigChangeConfirmDialog({
 // ── Documentation link ────────────────────────────────────────────────────────
 
 function DocLink() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language.startsWith('es') ? 'es' : 'en';
+  const guideUrl = `${import.meta.env.BASE_URL}docs/configuration-guide.${lang}.html`;
   return (
     <a
-      href="#"
+      href={guideUrl}
       target="_blank"
       rel="noopener noreferrer"
       className="config-first-launch-banner__link"
