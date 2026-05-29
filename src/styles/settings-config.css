@@ -1,0 +1,178 @@
+/* ── Configuration inline JSON editor with line numbers ────────────────────── */
+
+/*
+ * The wrapper is a flex row: line-number gutter on the left, textarea on the
+ * right. Its height is set via an inline style computed from the read-only
+ * view's rendered height so the editor opens at the same size without a layout
+ * jump. The user can resize it vertically by dragging the bottom-right handle.
+ *
+ * Key constraints that make the layout work correctly:
+ *  - The wrapper has an explicit height (set via inline style), not min-height.
+ *    This lets `height: 100%` on the textarea resolve against a concrete value
+ *    instead of expanding the wrapper to fit the content.
+ *  - `overflow: hidden` on the wrapper clips the textarea to the wrapper bounds.
+ *  - `resize: vertical` on the wrapper allows the user to grow it; `resize: none`
+ *    on the textarea prevents the native textarea handle from conflicting.
+ */
+.config-editor-wrapper {
+  display: flex;
+  flex-direction: row;
+  border: 1px solid #333;
+  border-radius: 6px;
+  overflow: hidden;
+  resize: vertical;
+  background: #111;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  /* min-height prevents the user from collapsing the editor to zero. */
+  min-height: 120px;
+}
+
+.config-editor-wrapper--error {
+  border-color: #e74c3c;
+}
+
+.config-editor-wrapper:focus-within {
+  border-color: var(--color-accent-green);
+}
+
+.config-editor__line-numbers {
+  width: 3.2em;
+  flex-shrink: 0;
+  padding: 10px 6px 10px 8px;
+  margin: 0;
+  background: #0d0d0d;
+  color: #555;
+  text-align: right;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre;
+  /* Vertical scroll driven by syncScroll() in JS; user scrolling disabled. */
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  border-right: 1px solid #222;
+  box-sizing: border-box;
+}
+
+.config-editor__textarea {
+  flex: 1;
+  /*
+   * height: 100% resolves against the wrapper's explicit height, filling it
+   * completely without expanding beyond it.
+   */
+  height: 100%;
+  min-height: 0;
+  padding: 10px 12px;
+  background: transparent;
+  color: #ccc;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+  box-sizing: border-box;
+}
+
+/* ── Read-only view ────────────────────────────────────────────────────────── */
+
+/*
+ * Plain <pre> without line numbers. Capped at 320px with vertical scroll so
+ * it does not dominate the sidebar when the config is long.
+ */
+.config-editor--readonly {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  background: #111;
+  color: #ccc;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 10px 12px;
+  white-space: pre;
+  overflow: auto;
+  max-height: 320px;
+  cursor: default;
+  user-select: text;
+  margin: 0;
+  tab-size: 2;
+}
+
+/* ── Validation error list ─────────────────────────────────────────────────── */
+
+.config-validation-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* ── Documentation / first-launch banner ───────────────────────────────────── */
+
+.config-first-launch-banner {
+  background: rgba(46, 204, 113, 0.08);
+  border: 1px solid rgba(46, 204, 113, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-first-launch-banner p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #aaa;
+  line-height: 1.5;
+}
+
+.config-first-launch-banner__link {
+  font-size: 0.78rem;
+  color: var(--color-accent-green);
+  text-decoration: underline;
+  align-self: flex-start;
+  transition: color 0.15s ease;
+}
+
+.config-first-launch-banner__link:hover {
+  color: #81c784;
+}
+
+/* ── Config change confirmation dialog ─────────────────────────────────────── */
+
+/*
+ * Sticky positioning keeps the dialog visible at the top of the section body
+ * while the user scrolls, without covering unrelated sidebar content.
+ */
+.config-confirm-backdrop {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(26, 26, 26, 0.97);
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 14px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.config-confirm-dialog__message {
+  font-size: 0.8rem;
+  color: #ccc;
+  line-height: 1.6;
+  margin: 0 0 12px 0;
+}
+
+.config-confirm-dialog__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

@@ -41,28 +41,33 @@ A browser-based 3D simulator for analysing shadow impact on rooftop photovoltaic
 - Daily hourly charts display hours in the installation's local timezone (DST-aware) rather than UTC.
 - Shadow heat maps display arrays and rows in physical orientation: highest array index at top, array 0 at bottom; within each array, highest row index at top (northernmost), row 0 at bottom (southernmost).
 - Generates a downloadable PDF report from any simulation run, including annual totals, monthly grouped bar chart, optional per-day hourly charts, and panel shadow heat maps drawn directly in the PDF.
-- Provides a settings sidebar (gear icon, top-left) with cache management and backup export/import.
-- Exports a complete backup (config + all simulation results) to a gzip-compressed `.solarsim` file and imports it back.
+- Provides a settings sidebar (gear icon, top-left) with cache management, backup export/import, and configuration editing.
+- Persists the active configuration to the Origin Private File System (OPFS) between sessions. On first launch the built-in example configuration is loaded automatically and the settings sidebar opens to guide the user.
+- Validates configuration edits with a full JSON Schema (ajv) before applying them. Any change to the configuration triggers a confirmation dialog warning that existing simulation results will become inaccessible in the results panel.
+- The results panel only shows simulation results that belong to the current active configuration; results from previous configurations remain in IndexedDB but are not visible.
+- Exports a complete backup (config + simulation results for the current config only) to a gzip-compressed `.solarsim` file and imports it back.
 - Validates the wall configuration and displays a prominent warning for non-90°/non-180° angles.
 - Displays the application version in the footer, sourced from `package.json` at build time.
+- Shows a blocking error screen when the browser does not support OPFS, with a table of minimum supported browser versions.
 
 ---
 
 ## Tech stack
 
-| Layer                | Library                         | Why                                      |
-|----------------------|---------------------------------|------------------------------------------|
-| UI framework         | React 18 + TypeScript           | Component model, type safety             |
-| 3D rendering         | Three.js + `@react-three/fiber` | Declarative Three.js in React            |
-| 3D helpers           | `@react-three/drei`             | OrbitControls, Grid, Text, Sphere        |
-| Raycast acceleration | `three-mesh-bvh`                | O(log n) ray–triangle intersection       |
-| Sun position         | `suncalc`                       | Altitude + azimuth from lat/lon/date     |
-| Date handling        | `dayjs` + UTC/timezone plugins  | Timezone-aware date arithmetic           |
-| Global state         | `zustand`                       | Minimal, selector-based store            |
-| Charts               | `echarts` + `echarts-for-react` | Bar, radar, line charts; interactive tooltips |
-| PDF generation       | `jspdf` + `svg2pdf.js`          | Client-side PDF with ECharts SSR charts and drawn primitives |
-| i18n                 | `i18next` + `react-i18next`     | EN/ES support, lazy-loaded JSON          |
-| Build                | Vite                            | Fast HMR, static output for GitHub Pages |
+| Layer | Library | Why |
+|---|---|---|
+| UI framework | React 18 + TypeScript | Component model, type safety |
+| 3D rendering | Three.js + `@react-three/fiber` | Declarative Three.js in React |
+| 3D helpers | `@react-three/drei` | OrbitControls, Grid, Text, Sphere |
+| Raycast acceleration | `three-mesh-bvh` | O(log n) ray–triangle intersection |
+| Sun position | `suncalc` | Altitude + azimuth from lat/lon/date |
+| Date handling | `dayjs` + UTC/timezone plugins | Timezone-aware date arithmetic |
+| Global state | `zustand` | Minimal, selector-based store |
+| Charts | `echarts` + `echarts-for-react` | Bar, radar, line charts; interactive tooltips |
+| PDF generation | `jspdf` + `svg2pdf.js` | Client-side PDF with ECharts SSR charts and drawn primitives |
+| Schema validation | `ajv` | JSON Schema validation for configuration editing |
+| i18n | `i18next` + `react-i18next` | EN/ES support, lazy-loaded JSON |
+| Build | Vite | Fast HMR, static output for GitHub Pages |
 
 ---
 
@@ -79,14 +84,19 @@ src/
 │   ├── panel-collapse.svg
 │   └── panel-minimise.svg
 │
+├── config/
+│   └── defaultConfig.ts          # Built-in example configuration (Madrid, 2×1 array)
+│
 ├── styles/
 │   ├── index.css
 │   ├── base.css
-│   ├── layout.css
+│   ├── layout.css                # App container, loading overlay, OPFS error screen
 │   ├── controls.css
 │   ├── simulation.css
 │   ├── results-panel.css
-│   └── settings-sidebar.css
+│   ├── settings-sidebar.css      # Sidebar shell, collapsible sections, shared button primitives
+│   ├── settings-cache.css        # Cache management section styles
+│   └── settings-config.css       # Configuration editor, banners, confirmation dialog
 │
 ├── types/
 │   ├── config.ts
@@ -120,17 +130,17 @@ src/
 ├── backup/
 │   ├── BackupConstants.ts
 │   ├── BackupTypes.ts
-│   ├── BackupExporter.ts
+│   ├── BackupExporter.ts         # Filters results to current config before export
 │   └── BackupImporter.ts
 │
 ├── pdf/
-│   ├── PdfTypes.ts           # ReportDay, PdfLabels, GenerateReportOptions
-│   ├── PdfLayout.ts          # Cursor, page geometry constants, colour palette, font helper
-│   ├── PdfPrimitives.ts      # drawSectionHeading, drawSubHeading, drawLegend, drawTable, drawScaleBar
-│   ├── PdfCharts.ts          # ECharts SSR, svg2pdf embedding, timezone helpers, option builders
-│   ├── PdfHeatmap.ts         # drawSetupHeatmap, shade colour helpers, zone average
-│   ├── PdfSections.ts        # drawCover, drawAnnualSection, drawHeatmapsSection, drawMonthlySection, drawDailySection
-│   └── PdfReportGenerator.ts # Public entry point: generatePdfReport, footer, filename
+│   ├── PdfTypes.ts
+│   ├── PdfLayout.ts
+│   ├── PdfPrimitives.ts
+│   ├── PdfCharts.ts
+│   ├── PdfHeatmap.ts
+│   ├── PdfSections.ts
+│   └── PdfReportGenerator.ts
 │
 ├── converter/
 │   ├── ThreeConverter.ts
@@ -142,13 +152,13 @@ src/
 │       ├── ConfigSlice.ts
 │       ├── RenderSlice.ts
 │       ├── SimulationSlice.ts
-│       └── SettingsSlice.ts
+│       └── SettingsSlice.ts      # isSidebarOpen, isFirstLaunch
 │
 ├── hooks/
 │   ├── useBVH.ts
 │   ├── useShadowSampler.ts
 │   ├── useAnnualSimulation.ts
-│   ├── useResultsPanel.ts
+│   ├── useResultsPanel.ts        # Filters results by current config's setupIds
 │   └── useResizablePanel.ts
 │
 ├── db/
@@ -166,12 +176,14 @@ src/
 └── utils/
     ├── HashUtils.ts
     ├── SetupColoursUtils.ts
-    ├── SimulationCacheUtils.ts
+    ├── SimulationCacheUtils.ts   # buildSetupHash exported separately
     ├── PointXZUtils.ts
     ├── RailingUtils.ts
     ├── ThreeUtils.ts
     ├── TimeUtils.ts
-    └── SimulationGroupUtils.ts
+    ├── SimulationGroupUtils.ts
+    ├── ConfigStorage.ts          # OPFS persistence with availability check
+    └── ConfigValidator.ts        # ajv-based JSON Schema validation
 
 └── components/
     ├── Scene.tsx
@@ -185,8 +197,13 @@ src/
     ├── AnnualSimulationProgress.tsx
     ├── AngleWarningBanner.tsx
     ├── DeveloperFooter.tsx
-    ├── SettingsSidebar.tsx
+    ├── SettingsSidebar.tsx        # Shell only; sections imported from settings/
     ├── SettingsSidebarButton.tsx
+    ├── settings/
+    │   ├── SimulationCacheSection.tsx
+    │   ├── IrradianceCacheSection.tsx
+    │   ├── ExportImportSection.tsx
+    │   └── ConfigurationSection.tsx  # Inline editor, file I/O, reset
     └── results/
         ├── AnnualTab.tsx
         ├── MonthlyTab.tsx
@@ -194,14 +211,43 @@ src/
         ├── AnnualBarChart.tsx
         ├── MonthlyRadarChart.tsx
         ├── MonthlyLineChart.tsx
-        ├── DailyLineChart.tsx       # UTC→local timezone correction on X axis
-        ├── PanelShadowHeatmap.tsx   # Array N at top, array 0 at bottom; row N at top, row 0 at bottom
+        ├── DailyLineChart.tsx
+        ├── PanelShadowHeatmap.tsx
         └── ReportModal.tsx
 ```
 
 ---
 
 ## Architecture decisions
+
+### Configuration persistence — OPFS
+
+The active configuration is persisted to the **Origin Private File System (OPFS)** between sessions. OPFS gives each origin a private directory managed by the browser, accessible via `navigator.storage.getDirectory()`. The config is stored as a single `config.json` file inside that directory.
+
+OPFS was chosen over `localStorage` because it is semantically correct for file storage, is async (non-blocking), and has no practical size limit. It is available in Chrome 86+, Firefox 111+, and Safari 15.2+ (>98% of users as of 2026) and works with no backend and no special HTTP headers — fully compatible with GitHub Pages.
+
+The application checks OPFS availability at startup via `checkOpfsAvailability()`. If absent, a blocking error screen is shown with a table of minimum supported browser versions. No fallback to `localStorage` is provided — the 2% of unsupported browsers see a clear message rather than a silently degraded experience.
+
+`public/config.json` has been removed from the repository. On first launch (no OPFS file), the built-in example configuration from `src/config/defaultConfig.ts` is loaded, persisted to OPFS, and the settings sidebar opens automatically to guide the user. On subsequent launches the saved OPFS file is loaded directly.
+
+### Configuration validation — ajv JSON Schema
+
+Configuration edits (both inline editor and file load) are validated at two levels:
+
+1. **JSON syntax** — `JSON.parse`. Errors are reported with the parser's message.
+2. **JSON Schema** — a hand-maintained schema in `src/utils/ConfigValidator.ts` compiled by ajv with `allErrors: true`. All validation errors are formatted into human-readable messages before display.
+
+The schema is maintained as a plain TypeScript object rather than generated at build time. This avoids a Vite plugin dependency and keeps the validation logic fully transparent and reviewable.
+
+### Simulation results scoped to active configuration
+
+`useResultsPanel` derives the set of valid `setupId`s from the current config and filters `SimulationCache.listResults()` to only include matching entries before grouping. Results from previous configurations that may still be present in IndexedDB are therefore not visible in the results panel.
+
+This means "keep simulations and apply" in the config-change confirmation dialog preserves the data in IndexedDB (useful if the user wants to reload a previous config to recover results) but makes those results invisible immediately. Only results whose `setupId` matches the current config are displayed.
+
+### Backup scoped to active configuration
+
+`BackupExporter` filters simulation results to those whose `setupId` matches one of the current config's setups before exporting. Results from previous configurations present in IndexedDB are excluded. This keeps the backup coherent — a backup always contains exactly the config and the results that belong to it.
 
 ### Factory pattern for domain models
 
@@ -224,9 +270,15 @@ Railing shapes use a discriminated union (`kind: 'square' | 'cylinder' | 'half-c
 
 Four domain slices: `ConfigSlice`, `RenderSlice`, `SimulationSlice`, `SettingsSlice`. Composed behind a single `useAppStore` facade. Slices never import each other.
 
-### Settings sidebar and results panel as fixed overlays
+`SettingsSlice` carries `isFirstLaunch: boolean` which is set to `true` when the app initialises from the built-in default and reset to `false` as soon as the user saves or loads a configuration. It drives the introductory banner in the Configuration section and the automatic opening of the sidebar.
 
-Both are `position: fixed` overlays. The Three.js canvas always fills `100vw × 100vh`. No layout reflow on open/close.
+### Settings sidebar — modular decomposition
+
+The sidebar is split into a thin shell (`SettingsSidebar.tsx`) and four independent section components under `src/components/settings/`. Each section owns its state and side effects; the shell only handles the overlay, drag-to-resize, and section collapsing. CSS is split along the same lines: `settings-sidebar.css` (shell + shared primitives), `settings-cache.css` (cache management), `settings-config.css` (editor, banners, confirmation dialog).
+
+### Loading overlay — unified
+
+A single `LoadingOverlay` component in `App.tsx` is used for all blocking loading states: initial app startup, and the moment before `window.location.reload()` fires after a config reset. The overlay is `position: fixed` with `z-index: 200`, covering all content. Before reload, `App.tsx` listens for a custom `app:reload` DOM event dispatched by `ConfigurationSection` and shows the overlay for ~80 ms before the reload triggers, giving the browser time to paint.
 
 ### Shared IndexedDB helper
 
@@ -242,7 +294,7 @@ Manages drag-to-resize, minimise, and fullscreen. Parametrised with `defaultWidt
 
 ### Backup export/import — `src/backup/`
 
-`BackupExporter` + `BackupImporter`. Native `CompressionStream`/`DecompressionStream` for gzip, auto-detected on import via magic bytes.
+`BackupExporter` + `BackupImporter`. Native `CompressionStream`/`DecompressionStream` for gzip, auto-detected on import via magic bytes. Export includes only results matching the current config's setupIds.
 
 ### Event bus — `src/events/AppEvents.ts`
 
@@ -250,71 +302,23 @@ Manages drag-to-resize, minimise, and fullscreen. Parametrised with `defaultWidt
 
 ### PDF report — `src/pdf/` module
 
-The PDF module is split into seven focused files with clear single responsibilities:
-
-| File | Responsibility |
-|------|---------------|
-| `PdfTypes.ts` | Public interfaces (`ReportDay`, `PdfLabels`, `GenerateReportOptions`) |
-| `PdfLayout.ts` | `Cursor` class, page geometry constants, colour palette, `font` helper, `setupLetter` |
-| `PdfPrimitives.ts` | `drawSectionHeading`, `drawSubHeading`, `drawLegend`, `drawTable`, `drawScaleBar` |
-| `PdfCharts.ts` | ECharts SSR init/dispose, `embedSvg` (svg2pdf), timezone helpers, all option builders |
-| `PdfHeatmap.ts` | `drawSetupHeatmap`, shade colour interpolation, zone average computation |
-| `PdfSections.ts` | `drawCover`, `drawAnnualSection`, `drawHeatmapsSection`, `drawMonthlySection`, `drawDailySection` |
-| `PdfReportGenerator.ts` | Public entry point: `generatePdfReport`, footer rendering, filename encoding |
-
-External callers import only from `PdfReportGenerator.ts`, which re-exports the public types. The internal sub-modules are implementation details.
-
-**Generation flow** is controlled by a three-state machine in `SimulationResultsPanel`:
-
-```
-idle → modal → generating → idle
-```
-
-`generatePdfReport` is called directly as an `async` function — no React components are mounted for chart capture.
+Split into seven focused files (see Project structure). External callers import only from `PdfReportGenerator.ts`.
 
 ### Charts in PDF — ECharts SSR + svg2pdf.js
 
-ECharts v5.3+ supports SSR rendering: `echarts.init(null, null, { renderer: 'svg', ssr: true })` produces an SVG string without any DOM or canvas dependency. `svg2pdf.js` converts that SVG string into native jsPDF vector content. This combination is fully synchronous on the ECharts side (SSR) and Promise-based on the pdf side (svg2pdf).
+`echarts.init(null, null, { renderer: 'svg', ssr: true })` produces SVG without DOM or canvas. `svg2pdf.js` converts SVG to native jsPDF vector content.
 
 ### Heat maps in PDF — jsPDF primitives
 
-Panel shadow heat maps are drawn directly as `doc.rect()` calls with computed fill colours — no DOM capture, no `html2canvas`. The colour computation is a pure function of the shade fraction, identical to the web UI. Each zone cell shows the zone ID in the upper half and the shade percentage (bold, larger font) in the lower half, both scaled proportionally to the cell size.
-
-### Heat map physical orientation
-
-Both the web UI (`PanelShadowHeatmap.tsx`) and the PDF (`PdfHeatmap.ts`) display arrays and rows in physical order:
-- **Arrays**: highest index at top, array 0 at bottom (southernmost).
-- **Rows within an array**: highest row index at top (northernmost), row 0 at bottom (southernmost).
+Panel shadow heat maps are drawn directly as `doc.rect()` calls with computed fill colours — no DOM capture, no `html2canvas`.
 
 ### Daily chart timezone correction
 
-Energy data is stored in UTC hour buckets. `DailyLineChart` and the PDF daily section both:
-1. Compute `offsetHours` using `Intl.DateTimeFormat` at noon UTC on the selected date (DST-safe).
-2. Derive `startUtc = (-offsetHours + 24) % 24` — the UTC hour corresponding to local midnight.
-3. Use sequential local labels `00:00–23:00` on the X axis.
-4. Map each X position `i` to UTC bucket `(startUtc + i) % 24`.
+Energy data is stored in UTC hour buckets. Both `DailyLineChart` and the PDF daily section derive `startUtc = (-offsetHours + 24) % 24` via `Intl.DateTimeFormat` at noon UTC on the selected date (DST-safe), then map `data[i]` to local hour `i`.
 
-This means `data[i]` = production at local hour `i`, so 08:00–20:00 local always shows correctly regardless of timezone or DST.
+### `buildSetupHash` — exported separately
 
-### PDF multilingual support
-
-All strings (section headings, table headers, parameter labels, month abbreviations) are resolved by `SimulationResultsPanel` via `t()` and passed to `generatePdfReport` as a `PdfLabels` object. The generator has no i18next dependency and is trivially testable.
-
-### PDF filename convention
-
-```
-solarsim-{lat}-{lon}-sim-{simulationCode}-{YYYYMMDDHHMMSS}.pdf
-```
-
-`{simulationCode}` mirrors the results panel run selector label in compact form, e.g. `2025-60m-openmeteo-16p4t-4s`. Coordinates use the same `p`/`n`/`d` encoding as `.solarsim` backup filenames.
-
-### Panel world-space positioning pipeline
-
-Panels are rendered outside the site `<group>` so raycasting sample points are already in absolute world space. `temperatureCoefficient` and `noct` are resolved with defaults in `SolarPanelConverter`.
-
-### Irradiance provider — Strategy pattern
-
-`IrradianceProvider` interface with two implementations: `GeometricIrradianceProvider` (returns null) and `OpenMeteoIrradianceProvider` (fetches DNI, DHI, temperature; caches in IndexedDB v2).
+`src/utils/SimulationCacheUtils.ts` exports `buildSetupHash` as a standalone function in addition to the full `buildCacheKey`. This allows `BackupExporter` to derive setup geometry hashes for result filtering without constructing a complete `SimulationCacheKey`.
 
 ---
 
@@ -343,15 +347,15 @@ West ─────┼───── East (+X)
 ### Azimuth convention
 
 | Value | Meaning |
-|-------|---------|
-| 0     | South-facing |
-| > 0   | Rotated toward East |
-| < 0   | Rotated toward West |
+|---|---|
+| 0 | South-facing |
+| > 0 | Rotated toward East |
+| < 0 | Rotated toward West |
 
 ### Panel indexing within an array
 
 | Index | 0 = … | Increases toward … |
-|-------|-------|--------------------|
+|---|---|---|
 | `row` | southernmost row | North |
 | `col` | westernmost column | East |
 
@@ -364,6 +368,8 @@ Unit normal to a segment: `n = (-dz, dx) / |d|` (left-hand perpendicular).
 ---
 
 ## Configuration reference
+
+The configuration lives in a `config.json` file that the user edits and loads via the settings sidebar. There is no `public/config.json` in the repository — the app ships with a built-in example in `src/config/defaultConfig.ts` used only on first launch.
 
 ```json
 {
@@ -398,7 +404,7 @@ Unit normal to a segment: `n = (-dz, dx) / |d|` (left-hand perpendicular).
 ### Site-level physical properties
 
 | Field | Default | Description |
-|-------|---------|-------------|
+|---|---|---|
 | `groundAlbedo` | 0.20 | Fraction of GHI reflected toward panels |
 | `inverterEfficiency` | 0.97 | DC/AC conversion efficiency |
 | `wiringLoss` | 0.02 | DC cable loss fraction |
@@ -406,7 +412,7 @@ Unit normal to a segment: `n = (-dz, dx) / |d|` (left-hand perpendicular).
 ### Panel-level physical properties
 
 | Field | Default | Description |
-|-------|---------|-------------|
+|---|---|---|
 | `temperatureCoefficient` | −0.004 /°C | Relative change in peak power per °C above 25°C |
 | `noct` | 45°C | Nominal Operating Cell Temperature |
 
@@ -465,7 +471,7 @@ effectivePower   = stringPower × systemLossFactor
 ### Irradiance sources
 
 | Source | Network | Interval | Year support |
-|--------|---------|----------|--------------|
+|---|---|---|---|
 | `geometric` | None | 15, 30, 60 min | Current + past 5 years |
 | `open-meteo` | Required | 60 min only | Past 5 years only |
 
@@ -482,7 +488,7 @@ All hour indices are UTC. The UI converts to local time using `Intl.DateTimeForm
 ### IndexedDB
 
 | Database | Version | Store | Key |
-|----------|---------|-------|-----|
+|---|---|---|---|
 | `solar-simulator` | 1 | `simulation-results` | `cacheKey` hash |
 | `solar-simulator-irradiance` | 2 | `irradiance-cache` | `{source}:{lat4dp}:{lon4dp}:{year}` |
 
@@ -491,6 +497,8 @@ All hour indices are UTC. The UI converts to local time using `Intl.DateTimeForm
 ## Results panel
 
 Fixed overlay, right edge. Drag handle resizes between 280px and 100vw. Three icon buttons: reset width, fullscreen, minimise.
+
+Only simulation results whose `setupId` matches one of the current config's setups are displayed. Results from previous configurations remain in IndexedDB but are invisible until that configuration is reloaded.
 
 ### Daily chart timezone
 
@@ -512,51 +520,62 @@ State machine: `idle → modal → generating → idle`.
 
 ### Module structure — `src/pdf/`
 
-Seven files with single responsibilities (see Architecture decisions above). External callers import only from `PdfReportGenerator.ts`.
+Seven files with single responsibilities. External callers import only from `PdfReportGenerator.ts`.
 
 ### Document structure
 
 | Pages | Content |
-|-------|---------|
+|---|---|
 | 1 | Cover: simulation parameters, computed-at date |
-| 2 | Annual: legend + horizontal bar chart (ECharts SSR) + totals table |
-| 3..N | Heat maps: one page per setup, arrays highest-index-first, rows highest-index-first |
-| N+1 | Monthly: legend + grouped bar chart (ECharts SSR) + monthly totals table |
-| N+2..M | Daily (one pair per selected day): page 1 = charts, page 2 = hourly table |
-
-### Charts — ECharts SSR + svg2pdf.js
-
-`echarts.init(null, null, { renderer: 'svg', ssr: true })` → `renderToSVGString()` → `doc.svg(svgEl, {...})`. No DOM, no canvas, no timing dependencies.
-
-### Heat maps — jsPDF primitives
-
-`doc.rect()` with shade-interpolated fill colours. Zone cells show zone ID (upper half, smaller font) and shade percentage (lower half, bold larger font), both scaled to cell size.
-
-### PDF filename
-
-```
-solarsim-{lat}-{lon}-sim-{year}-{interval}m-{source}-{density}p{threshold}t-{setups}s-{YYYYMMDDHHMMSS}.pdf
-```
-
-### Multilingual support
-
-All strings resolved via `t()` in `SimulationResultsPanel` and passed as `PdfLabels`. The generator has no i18next dependency.
+| 2 | Annual: legend + horizontal bar chart + totals table |
+| 3..N | Heat maps: one page per setup |
+| N+1 | Monthly: legend + grouped bar chart + monthly totals table |
+| N+2..M | Daily (one pair per selected day): charts + hourly data table |
 
 ---
 
 ## Settings sidebar
 
-Three collapsible sections: Cache management, Export / Import, Configuration (placeholder).
+Three collapsible sections, each implemented as an independent component under `src/components/settings/`:
 
-### Export / Import
+### Cache management (`SimulationCacheSection`, `IrradianceCacheSection`)
 
-Export: gzip-compressed `.solarsim` backup (config + simulation results). Import: replaces config and results, preserves irradiance cache.
+Lists cached simulation results grouped by run parameters (year, interval, irradiance source, density, threshold) and cached Open-Meteo irradiance data. Supports deleting individual entries, entire groups, or all entries of each type.
+
+### Export / Import (`ExportImportSection`)
+
+Exports a gzip-compressed `.solarsim` backup containing the current configuration and only the simulation results that belong to it. Results from previous configurations present in IndexedDB are excluded. Import replaces the current config and all simulation results; irradiance cache is preserved.
+
+### Configuration (`ConfigurationSection`)
+
+Three capabilities:
+
+1. **Inline JSON editor** with line numbers and two-level validation (JSON syntax + full ajv schema). The editor opens at the same pixel height as the read-only view to avoid a layout jump. The user can resize it vertically. Validation errors are listed below the editor, each referencing the field path reported by ajv.
+
+2. **Export to file** — downloads the current config as a plain `config.json`.
+
+3. **Load from file** — file picker accepting `.json` files. Same two-level validation is applied before the config is applied.
+
+Any config change (editor Apply or file load) triggers a three-option confirmation dialog:
+- **Delete simulations and apply** — clears IndexedDB results before applying.
+- **Keep simulations and apply** — applies without deleting; existing results stay in IndexedDB but become invisible in the results panel because they no longer match the new config's setupIds.
+- **Cancel** — discards the change.
+
+A **Reset to default** button clears OPFS and reloads the page, restoring the built-in example configuration. A documentation link is always visible in the section header (with a first-launch message on initial load, and a regular help message thereafter).
 
 ---
 
 ## Application layout
 
-Canvas fills `100vw × 100vh`. All UI elements are fixed or absolute overlays. `ReportModal` uses z-index 200 (above all other overlays).
+Canvas fills `100vw × 100vh`. All UI elements are fixed or absolute overlays.
+
+### Loading overlay
+
+A full-screen `LoadingOverlay` component covers all content (z-index 200) during two scenarios: initial app startup (OPFS check + config load) and the moment before `window.location.reload()` fires. The overlay is triggered in the second case by a custom `app:reload` DOM event, giving React ~80 ms to paint before the browser navigates.
+
+### OPFS error screen
+
+When `checkOpfsAvailability()` returns false, a blocking `OpfsUnavailableScreen` replaces the entire app with an explanation and a table of minimum supported browser versions. No fallback storage is provided.
 
 ---
 
@@ -573,31 +592,36 @@ Canvas fills `100vw × 100vh`. All UI elements are fixed or absolute overlays. `
 - **Isotropic sky model**: diffuse component assumes uniform sky radiance.
 - **Single inclination per setup for POA**: worker uses mean inclination across all arrays.
 - **Drag-to-resize is mouse-only**: touch not supported.
+- **OPFS required**: browsers older than Chrome 86 / Firefox 111 / Safari 15.2 cannot run the application.
 
 ---
 
 ## Lessons learned
 
+### OPFS as the correct storage primitive for configuration
+
+`localStorage` would work size-wise for a config JSON, but OPFS is semantically correct: the user is saving a file. Using the right abstraction produces cleaner code (async, file-oriented API) and makes the intent clear. The blocking error screen for unsupported browsers is preferable to a silent fallback — it sets honest expectations and affects fewer than 2% of users.
+
+### Configuration validation with ajv
+
+A hand-maintained JSON Schema compiled by ajv provides complete structural validation without a build-time schema generation step. The schema lives alongside the code it validates, is readable without tooling, and produces all errors in a single pass (`allErrors: true`). Error messages are post-processed from ajv's `ErrorObject` into field-path + plain-English descriptions before display.
+
+### Editor height synchronisation via `getBoundingClientRect`
+
+Capturing the rendered height of the read-only `<pre>` at the moment the Edit button is clicked and passing it as an inline `height` style to the editor wrapper avoids the layout jump that occurs when switching from a `max-height`-constrained element to an unconstrained one. The wrapper's `resize: vertical` then lets the user grow it from that stable starting point.
+
+### Scoping results to the active configuration
+
+Filtering `SimulationCache.listResults()` by the current config's `setupId` set in `useResultsPanel` is the correct boundary: IndexedDB is the source of truth for what is stored, but the UI is only responsible for showing what is relevant now. This decouples storage lifetime from display lifetime, which is exactly what the "keep simulations" option in the confirmation dialog exploits.
+
 ### PDF module decomposition
 
-An 800-line monolithic generator file is replaced by seven focused modules. The split follows natural seams: types, layout primitives, drawing primitives, chart rendering, heat map drawing, section composition, and the public entry point. Each file is independently readable and the dependency graph is a strict DAG with no cycles.
+An 800-line monolithic generator file is replaced by seven focused modules. The split follows natural seams: types, layout primitives, drawing primitives, chart rendering, heat map drawing, section composition, and the public entry point.
 
 ### ECharts SSR eliminates timing and DOM dependencies
 
-`echarts.init(null, null, { renderer: 'svg', ssr: true })` works in any JavaScript context without a DOM. Combined with `svg2pdf.js`, it produces crisp vector charts in the PDF without any timing hacks or off-screen React components.
+`echarts.init(null, null, { renderer: 'svg', ssr: true })` works in any JavaScript context without a DOM.
 
 ### UTC array rotation for timezone-correct hourly display
 
-Rotating the 24-element UTC array by `startUtc = (-offset + 24) % 24` positions and pairing it with sequential local labels `00:00–23:00` is both correct and simple. The key insight: the X axis always shows local hours sequentially; it is the data that is rotated, not the labels. Using `Intl.DateTimeFormat` at noon UTC (not midnight) as the DST reference avoids ambiguity during clock changes.
-
-### Heat map physical orientation
-
-Inverting both the array order (highest index first) and the row order within each array (highest index first) gives the correct physical orientation: the observer sees the installation from the south, with the southernmost panels (row 0, array 0) at the bottom. A single `.reverse()` on the array list and an `Array.from({length: rows}, (_, i) => rows-1-i)` index mapping for rows achieves both without any coordinate transformation.
-
-### PdfLabels interface decouples generator from i18next
-
-Resolving all strings in the React layer and passing them as a plain object means the PDF generator is pure TypeScript with no framework dependency. It can be tested with a simple mock object.
-
-### Cursor top-convention eliminates layout overlaps
-
-Defining `cursor.y` as the top of the next block (not a text baseline) makes every drawing call composable: receive top, draw downward, advance by exact height. There is no arithmetic between baseline offsets and block heights, which was the root cause of the table header overlap bug.
+Rotating the 24-element UTC array by `startUtc = (-offset + 24) % 24` and pairing it with sequential local labels `00:00–23:00` correctly maps production data to local hours. Using noon UTC as the DST reference avoids ambiguity during clock changes.

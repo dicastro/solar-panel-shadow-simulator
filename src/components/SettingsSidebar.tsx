@@ -1,16 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { TFunction } from 'i18next';
 import { useAppStore } from '../store/AppStore';
 import { useResizablePanel } from '../hooks/useResizablePanel';
-import { SimulationCache } from '../db/SimulationCache';
-import { IrradianceCacheManager, IrradianceCacheEntryMeta } from '../db/IrradianceCacheManager';
-import { SimulationGroup } from '../types/results';
-import { buildSimulationGroups } from '../utils/SimulationGroupUtils';
-import { BackupExporter } from '../backup/BackupExporter';
-import { BackupImporter } from '../backup/BackupImporter';
-import { BACKUP_FILE_EXTENSION } from '../backup/BackupConstants';
-import { appEvents } from '../events/AppEvents';
+import { SimulationCacheSection } from './settings/SimulationCacheSection';
+import { IrradianceCacheSection } from './settings/IrradianceCacheSection';
+import { ExportImportSection } from './settings/ExportImportSection';
+import { ConfigurationSection } from './settings/ConfigurationSection';
 
 const SIDEBAR_DEFAULT_WIDTH = 440;
 const SIDEBAR_MIN_WIDTH = 300;
@@ -18,38 +13,14 @@ const SIDEBAR_MIN_WIDTH = 300;
 /**
  * Persists the sidebar width across open/close cycles within the same browser
  * session. The sidebar component unmounts when closed, so React state alone
- * cannot preserve the value. A module-level variable survives remounts but
- * resets on page refresh — the correct trade-off for UI preference state that
- * does not need to outlive the session.
+ * cannot preserve the value.
  */
 let persistedSidebarWidth = SIDEBAR_DEFAULT_WIDTH;
 
-type SimulationSummary = Awaited<ReturnType<typeof SimulationCache.listResults>>[number];
-
-const formatDate = (ts: number): string =>
-  new Date(ts).toLocaleString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-
-/**
- * Builds the short label used for a simulation group in the cache list,
- * matching the format shown in the results panel run selector.
- */
-const buildGroupLabel = (g: SimulationGroup, t: TFunction): string =>
-  t('simulationResultsPanel.groupLabel', {
-    year: g.year,
-    interval: g.intervalMinutes,
-    irradiance: t(`simulationResultsPanel.irradiance_${g.irradianceSource}` as any),
-    samplingCode: `${g.density * g.density}p${g.threshold}t`,
-    setups: g.setups.length,
-  });
-
 /**
  * Collapsible section within the settings sidebar.
- * Starts open when defaultOpen is true.
  */
-function SidebarSection({
+export function SidebarSection({
   title,
   defaultOpen = false,
   children,
@@ -74,338 +45,15 @@ function SidebarSection({
 }
 
 /**
- * Cache management sub-section for simulation results.
- *
- * Entries are displayed in two levels:
- *  - Level 1: simulation group with a button to delete the entire group.
- *  - Level 2: individual setup rows within that group, each with their own
- *    delete button.
- *
- * After any mutation the local list reloads and simulationResultsChanged is
- * emitted so the results panel reacts consistently.
- */
-function SimulationCacheSection() {
-  const { t } = useTranslation();
-  const [groups, setGroups] = useState<SimulationGroup[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const reload = useCallback(() => {
-    setLoading(true);
-    SimulationCache.listResults()
-      .then((entries: SimulationSummary[]) => setGroups(buildSimulationGroups(entries)))
-      .catch(() => setGroups([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => { reload(); }, [reload]);
-
-  // Reload when any external operation modifies IndexedDB simulation results
-  // (backup import, deletions from another part of the UI).
-  useEffect(() => {
-    appEvents.on('simulationResultsChanged', reload);
-    return () => appEvents.off('simulationResultsChanged', reload);
-  }, [reload]);
-
-  const handleDeleteSetup = async (cacheKey: string) => {
-    await SimulationCache.deleteResult(cacheKey).catch(() => null);
-    reload();
-    appEvents.emit('simulationResultsChanged', { autoSelect: false });
-  };
-
-  const handleDeleteGroup = async (group: SimulationGroup) => {
-    await Promise.all(
-      group.setups.map(s => SimulationCache.deleteResult(s.cacheKey).catch(() => null)),
-    );
-    reload();
-    appEvents.emit('simulationResultsChanged', { autoSelect: false });
-  };
-
-  const handleClearAll = async () => {
-    await SimulationCache.clearAllResults().catch(() => null);
-    reload();
-    appEvents.emit('simulationResultsChanged', { autoSelect: false });
-  };
-
-  const totalEntries = groups.reduce((sum, g) => sum + g.setups.length, 0);
-
-  return (
-    <div>
-      <p className="settings-subsection__title">{t('settings.cache.simulationsTitle')}</p>
-      {loading ? (
-        <p className="cache-entry-list__empty">{t('settings.cache.loading')}</p>
-      ) : groups.length === 0 ? (
-        <p className="cache-entry-list__empty">{t('settings.cache.noSimulations')}</p>
-      ) : (
-        <div className="cache-entry-list">
-          {groups.map(group => (
-            <div key={group.groupKey} className="sim-group">
-              <div className="sim-group__header">
-                <span className="sim-group__label">{buildGroupLabel(group, t)}</span>
-                <span className="sim-group__meta">{formatDate(group.computedAt)}</span>
-                <button
-                  className="sim-group__delete-btn"
-                  onClick={() => handleDeleteGroup(group)}
-                  title={t('settings.cache.deleteGroup')}
-                >
-                  🗑
-                </button>
-              </div>
-              <div className="sim-group__setups">
-                {group.setups.map(setup => (
-                  <div key={setup.cacheKey} className="cache-entry">
-                    <div className="cache-entry__info">
-                      <span className="cache-entry__label">{setup.setupLabel}</span>
-                    </div>
-                    <span className="cache-entry__value">
-                      {setup.annualTotalKwh.toFixed(1)} kWh
-                    </span>
-                    <button
-                      className="cache-entry__delete-btn"
-                      onClick={() => handleDeleteSetup(setup.cacheKey)}
-                      title={t('settings.cache.deleteEntry')}
-                    >
-                      🗑
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      <button
-        className="settings-danger-btn"
-        onClick={handleClearAll}
-        disabled={totalEntries === 0}
-      >
-        {t('settings.cache.clearAllSimulations')}
-      </button>
-    </div>
-  );
-}
-
-/**
- * Cache management sub-section for Open-Meteo irradiance data.
- * Each entry is a flat row distinct by source, location, and year.
- */
-function IrradianceCacheSection() {
-  const { t } = useTranslation();
-  const [entries, setEntries] = useState<IrradianceCacheEntryMeta[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const reload = useCallback(() => {
-    setLoading(true);
-    IrradianceCacheManager.listEntries()
-      .then(setEntries)
-      .catch(() => setEntries([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => { reload(); }, [reload]);
-
-  const handleDelete = async (key: string) => {
-    await IrradianceCacheManager.deleteEntry(key).catch(() => null);
-    reload();
-  };
-
-  const handleClearAll = async () => {
-    await IrradianceCacheManager.clearAllEntries().catch(() => null);
-    reload();
-  };
-
-  return (
-    <div>
-      <p className="settings-subsection__title">{t('settings.cache.irradianceTitle')}</p>
-      {loading ? (
-        <p className="cache-entry-list__empty">{t('settings.cache.loading')}</p>
-      ) : (
-        <div className="cache-entry-list">
-          {entries.length === 0 ? (
-            <p className="cache-entry-list__empty">{t('settings.cache.noIrradiance')}</p>
-          ) : (
-            entries.map(entry => (
-              <div key={entry.key} className="cache-entry">
-                <div className="cache-entry__info">
-                  <span className="cache-entry__label">{entry.source}</span>
-                  <span className="cache-entry__meta">
-                    {entry.lat.toFixed(4)}, {entry.lon.toFixed(4)} · {entry.year}
-                  </span>
-                  <span className="cache-entry__meta">{formatDate(entry.fetchedAt)}</span>
-                </div>
-                <button
-                  className="cache-entry__delete-btn"
-                  onClick={() => handleDelete(entry.key)}
-                  title={t('settings.cache.deleteEntry')}
-                >
-                  🗑
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-      <button
-        className="settings-danger-btn"
-        onClick={handleClearAll}
-        disabled={entries.length === 0}
-      >
-        {t('settings.cache.clearAllIrradiance')}
-      </button>
-    </div>
-  );
-}
-
-/**
- * Export/Import sub-section within the settings sidebar.
- *
- * Export: reads all simulation results from IndexedDB and the current config
- * from the store, serialises them into a gzip-compressed backup file, and
- * triggers a browser download.
- *
- * Import: opens a file picker restricted to the backup extension, parses the
- * selected file, replaces all simulation results in IndexedDB, calls loadConfig
- * to replace the in-memory config and rebuild the 3D scene, then emits
- * simulationResultsChanged so the results panel reloads automatically.
- */
-function ExportImportSection() {
-  const { t } = useTranslation();
-  const config = useAppStore(s => s.config);
-  const loadConfig = useAppStore(s => s.loadConfig);
-
-  const [exportStatus, setExportStatus] = useState<'idle' | 'exporting' | 'success' | 'error'>('idle');
-  const [exportError, setExportError] = useState('');
-  const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [importMessage, setImportMessage] = useState('');
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleExport = async () => {
-    if (!config) return;
-    setExportStatus('exporting');
-    setExportError('');
-    try {
-      await BackupExporter.export(config);
-      setExportStatus('success');
-    } catch (err) {
-      setExportError(err instanceof Error ? err.message : String(err));
-      setExportStatus('error');
-    }
-  };
-
-  const handleImportClick = () => {
-    setImportStatus('idle');
-    setImportMessage('');
-    fileInputRef.current?.click();
-  };
-
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    // Reset so selecting the same file again triggers onChange.
-    e.target.value = '';
-    if (!file) return;
-
-    try {
-      const { config: importedConfig, simulationResults } = await BackupImporter.parse(file);
-
-      // Replace all simulation results in IndexedDB.
-      await SimulationCache.replaceAllResults(simulationResults);
-
-      // Replace the in-memory config and rebuild the 3D scene.
-      loadConfig(importedConfig);
-
-      // Notify the results panel to reload from the updated IndexedDB.
-      appEvents.emit('simulationResultsChanged', { autoSelect: true });
-
-      setImportStatus('success');
-      setImportMessage(
-        t('settings.exportImport.importSuccess', { count: simulationResults.length }),
-      );
-    } catch (err) {
-      setImportStatus('error');
-      setImportMessage(
-        t('settings.exportImport.importError', {
-          message: err instanceof Error ? err.message : String(err),
-        }),
-      );
-    }
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <p className="settings-placeholder" style={{ fontStyle: 'normal', color: '#aaa' }}>
-        {t('settings.exportImport.importDescription')}
-      </p>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <button
-          className="settings-action-btn"
-          onClick={handleExport}
-          disabled={!config || exportStatus === 'exporting'}
-          title={t('settings.exportImport.exportTitle')}
-        >
-          {exportStatus === 'exporting'
-            ? t('settings.exportImport.exportingBtn')
-            : t('settings.exportImport.exportBtn')}
-        </button>
-        {exportStatus === 'success' && (
-          <p className="settings-feedback settings-feedback--success">
-            {t('settings.exportImport.exportSuccess')}
-          </p>
-        )}
-        {exportStatus === 'error' && (
-          <p className="settings-feedback settings-feedback--error">
-            {t('settings.exportImport.exportError', { message: exportError })}
-          </p>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={BACKUP_FILE_EXTENSION}
-          style={{ display: 'none' }}
-          onChange={handleFileSelected}
-        />
-        <button
-          className="settings-action-btn"
-          onClick={handleImportClick}
-          title={t('settings.exportImport.importTitle')}
-        >
-          {t('settings.exportImport.importBtn')}
-        </button>
-        {importStatus === 'success' && (
-          <p className="settings-feedback settings-feedback--success">
-            {importMessage}
-          </p>
-        )}
-        {importStatus === 'error' && (
-          <p className="settings-feedback settings-feedback--error">
-            {importMessage}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
  * Full-height settings sidebar rendered as a fixed overlay on the left edge
  * of the viewport. The sidebar width is user-resizable by dragging the right
- * edge handle, and its body scrolls vertically when content exceeds the
- * viewport height.
- *
- * A semi-transparent backdrop covers the rest of the screen; clicking it
- * closes the sidebar. The gear button is hidden while the sidebar is open.
- *
- * Three collapsible sections:
- *  1. Cache management — simulation results (two-level) and irradiance data.
- *  2. Export / Import — export to and import from a compressed backup file.
- *  3. Configuration — placeholder for a future in-app config editor.
+ * edge handle. Contains three collapsible sections: cache management,
+ * backup export/import, and configuration editing.
  */
 export function SettingsSidebar() {
   const { t } = useTranslation();
   const closeSidebar = useAppStore(s => s.closeSidebar);
+  const isFirstLaunch = useAppStore(s => s.isFirstLaunch);
 
   const { width, isDragging, dragHandleProps } = useResizablePanel({
     defaultWidth: persistedSidebarWidth,
@@ -433,17 +81,22 @@ export function SettingsSidebar() {
           </div>
 
           <div className="settings-sidebar__body">
-            <SidebarSection title={t('settings.cache.sectionTitle')} defaultOpen>
+            <SidebarSection title={t('settings.cache.sectionTitle')}>
               <SimulationCacheSection />
               <IrradianceCacheSection />
             </SidebarSection>
 
-            <SidebarSection title={t('settings.exportImport.sectionTitle')} defaultOpen>
+            <SidebarSection title={t('settings.exportImport.sectionTitle')}>
               <ExportImportSection />
             </SidebarSection>
 
-            <SidebarSection title={t('settings.configuration.sectionTitle')}>
-              <p className="settings-placeholder">{t('settings.configuration.placeholder')}</p>
+            {/* Configuration section opens automatically on first launch
+                so the user is guided to edit their installation details. */}
+            <SidebarSection
+              title={t('settings.configuration.sectionTitle')}
+              defaultOpen={isFirstLaunch}
+            >
+              <ConfigurationSection />
             </SidebarSection>
           </div>
         </div>

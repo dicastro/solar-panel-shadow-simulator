@@ -33,12 +33,6 @@
   background: rgba(0, 0, 0, 0.4);
 }
 
-/*
- * The sidebar is a fixed overlay on the left edge. Its width is controlled
- * by an inline style set by useResizablePanel. The drag handle sits on the
- * right edge of the sidebar (opposite to the results panel, which has it on
- * the left edge).
- */
 .settings-sidebar-overlay {
   position: fixed;
   top: 0;
@@ -64,7 +58,6 @@
   overflow: hidden;
 }
 
-/* Drag handle — sits on the right edge of the sidebar panel */
 .settings-sidebar__drag-handle {
   width: 6px;
   height: 100%;
@@ -136,7 +129,7 @@
   min-height: 0;
 }
 
-/* ── Collapsible section ───────────────────────────────────────────────────── */
+/* ── Collapsible section shell ─────────────────────────────────────────────── */
 
 .settings-section {
   border-bottom: 1px solid var(--color-border-dark);
@@ -182,7 +175,7 @@
   gap: 12px;
 }
 
-/* ── Sub-section heading ───────────────────────────────────────────────────── */
+/* ── Shared primitives used across sections ────────────────────────────────── */
 
 .settings-subsection__title {
   font-size: 0.72rem;
@@ -194,183 +187,6 @@
   padding-bottom: 6px;
   border-bottom: 1px solid #2a2a2a;
 }
-
-/* ── Simulation group (two-level cache display) ────────────────────────────── */
-
-.sim-group {
-  background: #1e1e1e;
-  border: 1px solid #2e2e2e;
-  border-radius: 7px;
-  overflow: hidden;
-}
-
-.sim-group__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: #252525;
-  border-bottom: 1px solid #2e2e2e;
-}
-
-.sim-group__label {
-  flex: 1;
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: #ccc;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sim-group__meta {
-  font-size: 0.68rem;
-  color: #666;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.sim-group__delete-btn {
-  width: 24px;
-  height: 24px;
-  border: 1px solid #3a3a3a;
-  border-radius: 4px;
-  background: transparent;
-  color: #666;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  flex-shrink: 0;
-  transition: all 0.15s ease;
-}
-
-.sim-group__delete-btn:hover {
-  background: rgba(231, 76, 60, 0.15);
-  border-color: #e74c3c;
-  color: #e74c3c;
-}
-
-.sim-group__setups {
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── Cache entry (setup row inside a group) ────────────────────────────────── */
-
-.cache-entry {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 7px 10px;
-  border-bottom: 1px solid #282828;
-}
-
-.cache-entry:last-child {
-  border-bottom: none;
-}
-
-.cache-entry__info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.cache-entry__label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #ccc;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cache-entry__meta {
-  font-size: 0.68rem;
-  color: #666;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cache-entry__value {
-  font-size: 0.72rem;
-  color: var(--color-accent-green);
-  font-weight: 600;
-  white-space: nowrap;
-  flex-shrink: 0;
-  align-self: center;
-}
-
-.cache-entry__delete-btn {
-  width: 22px;
-  height: 22px;
-  border: 1px solid #3a3a3a;
-  border-radius: 4px;
-  background: transparent;
-  color: #555;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-  flex-shrink: 0;
-  align-self: center;
-  transition: all 0.15s ease;
-}
-
-.cache-entry__delete-btn:hover {
-  background: rgba(231, 76, 60, 0.15);
-  border-color: #e74c3c;
-  color: #e74c3c;
-}
-
-/* ── Irradiance entry list ─────────────────────────────────────────────────── */
-
-.cache-entry-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.cache-entry-list__empty {
-  font-size: 0.78rem;
-  color: #555;
-  font-style: italic;
-  padding: 4px 0;
-}
-
-/* ── Danger / clear-all button ─────────────────────────────────────────────── */
-
-.settings-danger-btn {
-  align-self: flex-start;
-  margin-top: 8px;
-  padding: 6px 12px;
-  border: 1px solid #5a2a2a;
-  border-radius: 5px;
-  background: rgba(231, 76, 60, 0.1);
-  color: #e74c3c;
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 600;
-  font-family: sans-serif;
-  transition: all 0.15s ease;
-}
-
-.settings-danger-btn:hover {
-  background: rgba(231, 76, 60, 0.22);
-  border-color: #e74c3c;
-}
-
-.settings-danger-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-/* ── Action button (export / import) ───────────────────────────────────────── */
 
 .settings-action-btn {
   width: 100%;
@@ -398,7 +214,30 @@
   cursor: not-allowed;
 }
 
-/* ── Feedback messages (success / error) ───────────────────────────────────── */
+.settings-danger-btn {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: 1px solid #5a2a2a;
+  border-radius: 5px;
+  background: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: sans-serif;
+  transition: all 0.15s ease;
+}
+
+.settings-danger-btn:hover {
+  background: rgba(231, 76, 60, 0.22);
+  border-color: #e74c3c;
+}
+
+.settings-danger-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 
 .settings-feedback {
   font-size: 0.75rem;
@@ -420,8 +259,6 @@
   border: 1px solid rgba(231, 76, 60, 0.3);
   color: #e74c3c;
 }
-
-/* ── Coming-soon placeholder ───────────────────────────────────────────────── */
 
 .settings-placeholder {
   font-size: 0.78rem;

@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/es';
 import 'dayjs/locale/en';
@@ -16,9 +16,69 @@ import { SimulationResultsPanel } from './components/SimulationResultsPanel';
 import { SettingsSidebar } from './components/SettingsSidebar';
 import { SettingsSidebarButton } from './components/SettingsSidebarButton';
 import { Scene } from './components/Scene';
+import { checkOpfsAvailability, ConfigStorage } from './utils/ConfigStorage';
+import { DEFAULT_CONFIG } from './config/defaultConfig';
+
+/**
+ * Full-screen loading overlay shown during initialisation and before page
+ * reloads (e.g. after a config reset). Covers all content and prevents
+ * interaction while the app is not yet ready.
+ */
+function LoadingOverlay({ message }: { message: string }) {
+  return (
+    <div className="loading-overlay">
+      <div className="loading-overlay__box">
+        <div className="loading-overlay__spinner" />
+        <p className="loading-overlay__message">{message}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Blocking error screen shown when OPFS is not available in the user's browser.
+ * The application cannot persist configuration without OPFS, so this is a hard
+ * requirement rather than a graceful degradation.
+ */
+function OpfsUnavailableScreen() {
+  const { t } = useTranslation();
+  return (
+    <div className="opfs-error-screen">
+      <div className="opfs-error-screen__box">
+        <h1 className="opfs-error-screen__title">{t('opfsError.title')}</h1>
+        <p className="opfs-error-screen__message">{t('opfsError.message')}</p>
+        <table className="opfs-error-screen__table">
+          <thead>
+            <tr>
+              <th>{t('opfsError.browser')}</th>
+              <th>{t('opfsError.minVersion')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Chrome / Edge</td><td>86</td></tr>
+            <tr><td>Firefox</td><td>111</td></tr>
+            <tr><td>Safari</td><td>15.2</td></tr>
+            <tr><td>Chrome Android</td><td>86</td></tr>
+            <tr><td>Safari iOS</td><td>15.2</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+type AppInitState = 'checking' | 'opfs-unavailable' | 'ready';
 
 export default function App() {
   const { t, i18n } = useTranslation();
+
+  const [initState, setInitState] = useState<AppInitState>('checking');
+  /**
+   * When true, a full-screen loading overlay is shown over the ready app.
+   * Used to cover the UI during window.location.reload() calls so the user
+   * sees feedback immediately rather than a moment of unresponsive UI.
+   */
+  const [isReloading, setIsReloading] = useState(false);
 
   const site = useAppStore(s => s.site);
   const activeSetup = useAppStore(s => s.activeSetup);
@@ -32,16 +92,40 @@ export default function App() {
   const setInstantProductionResult = useAppStore(s => s.setInstantProductionResult);
   const tickHour = useAppStore(s => s.tickHour);
   const loadConfig = useAppStore(s => s.loadConfig);
+  const openSidebar = useAppStore(s => s.openSidebar);
+  const setIsFirstLaunch = useAppStore(s => s.setIsFirstLaunch);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => { dayjs.locale(i18n.language); }, [i18n.language]);
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}config.json`)
-      .then(res => res.json())
-      .then(data => loadConfig(data));
-  }, [loadConfig]);
+    const init = async () => {
+      const opfsOk = await checkOpfsAvailability();
+      if (!opfsOk) {
+        setInitState('opfs-unavailable');
+        return;
+      }
+
+      const saved = await ConfigStorage.load();
+      if (saved) {
+        loadConfig(saved);
+      } else {
+        // First launch: apply the built-in default, persist it, and open the
+        // settings sidebar so the user is guided to configure their installation.
+        await ConfigStorage.save(DEFAULT_CONFIG);
+        loadConfig(DEFAULT_CONFIG);
+        setIsFirstLaunch(true);
+        openSidebar();
+      }
+
+      setInitState('ready');
+    };
+
+    init();
+    // loadConfig, openSidebar and setIsFirstLaunch are stable store actions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (isPlaying) {
@@ -52,8 +136,29 @@ export default function App() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isPlaying, tickHour]);
 
+  // The sidebar signals a page reload is needed (e.g. config reset) by emitting
+  // this custom event. The app shows the loading overlay before the reload fires
+  // so the user sees immediate feedback.
+  useEffect(() => {
+    const handler = () => {
+      setIsReloading(true);
+      // Small delay so React can paint the overlay before the reload triggers.
+      setTimeout(() => window.location.reload(), 80);
+    };
+    window.addEventListener('app:reload', handler);
+    return () => window.removeEventListener('app:reload', handler);
+  }, []);
+
+  if (initState === 'checking') {
+    return <LoadingOverlay message={t('loading')} />;
+  }
+
+  if (initState === 'opfs-unavailable') {
+    return <OpfsUnavailableScreen />;
+  }
+
   if (!site || !activeSetup || !sun) {
-    return <div className="app-loading">{t('loading')}</div>;
+    return <LoadingOverlay message={t('loading')} />;
   }
 
   const cameraDistance = site.boundingRadius * 4;
@@ -61,19 +166,14 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {isReloading && <LoadingOverlay message={t('loading')} />}
+
       <AngleWarningBanner />
 
-      {/* Settings sidebar — rendered as a fixed overlay when open */}
       {isSidebarOpen && <SettingsSidebar />}
 
       <div className="app-layout">
         <div className="app-layout__canvas-column">
-          {/*
-           * The gear button sits at top-left. When the sidebar is open it is
-           * hidden (the sidebar itself occupies the left edge and provides a
-           * close button). RenderControls is pushed down by the gear button
-           * height + gap via the --controls-top-offset custom property.
-           */}
           {!isSidebarOpen && <SettingsSidebarButton />}
 
           <RenderControls offsetTop={isSidebarOpen ? false : true} />
@@ -95,7 +195,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Results panel — fixed overlay, independent of the canvas column */}
       <SimulationResultsPanel />
     </div>
   );

@@ -1,0 +1,147 @@
+/* ── Simulation group (two-level cache display) ────────────────────────────── */
+
+.sim-group {
+  background: #1e1e1e;
+  border: 1px solid #2e2e2e;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.sim-group__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #252525;
+  border-bottom: 1px solid #2e2e2e;
+}
+
+.sim-group__label {
+  flex: 1;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sim-group__meta {
+  font-size: 0.68rem;
+  color: #666;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sim-group__delete-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.sim-group__delete-btn:hover {
+  background: rgba(231, 76, 60, 0.15);
+  border-color: #e74c3c;
+  color: #e74c3c;
+}
+
+.sim-group__setups {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Cache entry row ───────────────────────────────────────────────────────── */
+
+.cache-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid #282828;
+}
+
+.cache-entry:last-child {
+  border-bottom: none;
+}
+
+.cache-entry__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cache-entry__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cache-entry__meta {
+  font-size: 0.68rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cache-entry__value {
+  font-size: 0.72rem;
+  color: var(--color-accent-green);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.cache-entry__delete-btn {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  align-self: center;
+  transition: all 0.15s ease;
+}
+
+.cache-entry__delete-btn:hover {
+  background: rgba(231, 76, 60, 0.15);
+  border-color: #e74c3c;
+  color: #e74c3c;
+}
+
+/* ── Entry list container ──────────────────────────────────────────────────── */
+
+.cache-entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cache-entry-list__empty {
+  font-size: 0.78rem;
+  color: #555;
+  font-style: italic;
+  padding: 4px 0;
+}

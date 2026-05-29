@@ -143,6 +143,12 @@
     "donate": "Buy me a coffee",
     "donateTitle": "Support this project on Ko-fi"
   },
+  "opfsError": {
+    "title": "Browser not supported",
+    "message": "This application requires the Origin Private File System (OPFS) API to store your configuration between sessions. Your current browser does not support it. Please update to a recent version of one of the following browsers:",
+    "browser": "Browser",
+    "minVersion": "Minimum version"
+  },
   "settings": {
     "title": "Settings",
     "openTitle": "Open settings",
@@ -163,7 +169,7 @@
     "exportImport": {
       "sectionTitle": "Export / Import",
       "exportBtn": "Export backup",
-      "exportTitle": "Export all simulation results and configuration to a backup file",
+      "exportTitle": "Export the current configuration and its simulation results to a backup file",
       "exportingBtn": "Exporting…",
       "exportSuccess": "Backup exported successfully.",
       "exportError": "Export failed: {{message}}",
@@ -175,7 +181,31 @@
     },
     "configuration": {
       "sectionTitle": "Configuration",
-      "placeholder": "In-app configuration editing will be available in a future update."
+      "firstLaunchMessage": "This is the built-in example configuration. Edit it to match your installation, or load your own config.json file using the buttons below.",
+      "firstLaunchDocLink": "How to configure your installation →",
+      "editorTitle": "Inline editor",
+      "editBtn": "Edit",
+      "applyBtn": "Apply",
+      "cancelBtn": "Cancel",
+      "applySuccess": "Configuration applied successfully.",
+      "syntaxError": "JSON syntax error: {{message}}",
+      "structureError": "Invalid configuration: {{message}}",
+      "invalidConfig": "The file does not contain a valid configuration.",
+      "fileTitle": "File",
+      "exportFileBtn": "Save config to file",
+      "exportFileTitle": "Download the current configuration as config.json",
+      "exportFileSuccess": "Configuration file downloaded.",
+      "importFileBtn": "Load config from file",
+      "importFileTitle": "Load a config.json file and apply it immediately",
+      "importSuccess": "Configuration loaded and applied successfully.",
+      "resetBtn": "Reset to default configuration",
+      "resetTitle": "Clear the saved configuration and reload the built-in default",
+      "resetConfirm": "Reset to the default configuration? The current configuration will be replaced by the built-in example.",
+      "changeWarning": "Changing the configuration will make existing simulation results inaccessible in the results panel, because those results are linked to the previous configuration. You can keep them in storage and recover them by reloading the previous configuration, or delete them now to free up space.",
+      "changeDeleteAndContinue": "Delete simulations and apply",
+      "changeKeepAndContinue": "Keep simulations and apply",
+      "changeCancel": "Cancel",
+      "docLinkMessage": "Need help configuring your installation? Check the documentation:"
     }
   }
 }

@@ -7,8 +7,12 @@ import { HashUtils } from './HashUtils';
  * output: world positions, rotations, zones, peak power, string assignment,
  * and optimizer flag. Layout fields (renderData, samplePoints) are excluded
  * because they are derived from the same inputs and add no new information.
+ *
+ * Exported separately so callers that only need the geometry hash (e.g. the
+ * backup exporter when filtering results by current config) can obtain it
+ * without constructing a full SimulationCacheKey.
  */
-const hashSetupGeometry = (setup: PanelSetup): string => {
+export const buildSetupHash = (setup: PanelSetup): string => {
   const relevant = setup.panelArrays.flatMap(pa =>
     pa.panels.map(p => ({
       id: p.id,
@@ -45,7 +49,7 @@ export const SimulationCacheUtils = {
     irradianceSource: IrradianceSource,
   ): SimulationCacheKey => ({
     setupId: setup.id,
-    setupHash: hashSetupGeometry(setup),
+    setupHash: buildSetupHash(setup),
     density,
     threshold,
     intervalMinutes,
@@ -61,4 +65,4 @@ export const SimulationCacheUtils = {
    */
   hashCacheKey: (key: SimulationCacheKey): string =>
     HashUtils.fnv1a(JSON.stringify(key)),
-}
+};
