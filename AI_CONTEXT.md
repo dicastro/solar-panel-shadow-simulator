@@ -10,7 +10,7 @@ This file provides context for AI assistants working on this project.
 - You are working through the web chat interface. You cannot modify source files directly. Provide the modified files as output — the user will copy them into the repository.
 - Before writing any code, read the existing relevant files from the context window to understand the current state.
 - If you have doubts about something stated or asked, ask before proposing code changes.
-- Once the user confirms the code changes are good, update `README.md` accordingly (it is heavy — do not update it before confirmation to avoid wasting tokens).
+- Once the user confirms the code changes are good, update documentation accordingly (README.md, AI_CONTEXT.md, and any relevant files under doc/ or public/docs/). Do not update documentation before confirmation to avoid wasting tokens.
 - If you cannot complete a full response due to message limits, the user will ask you to continue. Do not re-provide files already delivered in the same conversation unless they need a further change.
 - Produce a concise git commit message at the end of every completed change set.
 
@@ -22,13 +22,20 @@ This file provides context for AI assistants working on this project.
 - All code, comments, and documentation in English.
 - Follow existing patterns in the codebase rather than introducing new conventions.
 - Semantic parameter grouping: place fields where they conceptually belong, not in catch-all objects.
+- **Module size**: before adding code to an existing function or module, assess its current size. If it is already large, refactor and split it into smaller units with a clear logical separation before adding new functionality. A function should do one thing; a module should have one clear responsibility.
 
-## README and documentation updates
+## Documentation structure
 
-- `README.md` is the public-facing overview. It should be simple: what the app does, use cases, links to documentation, Ko-fi link.
-- Technical documentation lives in `doc/technical/`. Functional documentation in `doc/functional/`.
-- The interactive configuration guide is `public/docs/configuration-guide.html`.
-- When updating `README.md`, merge with existing content — do not replace it wholesale. Only current/implemented features, never planned ones.
+The project documentation is split across several locations. When documentation needs updating, identify all affected locations:
+
+- `README.md` — public-facing overview: what the app does, use cases, links, Ko-fi. Simple and concise. Only implemented features, never planned ones.
+- `AI_CONTEXT.md` — this file. Context and instructions for AI assistants.
+- `doc/technical/` — technical deep-dives: coordinate system, solar production model, shadow detection, annual simulation.
+- `doc/functional/` — functional reference: configuration field reference.
+- `doc/README.md` — index of the doc/ folder.
+- `public/docs/configuration-guide.en.html` and `public/docs/configuration-guide.es.html` — interactive configuration guides with diagrams, served by the app and linked from Settings → Configuration.
+
+When updating any documentation file, merge with existing content — do not replace it wholesale.
 
 ## Project overview
 
@@ -70,3 +77,6 @@ A browser-based 3D solar panel shadow simulator. The user defines their rooftop 
 | Settings | `src/components/settings/ConfigurationSection.tsx`, `src/utils/ConfigStorage.ts` |
 | Irradiance | `src/irradiance/IrradianceProvider.ts`, `src/irradiance/OpenMeteoIrradianceProvider.ts` |
 | PDF | `src/pdf/PdfReportGenerator.ts` (public API only; internals in the other `src/pdf/` files) |
+| Technical docs | `doc/technical/coordinate-system.md`, `doc/technical/solar-production-model.md`, `doc/technical/shadow-detection.md`, `doc/technical/annual-simulation.md` |
+| Functional docs | `doc/functional/configuration-reference.md` |
+| Config guides | `public/docs/configuration-guide.en.html`, `public/docs/configuration-guide.es.html` |
