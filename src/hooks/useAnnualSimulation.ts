@@ -20,33 +20,19 @@ import { createIrradianceProvider } from '../irradiance/IrradianceProvider';
 import { appEvents } from '../events/AppEvents';
 
 /**
- * How many logical CPU cores to use for simulation workers.
- * One core is always kept free for the main thread to preserve UI responsiveness.
+ * Module-level stop flag. Activated synchronously by stopSimulation() in the
+ * store before any React effect cleanup runs. This ensures worker messages
+ * arriving after the user stops the simulation are discarded immediately,
+ * without depending on React's asynchronous effect cleanup timing.
  */
+export const simulationStopFlag = { current: false };
+
 const maxWorkers = (): number =>
   Math.max(1, (navigator.hardwareConcurrency ?? 2) - 1);
 
-/**
- * Returns true for meshes that are NOT panel frames.
- *
- * Panel frame meshes are marked with `userData.isPanelFrame = true` by
- * SolarPanelComponent. Excluding them from the static batch ensures each
- * worker receives only the scene's structural geometry (walls, railings,
- * intersection posts). The correct panel geometry for each simulated setup
- * is added separately via PanelMeshFactory.
- */
 const isNotPanelFrame = (mesh: THREE.Mesh): boolean =>
   mesh.userData.isPanelFrame !== true;
 
-/**
- * Computes a representative panel inclination for a setup, used by the worker
- * to calculate the diffuse and albedo POA components.
- *
- * Most residential setups use a single inclination across all arrays. When
- * arrays differ, the mean inclination is a reasonable approximation because
- * the sky-view and ground-view factors vary slowly with tilt and the
- * cross-array difference is small compared to other uncertainties.
- */
 const meanInclinationRad = (setup: PanelSetup): number => {
   const allPanels = setup.panelArrays.flatMap(pa => pa.panels);
   if (allPanels.length === 0) return 0;
@@ -54,19 +40,6 @@ const meanInclinationRad = (setup: PanelSetup): number => {
   return sum / allPanels.length;
 };
 
-/**
- * Builds the complete worker payload for a single setup.
- *
- * The serialised mesh list combines:
- *  1. Static meshes (walls, railings, intersection posts) — extracted once
- *     from the live scene (panel frames excluded) and reused across all setups.
- *  2. Panel frame meshes — built procedurally from the setup's panel data by
- *     PanelMeshFactory, ensuring each worker receives the correct panels for
- *     the setup it simulates, independently of the 3D viewport state.
- *
- * All transferable buffers are collected into a single list for one-pass
- * zero-copy postMessage transfer.
- */
 const buildPayload = (
   setup: PanelSetup,
   site: Site,
@@ -97,9 +70,6 @@ const buildPayload = (
     groundAlbedo: site.groundAlbedo,
   };
 
-  // Each worker needs its own copy of the typed arrays — zero-copy transfer
-  // detaches the buffer on the sending side, so a shared reference would
-  // corrupt subsequent workers.
   let workerWeatherData: WorkerSimulationPayload['weatherData'] = null;
   if (weatherData) {
     const dniCopy = weatherData.dni.slice();
@@ -138,34 +108,15 @@ export interface AnnualSimulationCallbacks {
   onResult: (setupId: string, label: string, annualTotalKwh: number) => void;
   onError: (setupId: string, message: string) => void;
   onAllComplete: () => void;
-  /** Called whenever the number of queued (not-yet-started) setups changes. */
   onPendingUpdate: (count: number) => void;
 }
 
-/**
- * Manages the full lifecycle of the annual simulation:
- *  - Resolves the irradiance provider for the selected source.
- *  - Fetches and caches weather data (DNI, DHI, temperature) on the main
- *    thread before worker launch; distributes independent copies to each worker.
- *  - Checks IndexedDB for each setup's cached result before doing any work.
- *  - Collects static scene meshes (walls, railings) once, excluding panel frames.
- *  - Builds panel frame meshes procedurally per setup via PanelMeshFactory so
- *    each worker always receives the correct geometry regardless of which setup
- *    is currently displayed in the 3D viewport.
- *  - Spawns up to maxWorkers() concurrent workers; queues the rest.
- *  - Tracks per-setup progress with EMA-smoothed ETA.
- *  - Persists completed results to IndexedDB and emits simulationResultsChanged
- *    so the results panel reloads without any direct coupling between the
- *    simulation pipeline and the UI hook.
- *
- * Must be called from inside a <Canvas> tree so that useThree works.
- * The returned stop function terminates all active workers immediately.
- */
 export function useAnnualSimulation() {
   const { scene } = useThree();
   const workersRef = useRef<Worker[]>([]);
 
   const stop = useCallback(() => {
+    simulationStopFlag.current = true;
     workersRef.current.forEach(w => w.terminate());
     workersRef.current = [];
   }, []);
@@ -181,6 +132,7 @@ export function useAnnualSimulation() {
     callbacks: AnnualSimulationCallbacks,
   ) => {
     stop();
+    simulationStopFlag.current = false;
 
     let sharedWeatherData: { dni: Float32Array; dhi: Float32Array; temperature: Float32Array | null } | null = null;
     try {
@@ -214,7 +166,6 @@ export function useAnnualSimulation() {
       if (cached) {
         callbacks.onResult(setup.id, setup.label, cached.annualTotalKwh);
         callbacks.onSetupComplete(setup.id);
-        // Emit so the results panel reflects the cached result immediately.
         appEvents.emit('simulationResultsChanged', { autoSelect: true });
       } else {
         uncachedSetups.push({ setup, cacheKey });
@@ -266,6 +217,8 @@ export function useAnnualSimulation() {
         workersRef.current.push(worker);
 
         worker.onmessage = async (event: MessageEvent<WorkerOutgoingMessage>) => {
+          if (simulationStopFlag.current) return;
+
           const msg = event.data;
 
           if (msg.type === 'progress') {
@@ -302,7 +255,6 @@ export function useAnnualSimulation() {
             }
             callbacks.onResult(msg.result.setupId, msg.result.setupLabel, msg.result.annualTotalKwh);
             callbacks.onSetupComplete(msg.result.setupId);
-            // Notify the results panel that a new setup result is available.
             appEvents.emit('simulationResultsChanged', { autoSelect: true });
             onWorkerDone(worker);
           }
@@ -315,6 +267,7 @@ export function useAnnualSimulation() {
         };
 
         worker.onerror = (err) => {
+          if (simulationStopFlag.current) return;
           callbacks.onError(setup.id, err.message ?? 'Unknown worker error');
           callbacks.onSetupComplete(setup.id);
           onWorkerDone(worker);

@@ -35,7 +35,7 @@ Define your rooftop installation in a JSON configuration file — terrace shape,
 
 ## Support the project
 
-If this tool saves you time or helps with your installation, consider [buying me a coffee on Ko-fi](https://ko-fi.com/pending_to_be_created).
+If this tool saves you time or helps with your installation, consider [buying me a coffee on Ko-fi](https://ko-fi.com/dicastro).
 
 ## Tech stack
 

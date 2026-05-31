@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
  *  - Replace DEVELOPER_NAME with your name or handle
  */
 
-const KOFI_USERNAME = 'pending_to_be_created';
+const KOFI_USERNAME = 'dicastro';
 const PERSONAL_SITE_URL = 'https://diegocastroviadero.com/projects/solar-simulator';
 const DEVELOPER_NAME = 'Diego Castro';
 
