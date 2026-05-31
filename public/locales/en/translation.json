@@ -133,10 +133,19 @@
     "colSetup": "Setup",
     "unitMin": "min"
   },
-  "angleWarning": {
-    "title": "Configuration Warning",
-    "message": "This application only supports 90°/180° wall angles. The following sets of points form angles that do not meet this requirement and rendering may be inaccurate:",
-    "tripletLabel": "{{prev}} → {{point}} → {{next}}"
+  "validationIssues": {
+    "errorTitle": "Configuration Errors",
+    "warningTitle": "Configuration Warnings",
+    "angle": {
+      "title": "Wall angle warning",
+      "message": "This application only supports 90°/180° wall angles. The following sets of points form angles that do not meet this requirement and rendering may be inaccurate:",
+      "tripletLabel": "{{prev}} → {{point}} → {{next}}"
+    },
+    "railing-support-count": {
+      "title": "Railing support count",
+      "defaultMessage": "Default railing support count must be at least 2 (currently {{count}})",
+      "wallMessage": "Wall {{wall}}: railing support count must be at least 2 (currently {{count}})"
+    }
   },
   "footer": {
     "madeBy": "Made by",

@@ -1,12 +1,12 @@
 import { Config } from '../../types/config';
 import { Site } from '../../types/installation';
-import { AngleWarning } from '../../types/geometry';
+import { FunctionalValidationIssue, runAllValidators } from '../../validation';
 import { SiteFactory } from '../../factory/SiteFactory';
 
 export interface ConfigState {
   config: Config | null;
   site: Site | null;
-  angleWarnings: readonly AngleWarning[];
+  validationIssues: readonly FunctionalValidationIssue[];
 }
 
 export interface ConfigActions {
@@ -20,10 +20,11 @@ export const createConfigSlice = (
 ): ConfigSlice => ({
   config: null,
   site: null,
-  angleWarnings: [],
+  validationIssues: [],
 
   loadConfig: (config) => {
-    const { site, angleWarnings } = SiteFactory.create(config);
-    set({ config, site, angleWarnings });
+    const site = SiteFactory.create(config);
+    const validationIssues = runAllValidators(config);
+    set({ config, site, validationIssues });
   },
 });

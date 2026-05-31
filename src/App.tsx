@@ -11,7 +11,7 @@ import { useAppStore } from './store/AppStore';
 import { RenderControls } from './components/RenderControls';
 import { SimulationControls } from './components/SimulationControls';
 import { DeveloperFooter } from './components/DeveloperFooter';
-import { AngleWarningBanner } from './components/AngleWarningBanner';
+import { ValidationIssueBanner } from './components/ValidationIssueBanner';
 import { SimulationResultsPanel } from './components/SimulationResultsPanel';
 import { SettingsSidebar } from './components/SettingsSidebar';
 import { SettingsSidebarButton } from './components/SettingsSidebarButton';
@@ -168,7 +168,7 @@ export default function App() {
     <div className="app-container">
       {isReloading && <LoadingOverlay message={t('loading')} />}
 
-      <AngleWarningBanner />
+      <ValidationIssueBanner />
 
       {isSidebarOpen && <SettingsSidebar />}
 

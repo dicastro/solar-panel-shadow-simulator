@@ -133,10 +133,19 @@
     "colSetup": "Configuración",
     "unitMin": "min"
   },
-  "angleWarning": {
-    "title": "Aviso de configuración",
-    "message": "Esta aplicación solo soporta ángulos de 90°/180° entre muros. Los siguientes conjuntos de puntos forman ángulos que no cumplen este requisito y el renderizado puede no ser preciso:",
-    "tripletLabel": "{{prev}} → {{point}} → {{next}}"
+  "validationIssues": {
+    "errorTitle": "Errores de configuración",
+    "warningTitle": "Avisos de configuración",
+    "angle": {
+      "title": "Ángulos de muros",
+      "message": "Esta aplicación solo soporta ángulos de 90°/180° entre muros. Los siguientes conjuntos de puntos forman ángulos que no cumplen este requisito y el renderizado puede no ser preciso:",
+      "tripletLabel": "{{prev}} → {{point}} → {{next}}"
+    },
+    "railing-support-count": {
+      "title": "Número de soportes de barandilla",
+      "defaultMessage": "El número de soportes de barandilla por defecto debe ser al menos 2 (actualmente {{count}})",
+      "wallMessage": "Muro {{wall}}: el número de soportes de barandilla debe ser al menos 2 (actualmente {{count}})"
+    }
   },
   "footer": {
     "madeBy": "Desarrollado por",

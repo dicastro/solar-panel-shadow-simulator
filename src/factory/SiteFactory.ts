@@ -1,6 +1,6 @@
 import { Site } from '../types/installation';
 import { Config } from '../types/config';
-import { PointXZ, AngleWarning } from '../types/geometry';
+import { PointXZ } from '../types/geometry';
 import { PointXZUtils } from '../utils/PointXZUtils';
 import { PointXZFactory } from './PointXZFactory';
 import { WallFactory } from './WallFactory';
@@ -9,15 +9,6 @@ import { WallIntersectionFactory } from './WallIntersectionFactory';
 const DEFAULT_GROUND_ALBEDO = 0.20;
 const DEFAULT_INVERTER_EFFICIENCY = 0.97;
 const DEFAULT_WIRING_LOSS = 0.02;
-
-/**
- * Result of SiteFactory.create, bundling the Site geometry with any angle
- * validation warnings detected during construction.
- */
-export interface SiteFactoryResult {
-  readonly site: Site;
-  readonly angleWarnings: readonly AngleWarning[];
-}
 
 const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
   if (isStraight || !isConvex) return 0;
@@ -43,7 +34,7 @@ export const SiteFactory = {
    * System-level loss parameters (groundAlbedo, inverterEfficiency, wiringLoss) default
    * to industry-standard values when omitted from the configuration.
    */
-  create: (config: Config): SiteFactoryResult => {
+  create: (config: Config): Site => {
     const { wallPoints, wallDefaults, railingDefaults, wallsSettings, azimuth } = config.site;
     const n = wallPoints.length;
 
@@ -61,23 +52,10 @@ export const SiteFactory = {
       PointXZFactory.create(p[0] - centerX, -(p[1] - centerZ))
     );
 
-    const angleWarnings: AngleWarning[] = [];
     const vertexInfo = centeredPoints.map((p, i) => {
       const pPrev = PointXZUtils.getPreviousPoint(i, centeredPoints);
       const pNext = PointXZUtils.getNextPoint(i, centeredPoints);
-      const info = PointXZUtils.pointAlignedWithPreviousAndNext(p, pPrev, pNext);
-
-      if (!info.isStraight && !PointXZUtils.isRightAngle(p, pPrev, pNext)) {
-        const prevIdx = (i - 1 + n) % n;
-        const nextIdx = (i + 1) % n;
-        angleWarnings.push({
-          pointPrev: wallPoints[prevIdx],
-          point: wallPoints[i],
-          pointNext: wallPoints[nextIdx],
-        });
-      }
-
-      return info;
+      return PointXZUtils.pointAlignedWithPreviousAndNext(p, pPrev, pNext);
     });
 
     const wallIntersections = centeredPoints
@@ -115,7 +93,7 @@ export const SiteFactory = {
       );
     });
 
-    const site: Site = {
+    return {
       location: config.site.location,
       azimuthRad: (azimuth * Math.PI) / 180,
       centerX,
@@ -129,7 +107,5 @@ export const SiteFactory = {
       inverterEfficiency: config.site.inverterEfficiency ?? DEFAULT_INVERTER_EFFICIENCY,
       wiringLoss: config.site.wiringLoss ?? DEFAULT_WIRING_LOSS,
     };
-
-    return { site, angleWarnings };
   },
 };

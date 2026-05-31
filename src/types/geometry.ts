@@ -15,17 +15,6 @@ export interface PointXZAlignedResult {
 }
 
 /**
- * Three consecutive config-space wall points that form a non-right angle.
- * Coordinates are in the original config coordinate system (+X = East, +Z = North),
- * making them directly readable as the values the user typed in config.json.
- */
-export interface AngleWarning {
-  readonly pointPrev: readonly [number, number];
-  readonly point: readonly [number, number];
-  readonly pointNext: readonly [number, number];
-}
-
-/**
  * Generic 3D vector, decoupled from any rendering library.
  * Use ThreeConverter to transform to THREE.Vector3 when needed.
  */

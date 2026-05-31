@@ -29,40 +29,71 @@
   overflow: hidden;
 }
 
-/* ── Angle warning banner ─────────────────────────────────────────────────── */
+/* ── Validation issue banner ──────────────────────────────────────────────── */
 
-.angle-warning-banner {
+.validation-banner {
   position: absolute;
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
-  background: rgba(180, 30, 30, 0.97);
-  color: #fff;
-  padding: 14px 20px;
-  border-radius: 8px;
-  border: 2px solid #ff6b6b;
   font-family: sans-serif;
   font-size: 0.85rem;
-  max-width: 520px;
-  box-shadow: 0 0 24px rgba(255, 80, 80, 0.5);
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   line-height: 1.5;
 }
 
-.angle-warning-banner__title {
+.validation-banner__group {
+  padding: 14px 20px;
+  border-radius: 8px;
+}
+
+.validation-banner__group--error {
+  background: rgba(180, 30, 30, 0.97);
+  color: #fff;
+  border: 2px solid #ff6b6b;
+  box-shadow: 0 0 24px rgba(255, 80, 80, 0.5);
+}
+
+.validation-banner__group--warning {
+  background: rgba(160, 100, 0, 0.97);
+  color: #fff;
+  border: 2px solid #ffc107;
+  box-shadow: 0 0 24px rgba(255, 193, 7, 0.4);
+}
+
+.validation-banner__group-title {
   font-weight: bold;
   font-size: 1rem;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.angle-warning-banner__message {
-  margin-bottom: 8px;
+.validation-banner__type-block {
+  margin-bottom: 10px;
 }
 
-.angle-warning-banner__list {
+.validation-banner__type-block:last-child {
+  margin-bottom: 0;
+}
+
+.validation-banner__type-title {
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: 6px;
+  opacity: 0.9;
+}
+
+.validation-banner__type-message {
+  margin: 0 0 6px 0;
+}
+
+.validation-banner__list {
   margin: 0;
   padding-left: 18px;
   display: flex;
@@ -70,7 +101,7 @@
   gap: 4px;
 }
 
-.angle-warning-banner__list-item {
+.validation-banner__list-item {
   font-family: monospace;
   font-size: 0.8rem;
   background: rgba(255, 255, 255, 0.1);

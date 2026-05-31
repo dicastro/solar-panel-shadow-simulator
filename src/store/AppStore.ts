@@ -5,20 +5,8 @@ import { RenderSlice, createRenderSlice } from './slices/RenderSlice';
 import { SimulationSlice, createSimulationSlice } from './slices/SimulationSlice';
 import { SettingsSlice, createSettingsSlice } from './slices/SettingsSlice';
 import { SiteFactory } from '../factory/SiteFactory';
+import { runAllValidators } from '../validation';
 
-/**
- * Unified application store composed from four domain slices:
- *
- *  - ConfigSlice      — raw configuration and derived site geometry.
- *  - RenderSlice      — everything that drives the 3D interactive view.
- *  - SimulationSlice  — annual simulation parameters and lifecycle state.
- *  - SettingsSlice    — UI state for the settings sidebar.
- *
- * Cross-slice coordination:
- * `loadConfig` is overridden at the facade level to sequence both ConfigSlice
- * and RenderSlice operations atomically, so no component ever observes a state
- * where `site` is set but `activeSetup` is not.
- */
 type AppStore = ConfigSlice & RenderSlice & SimulationSlice & SettingsSlice;
 
 export const useAppStore = create<AppStore>((set, get) => {
@@ -42,8 +30,9 @@ export const useAppStore = create<AppStore>((set, get) => {
     ...settingsSlice,
 
     loadConfig: (config: Config) => {
-      const { site, angleWarnings } = SiteFactory.create(config);
-      typedSet({ config, site, angleWarnings });
+      const site = SiteFactory.create(config);
+      const validationIssues = runAllValidators(config);
+      typedSet({ config, site, validationIssues });
       renderSlice.initRender(config, site, typedGet().renderDensity);
     },
   };
