@@ -72,7 +72,7 @@ const triggerDownload = (blob: Blob, filename: string): void => {
  * geometry hash from the current config to cross-check.
  */
 const buildCurrentSetupIdentities = (config: Config): Map<string, string> => {
-  const { site } = SiteFactory.create(config);
+  const site = SiteFactory.create(config);
   const identities = new Map<string, string>();
 
   config.setups.forEach((setupConfig, setupIndex) => {
