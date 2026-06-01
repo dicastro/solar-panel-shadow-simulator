@@ -4,6 +4,7 @@ import { LoadedSetupResult } from '../../types/results';
 import { PanelAnnualData } from '../../types/simulation';
 import { ZonesDisposition } from '../../types/config';
 import { SetupColoursUtils } from '../../utils/SetupColoursUtils';
+import { StringColoursUtils } from '../../utils/StringColorUtils';
 
 interface Props {
   results: LoadedSetupResult[];
@@ -91,17 +92,19 @@ function PanelCell({ panel, month, day }: {
   month: number | null;
   day: number | null;
 }) {
-  const { actualWidth: w, actualHeight: h } = panel;
+  const { actualWidth: w, actualHeight: h, stringColorIndex } = panel;
   const scale = MAX_PANEL_PX / Math.max(w, h);
   const cellW = Math.round(w * scale);
   const cellH = Math.round(h * scale);
   const layouts = zoneCssLayouts(panel.zones, panel.zonesDisposition);
+  const stringColour = StringColoursUtils.getStringColour(stringColorIndex);
 
   return (
     <div
       style={{
         width: cellW, height: cellH, position: 'relative', borderRadius: 2,
-        overflow: 'hidden', flexShrink: 0, border: '1px solid rgba(0,0,0,0.18)',
+        overflow: 'hidden', flexShrink: 0,
+        border: `2px solid ${stringColour}`,
       }}
       title={panel.panelId}
     >
@@ -153,7 +156,17 @@ function SingleHeatmap({ result, month, day }: {
   );
   const setupColour = SetupColoursUtils.getSetupColour(result.colourIndex);
 
-  // Arrays rendered in reverse order: highest arrayIndex at top, array 0 at bottom.
+  // Derive unique strings in first-appearance order.
+  const stringLegend = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const panel of result.result.panels) {
+      if (!seen.has(panel.string)) {
+        seen.set(panel.string, panel.stringColorIndex);
+      }
+    }
+    return Array.from(seen.entries()).map(([string, colorIndex]) => ({ string, colorIndex }));
+  }, [result.result.panels]);
+
   const reversedGroups = [...groups].reverse();
 
   return (
@@ -164,6 +177,19 @@ function SingleHeatmap({ result, month, day }: {
         overflow: 'hidden', textOverflow: 'ellipsis',
       }} title={result.result.setupLabel}>
         {result.result.setupLabel}
+      </div>
+
+      {/* String legend */}
+      <div className="heatmap-string-legend">
+        {stringLegend.map(({ string, colorIndex }) => (
+          <div key={string} className="heatmap-string-legend__item">
+            <span
+              className="heatmap-string-legend__swatch"
+              style={{ background: StringColoursUtils.getStringColour(colorIndex) }}
+            />
+            <span className="heatmap-string-legend__label">{string}</span>
+          </div>
+        ))}
       </div>
 
       {reversedGroups.map(group => (

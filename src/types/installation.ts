@@ -79,6 +79,7 @@ export interface PanelRenderData {
   readonly frameColor: string;
   readonly emissiveColor: string;
   readonly zones: readonly ZoneRenderData[];
+  readonly stringColorIndex: number;
 }
 
 export interface WallRailing {
@@ -189,6 +190,8 @@ export interface Site {
   readonly inverterEfficiency: number;
   /** Wiring loss fraction (0–1). Applied as an additional loss after inverter efficiency. */
   readonly wiringLoss: number;
+  /** CSS hex colour of the terrace floor surface. */
+  readonly floorColor: string;
 }
 
 export interface PanelSetup {

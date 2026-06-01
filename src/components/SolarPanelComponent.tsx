@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Text } from '@react-three/drei';
 import { PanelRenderData, SamplePoint } from '../types/installation';
 import { ShadowMap } from '../hooks/useShadowSampler';
+import { StringColoursUtils } from '../utils/StringColorUtils';
 
 interface SolarPanelComponentProps {
   panelId: string;
@@ -14,23 +15,17 @@ interface SolarPanelComponentProps {
 
 /**
  * Renders a single solar panel: the aluminium frame, the diode-zone glass
- * planes, zone ID labels, and (optionally) the sample points used for shadow
- * detection.
+ * planes, zone ID labels, the string colour border, and (optionally) the
+ * sample points used for shadow detection.
  *
- * Zone labels use the format `{panelId}-z{zoneIndex}` (e.g. `a0-r0-c0-z0`),
- * matching the identifier scheme used in the results panel heat maps so the
- * user can correlate 3D view and heat map without ambiguity.
- *
- * All geometry (panel dimensions, zone positions and sizes) is consumed from
- * `renderData`, which is pre-computed by SolarPanelFactory. This component
- * is purely presentational and performs no calculations.
+ * The string colour border is a rectangle rendered as edges on the front
+ * face of the panel, rotated to match the zone planes (rotation X = -π/2).
+ * It sits at Y = 0.018, just above the zone planes at Y = 0.016, to avoid
+ * z-fighting.
  *
  * The frame mesh carries `userData={{ isPanelFrame: true }}` so that
  * MeshFactory can exclude it from the static scene geometry batch sent to
- * simulation workers. Panel frame geometry for each simulated setup is built
- * independently by PanelMeshFactory from SimulationPanelData, ensuring the
- * worker always receives the correct panels regardless of which setup is
- * currently rendered in the 3D viewport.
+ * simulation workers.
  */
 export function SolarPanelComponent({
   panelId,
@@ -40,16 +35,13 @@ export function SolarPanelComponent({
   samplePoints,
   shadowMap,
 }: SolarPanelComponentProps) {
-  const { actualWidth, actualHeight, frameColor, emissiveColor } = renderData;
+  const { actualWidth, actualHeight, frameColor, emissiveColor, stringColorIndex } = renderData;
+  const stringColour = StringColoursUtils.getStringColour(stringColorIndex);
 
   return (
     <group>
       {/* Frame + glass body */}
-      <mesh
-        castShadow
-        receiveShadow
-        userData={{ isPanelFrame: true }}
-      >
+      <mesh castShadow receiveShadow userData={{ isPanelFrame: true }}>
         <boxGeometry args={[actualWidth, 0.03, actualHeight]} />
         <meshStandardMaterial
           color={frameColor}
@@ -58,6 +50,12 @@ export function SolarPanelComponent({
           emissive={emissiveColor}
         />
       </mesh>
+
+      {/* String colour border */}
+      <lineSegments position={[0, 0.018, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <edgesGeometry args={[new THREE.PlaneGeometry(actualWidth - 0.01, actualHeight - 0.01)]} />
+        <lineBasicMaterial color={stringColour} />
+      </lineSegments>
 
       {/* Diode zones */}
       {renderData.zones.map((zone) => {
@@ -68,7 +66,6 @@ export function SolarPanelComponent({
 
         return (
           <group key={zone.zoneIndex}>
-            {/* Translucent zone plane */}
             <mesh position={[zone.posX, 0.016, zone.posZ]} rotation={[-Math.PI / 2, 0, 0]}>
               <planeGeometry args={[zone.width, zone.height]} />
               <meshStandardMaterial
@@ -79,7 +76,6 @@ export function SolarPanelComponent({
               />
             </mesh>
 
-            {/* Zone ID label rendered above the panel surface */}
             <Text
               position={[zone.posX, 0.035, zone.posZ]}
               rotation={[-Math.PI / 2, 0, 0]}
@@ -92,7 +88,6 @@ export function SolarPanelComponent({
               {zoneId}
             </Text>
 
-            {/* Sample points (only shown when showPoints is enabled) */}
             {zonePoints.map((sp) => {
               const isShaded = shadowMap.get(sp.id) ?? false;
               return (

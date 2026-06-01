@@ -71,16 +71,13 @@ export interface PanelAnnualData {
   readonly energyKwh: number[][][];
   readonly shadeFraction: number[][][];
   readonly zoneShadeFraction: number[][][][];
-  /** Physical orientation of the panel as mounted. */
   readonly orientation: PanelOrientation;
-  /** Rendered panel width in metres (accounts for orientation swap). */
   readonly actualWidth: number;
-  /** Rendered panel height in metres (accounts for orientation swap). */
   readonly actualHeight: number;
-  /** Number of bypass-diode zones. */
   readonly zones: number;
-  /** How zones are split across the panel face. */
   readonly zonesDisposition: ZonesDisposition;
+  readonly string: string;
+  readonly stringColorIndex: number;
 }
 
 export interface SetupAnnualResult {
@@ -173,26 +170,12 @@ export interface SimulationPanelData {
   readonly actualHeight: number;
   readonly hasOptimizer: boolean;
   readonly string: string;
-  /** Panel normal in world space, pre-computed from worldRotation. */
+  readonly stringColorIndex: number;
   readonly worldNormal: Vector3;
-  /** Panel centre in world space. Used to build the panel mesh for raycasting. */
   readonly worldPosition: Vector3;
-  /**
-   * Panel rotation in world space (Euler, order 'YXZ').
-   * Used to orient the panel mesh correctly for raycasting.
-   */
   readonly worldRotation: Euler3;
-  /** Sample points already in world space. */
   readonly samplePoints: SimulationSamplePoint[];
-  /**
-   * Temperature coefficient of maximum power (per °C, typically negative).
-   * Applied per time step when ambient temperature data is available.
-   */
   readonly temperatureCoefficient: number;
-  /**
-   * Nominal Operating Cell Temperature (°C).
-   * Used to estimate cell temperature from ambient temperature and POA irradiance.
-   */
   readonly noct: number;
 }
 

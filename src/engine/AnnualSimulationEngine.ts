@@ -118,6 +118,8 @@ export const AnnualSimulationEngine = {
       actualHeight: panel.actualHeight,
       zones: panel.zones,
       zonesDisposition: panel.zonesDisposition,
+      string: panel.string,
+      stringColorIndex: panel.stringColorIndex,
     };
   },
 

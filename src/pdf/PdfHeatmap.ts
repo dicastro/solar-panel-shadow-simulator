@@ -1,7 +1,8 @@
 import { jsPDF } from 'jspdf';
 import { LoadedSetupResult } from '../types/results';
-import { MARGIN, CONTENT_W, C_BORDER, C_MUTED, font, Cursor } from './PdfLayout';
+import { MARGIN, CONTENT_W, C_DARK, C_MUTED, font, Cursor } from './PdfLayout';
 import { SetupColoursUtils } from '../utils/SetupColoursUtils';
+import { StringColoursUtils } from '../utils/StringColorUtils';
 import { drawScaleBar } from './PdfPrimitives';
 
 // ── Shade colour interpolation ────────────────────────────────────────────────
@@ -102,6 +103,33 @@ export const drawSetupHeatmap = (
   doc.text(result.result.setupLabel, MARGIN, cursor.y + 6);
   cursor.advance(8);
 
+  // String legend.
+  const stringLegend = new Map<string, number>();
+  for (const panel of panels) {
+    if (!stringLegend.has(panel.string)) {
+      stringLegend.set(panel.string, panel.stringColorIndex);
+    }
+  }
+
+  if (stringLegend.size > 0) {
+    cursor.ensureSpace(8);
+    let lx = MARGIN;
+    const SWATCH = 3;
+    const GAP = 2;
+    const LABEL_W = 16;
+    const ITEM_W = SWATCH + GAP + LABEL_W + 4;
+
+    for (const [string, colorIndex] of stringLegend.entries()) {
+      const hex = StringColoursUtils.getStringColour(colorIndex);
+      doc.setFillColor(hex);
+      doc.rect(lx, cursor.y + 1, SWATCH, SWATCH, 'F');
+      font(doc, 6.5, 'bold', C_DARK);
+      doc.text(string, lx + SWATCH + GAP, cursor.y + SWATCH);
+      lx += ITEM_W;
+    }
+    cursor.advance(7);
+  }
+
   sortedArrays.forEach(([arrayIndex, arrPanels]) => {
     const rows = Math.max(...arrPanels.map(p => p.row)) + 1;
     const cols = Math.max(...arrPanels.map(p => p.col)) + 1;
@@ -118,7 +146,7 @@ export const drawSetupHeatmap = (
     doc.text(`Array ${arrayIndex}`, MARGIN, cursor.y + 4.5);
     cursor.advance(6);
 
-    const arrayBlockH = rows * (cellH + CELL_GAP);
+    const arrayBlockH = rows * cellH + (rows - 1) * CELL_GAP;
     cursor.ensureSpace(arrayBlockH + ARRAY_GAP);
     const arrayTop = cursor.y;
 
@@ -169,7 +197,8 @@ export const drawSetupHeatmap = (
         }
 
         // Panel border.
-        doc.setDrawColor(C_BORDER);
+        const borderHex = StringColoursUtils.getStringColour(panel.stringColorIndex);
+        doc.setDrawColor(borderHex);
         doc.setLineWidth(0.15);
         doc.rect(cx, cy, cellW, cellH, 'S');
       }

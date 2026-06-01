@@ -25,6 +25,7 @@ Complete reference for every field in `config.json`. For a guided introduction w
 | `groundAlbedo` | number 0–1 | — | 0.20 | Fraction of GHI reflected toward panels |
 | `inverterEfficiency` | number 0–1 | — | 0.97 | DC/AC inverter efficiency |
 | `wiringLoss` | number 0–1 | — | 0.02 | DC wiring loss fraction |
+| `floorColor` | string (CSS hex) | — | `'#cccccc'` | Colour of the terrace floor in the 3D view. Must be a 6-digit hex colour (e.g. `#b45d16` for terracotta). Has no effect on calculations. |
 
 ## `site.location`
 

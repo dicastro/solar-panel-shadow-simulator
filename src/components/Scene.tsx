@@ -171,7 +171,7 @@ export function Scene({
       <group rotation-y={site.azimuthRad}>
         <mesh receiveShadow position={[0, 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <extrudeGeometry args={[floorShape, { depth: 0.02, bevelEnabled: false }]} />
-          <meshStandardMaterial color="#b45d16" side={THREE.DoubleSide} />
+          <meshStandardMaterial color={site.floorColor} side={THREE.DoubleSide} />
         </mesh>
 
         {site.wallIntersections.map(wi => (

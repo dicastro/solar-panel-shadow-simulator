@@ -9,6 +9,7 @@ import { WallIntersectionFactory } from './WallIntersectionFactory';
 const DEFAULT_GROUND_ALBEDO = 0.20;
 const DEFAULT_INVERTER_EFFICIENCY = 0.97;
 const DEFAULT_WIRING_LOSS = 0.02;
+const DEFAULT_FLOOR_COLOR = '#cccccc';
 
 const computeAdjust = (isConvex: boolean, isStraight: boolean, wallThickness: number): number => {
   if (isStraight || !isConvex) return 0;
@@ -106,6 +107,7 @@ export const SiteFactory = {
       groundAlbedo: config.site.groundAlbedo ?? DEFAULT_GROUND_ALBEDO,
       inverterEfficiency: config.site.inverterEfficiency ?? DEFAULT_INVERTER_EFFICIENCY,
       wiringLoss: config.site.wiringLoss ?? DEFAULT_WIRING_LOSS,
+      floorColor: config.site.floorColor ?? DEFAULT_FLOOR_COLOR,
     };
   },
 };

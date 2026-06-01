@@ -81,6 +81,7 @@ export const SolarPanelConverter = {
     actualHeight: panel.renderData.actualHeight,
     hasOptimizer: panel.hasOptimizer,
     string: panel.string,
+    stringColorIndex: panel.renderData.stringColorIndex,
     worldNormal: SolarPanelConverter.toWorldNormal(panel),
     worldPosition: panel.worldPosition,
     worldRotation: panel.worldRotation,

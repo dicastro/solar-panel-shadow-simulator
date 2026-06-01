@@ -172,6 +172,11 @@ export interface InstallationConfiguration {
    * Defaults to 0.02 when omitted.
    */
   readonly wiringLoss?: number;
+  /**
+   * CSS hex colour of the terrace floor surface rendered in the 3D view.
+   * Defaults to '#cccccc' (light grey) when omitted.
+   */
+  readonly floorColor?: string;
 }
 
 export interface PanelDefinition {

@@ -479,6 +479,35 @@
   background: linear-gradient(to right, #2ecc71, #f1c40f, #e74c3c);
 }
 
+/* ── Heat map string legend ────────────────────────────────────────────────── */
+
+.heatmap-string-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.heatmap-string-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: sans-serif;
+  font-size: 0.7rem;
+  color: #444;
+}
+
+.heatmap-string-legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.heatmap-string-legend__label {
+  font-weight: 600;
+}
+
 /* ── Report generation modal ───────────────────────────────────────────────── */
 
 .report-modal-backdrop {

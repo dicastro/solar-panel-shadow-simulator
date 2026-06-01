@@ -4,13 +4,6 @@ import { PanelSetupConfiguration } from '../types/config';
 import { SolarPanelArrayFactory } from './SolarPanelArrayFactory';
 import { SamplePointFactory } from './SamplePointFactory';
 
-/**
- * Derives a stable internal id from a setup's label and its position in the
- * config array. The label is normalised (lower-cased, diacritics stripped,
- * spaces replaced with hyphens) so the id is URL-safe and human-readable.
- * The index suffix guarantees uniqueness even when two setups share the same
- * normalised label.
- */
 const deriveSetupId = (label: string, index: number): string => {
   const normalised = label
     .normalize('NFD')
@@ -21,34 +14,28 @@ const deriveSetupId = (label: string, index: number): string => {
   return `${normalised}-${index}`;
 };
 
-/**
- * Returns the frame and emissive colours for a panel cell based on whether
- * it has an optimizer.
- */
 const panelColours = (hasOptimizer: boolean) => ({
   frameColor: hasOptimizer ? '#2ecc71' : '#121e36',
   emissiveColor: hasOptimizer ? '#0a2a16' : '#050a15',
 });
 
+/**
+ * Assigns a stable colour index to each unique string identifier within a
+ * setup, based on first-appearance order across all arrays in row-major
+ * order (array 0 row 0 col 0 first). This order is deterministic and
+ * independent of how many arrays or panels the setup contains.
+ */
+const buildStringColorMap = (panels: SolarPanel[]): Map<string, number> => {
+  const map = new Map<string, number>();
+  for (const panel of panels) {
+    if (!map.has(panel.string)) {
+      map.set(panel.string, map.size);
+    }
+  }
+  return map;
+};
+
 export const PanelSetupFactory = {
-  /**
-   * Creates a full PanelSetup from scratch: panel geometry, world positions,
-   * render data, and sample points.
-   *
-   * The site's SW corner (`swCornerX`, `swCornerZ`) and azimuth (`azimuthRad`)
-   * are forwarded to `SolarPanelArrayFactory` so that array positions are
-   * measured from the correct reference point in the correct reference frame.
-   *
-   * After building all arrays, per-panel overrides from `arraysSettings` are
-   * applied. Each override targets one panel by its `array`, `row`, and `col`
-   * address and can change `hasOptimizer` and/or `string`. The frame colour is
-   * updated to reflect the new optimizer state.
-   *
-   * Call this when the active setup changes or on initial load.
-   * For density-only changes, use `rebuildSamplePoints` instead — it reuses
-   * the existing panel geometry and only regenerates the sample point grids,
-   * which is significantly cheaper.
-   */
   create: (
     setupConfig: PanelSetupConfiguration,
     setupIndex: number,
@@ -69,9 +56,9 @@ export const PanelSetupFactory = {
       ),
     );
 
-    // Apply per-panel overrides from arraysSettings if present.
+    // Apply per-panel overrides.
     const overrides = setupConfig.arraysSettings;
-    const finalArrays: SolarPanelArray[] = overrides && overrides.length > 0
+    const arraysAfterOverrides: SolarPanelArray[] = overrides && overrides.length > 0
       ? panelArrays.map(pa => {
         const arrayOverrides = overrides.filter(o => o.array === pa.index);
         if (arrayOverrides.length === 0) return pa;
@@ -102,6 +89,22 @@ export const PanelSetupFactory = {
       })
       : panelArrays;
 
+    // Build the string colour map from the final panel list (after overrides),
+    // so string reassignments via arraysSettings are reflected in the colours.
+    const allPanels = arraysAfterOverrides.flatMap(pa => pa.panels);
+    const stringColorMap = buildStringColorMap(allPanels);
+
+    const finalArrays: SolarPanelArray[] = arraysAfterOverrides.map(pa => ({
+      ...pa,
+      panels: pa.panels.map(panel => ({
+        ...panel,
+        renderData: {
+          ...panel.renderData,
+          stringColorIndex: stringColorMap.get(panel.string) ?? 0,
+        },
+      })),
+    }));
+
     return {
       id: deriveSetupId(setupConfig.label, setupIndex),
       label: setupConfig.label,
@@ -109,15 +112,6 @@ export const PanelSetupFactory = {
     };
   },
 
-  /**
-   * Returns a new PanelSetup with regenerated sample points for a new density,
-   * reusing all panel geometry (world positions, rotations, render data) from
-   * the existing setup unchanged.
-   *
-   * Panel geometry is independent of sampling density. Rebuilding it on every
-   * density slider change wastes CPU and triggers React re-renders of the
-   * entire panel tree even though nothing visual has changed.
-   */
   rebuildSamplePoints: (
     existing: PanelSetup,
     density: number,

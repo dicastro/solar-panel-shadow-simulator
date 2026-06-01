@@ -73,6 +73,7 @@
     <ol>
       <li><a href="#location">Site location</a></li>
       <li><a href="#azimuth">Site azimuth</a></li>
+      <li><a href="#appearance">Site appearance</a></li>
       <li><a href="#wall-points">Installation footprint (wall points)</a></li>
       <li><a href="#wall-defaults">Wall defaults</a></li>
       <li><a href="#wall-overrides">Per-wall overrides</a></li>
@@ -159,7 +160,24 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="wall-points">3. Installation footprint (wall points)</h2>
+  <h2 id="appearance">3. Site appearance</h2>
+
+  <p>These optional fields control the visual appearance of the installation in the 3D view. They have no effect on shadow calculations or energy production estimates.</p>
+
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr>
+    <tr>
+      <td><code>floorColor</code></td>
+      <td>string (CSS hex)</td>
+      <td><code>#cccccc</code></td>
+      <td>Colour of the terrace floor surface. Must be a 6-digit hex colour. Examples: <code>#b45d16</code> terracotta, <code>#888888</code> concrete, <code>#cccccc</code> light grey.</td>
+    </tr>
+  </table>
+
+  <pre><code>"floorColor": "#b45d16"</code></pre>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="wall-points">4. Installation footprint (wall points)</h2>
 
   <p>The <code>wallPoints</code> array defines the perimeter of the terrace as a sequence of corner coordinates in metres. The coordinate system is:</p>
   <ul>
@@ -251,7 +269,7 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="wall-defaults">4. Wall defaults</h2>
+  <h2 id="wall-defaults">5. Wall defaults</h2>
 
   <p>The <code>wallDefaults</code> object sets the height and thickness applied to all walls unless overridden.</p>
 
@@ -267,7 +285,7 @@
   </table>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="wall-overrides">5. Per-wall overrides</h2>
+  <h2 id="wall-overrides">6. Per-wall overrides</h2>
 
   <p>Individual walls can override the defaults via <code>wallsSettings</code>. Each entry targets one wall by its <strong>0-based index</strong> — the index of the start point of that segment in <code>wallPoints</code>. Wall 0 goes from <code>wallPoints[0]</code> to <code>wallPoints[1]</code>, wall 1 from <code>wallPoints[1]</code> to <code>wallPoints[2]</code>, and so on.</p>
 
@@ -283,7 +301,7 @@
   <p>This raises wall 2 (the third side of the perimeter) to 1.2 m while all other walls stay at the default height. You can override <code>height</code> and/or the railing configuration for any individual wall.</p>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="railing">6. Railings</h2>
+  <h2 id="railing">7. Railings</h2>
 
   <p>Railings sit on top of walls. The <code>railingDefaults</code> object sets the global railing style; individual walls can override it via <code>wallsSettings[].override.railing</code>.</p>
 
@@ -345,7 +363,7 @@
   </table>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="system-losses">7. System-level losses</h2>
+  <h2 id="system-losses">8. System-level losses</h2>
 
   <p>These three optional fields on <code>site</code> model real-world energy losses between the panels and the grid connection point.</p>
 
@@ -361,7 +379,7 @@
   </table>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="setups">8. Setups</h2>
+  <h2 id="setups">9. Setups</h2>
 
   <p>A <strong>setup</strong> is one complete panel configuration to simulate. You can define multiple setups in the <code>setups</code> array to compare different layouts, orientations, or equipment choices side by side.</p>
 
@@ -373,7 +391,7 @@
   <p>Each setup has a <code>label</code> (shown in the UI and in reports), a <code>panelDefaults</code> block, and one or more <code>arrays</code>.</p>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="panel-defaults">9. Panel defaults</h2>
+  <h2 id="panel-defaults">10. Panel defaults</h2>
 
   <p>The <code>panelDefaults</code> object defines the physical and electrical characteristics of the panels used in all arrays of this setup, unless overridden at the array level.</p>
 
@@ -426,7 +444,7 @@
   </svg>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="arrays">10. Panel arrays</h2>
+  <h2 id="arrays">11. Panel arrays</h2>
 
   <p>Each setup contains one or more <code>arrays</code>. An array is a rectangular grid of identical panels at a fixed position, inclination, and azimuth.</p>
 
@@ -475,7 +493,7 @@
 ]</code></pre>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="panel-overrides">11. Per-panel overrides</h2>
+  <h2 id="panel-overrides">12. Per-panel overrides</h2>
 
   <p>Individual panels within an array can be overridden via <code>arraysSettings</code>. Each entry targets one panel by its array index, row, and column.</p>
 
@@ -496,7 +514,7 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="full-example">12. Full example</h2>
+  <h2 id="full-example">13. Full example</h2>
 
   <p>A complete configuration for a real-world style installation: rectangular 5m × 8m terrace in Madrid, one panel array of 2 rows × 4 columns, South-facing, 20° inclination, 415 Wp panels with 3 horizontal bypass zones.</p>
 

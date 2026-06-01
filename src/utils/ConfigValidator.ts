@@ -31,6 +31,7 @@ const CONFIG_SCHEMA = {
         azimuth: { type: 'number' },
         timezone: { type: 'string', minLength: 1 },
         groundAlbedo: { type: 'number', minimum: 0, maximum: 1 },
+        floorColor: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
         inverterEfficiency: { type: 'number', minimum: 0, maximum: 1 },
         wiringLoss: { type: 'number', minimum: 0, maximum: 1 },
         wallPoints: {

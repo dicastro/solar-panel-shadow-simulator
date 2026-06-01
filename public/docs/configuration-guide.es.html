@@ -73,6 +73,7 @@
     <ol>
       <li><a href="#location">Ubicación de la instalación</a></li>
       <li><a href="#azimuth">Azimut de la instalación</a></li>
+      <li><a href="#appearance">Apariencia de la instalación</a></li>
       <li><a href="#wall-points">Perímetro de la instalación (puntos de muro)</a></li>
       <li><a href="#wall-defaults">Configuración predeterminada de muros</a></li>
       <li><a href="#wall-overrides">Sobreescritura de muros individuales</a></li>
@@ -159,7 +160,24 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="wall-points">3. Perímetro de la instalación (puntos de muro)</h2>
+  <h2 id="appearance">3. Apariencia de la instalación</h2>
+
+  <p>Estos campos opcionales controlan la apariencia visual de la instalación en la vista 3D. No tienen ningún efecto sobre los cálculos de sombras ni sobre las estimaciones de producción de energía.</p>
+
+  <table>
+    <tr><th>Campo</th><th>Tipo</th><th>Por defecto</th><th>Descripción</th></tr>
+    <tr>
+      <td><code>floorColor</code></td>
+      <td>string (hex CSS)</td>
+      <td><code>#cccccc</code></td>
+      <td>Color del suelo de la terraza. Debe ser un color hexadecimal de 6 dígitos. Ejemplos: <code>#b45d16</code> terracota, <code>#888888</code> hormigón, <code>#cccccc</code> gris claro.</td>
+    </tr>
+  </table>
+
+  <pre><code>"floorColor": "#b45d16"</code></pre>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="wall-points">4. Perímetro de la instalación (puntos de muro)</h2>
 
   <p>El array <code>wallPoints</code> define el perímetro de la terraza como una secuencia de coordenadas de esquinas en metros. El sistema de coordenadas es:</p>
   <ul>
@@ -249,7 +267,7 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="wall-defaults">4. Configuración predeterminada de muros</h2>
+  <h2 id="wall-defaults">5. Configuración predeterminada de muros</h2>
 
   <p>El objeto <code>wallDefaults</code> define la altura y el grosor aplicados a todos los muros salvo que se sobreescriban individualmente.</p>
 
@@ -265,7 +283,7 @@
   </table>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="wall-overrides">5. Sobreescritura de muros individuales</h2>
+  <h2 id="wall-overrides">6. Sobreescritura de muros individuales</h2>
 
   <p>Los muros individuales pueden sobreescribir los valores predeterminados mediante <code>wallsSettings</code>. Cada entrada apunta a un muro por su <strong>índice basado en 0</strong> — el índice del punto de inicio de ese segmento en <code>wallPoints</code>. El muro 0 va de <code>wallPoints[0]</code> a <code>wallPoints[1]</code>, el muro 1 de <code>wallPoints[1]</code> a <code>wallPoints[2]</code>, y así sucesivamente.</p>
 
@@ -281,7 +299,7 @@
   <p>Esto eleva el muro 2 (el tercer lado del perímetro) a 1,2 m mientras todos los demás muros mantienen la altura predeterminada. Puedes sobreescribir <code>height</code> y/o la configuración de barandilla de cualquier muro individual.</p>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="railing">6. Barandillas</h2>
+  <h2 id="railing">7. Barandillas</h2>
 
   <p>Las barandillas se colocan sobre los muros. El objeto <code>railingDefaults</code> define el estilo global de barandilla; los muros individuales pueden sobreescribirlo mediante <code>wallsSettings[].override.railing</code>.</p>
 
@@ -357,7 +375,7 @@
   </table>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="system-losses">7. Pérdidas del sistema</h2>
+  <h2 id="system-losses">8. Pérdidas del sistema</h2>
 
   <p>Estos tres campos opcionales en <code>site</code> modelan las pérdidas de energía reales entre los paneles y el punto de conexión a la red.</p>
 
@@ -373,7 +391,7 @@
   </table>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="setups">8. Configuraciones (setups)</h2>
+  <h2 id="setups">9. Configuraciones (setups)</h2>
 
   <p>Una <strong>configuración</strong> (setup) es un conjunto completo de paneles a simular. Puedes definir varias configuraciones en el array <code>setups</code> para comparar distintos diseños, orientaciones o equipos.</p>
 
@@ -385,7 +403,7 @@
   <p>Cada configuración tiene un <code>label</code> (mostrado en la interfaz y en los informes), un bloque <code>panelDefaults</code> y uno o más <code>arrays</code>.</p>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="panel-defaults">9. Propiedades predeterminadas de paneles</h2>
+  <h2 id="panel-defaults">10. Propiedades predeterminadas de paneles</h2>
 
   <p>El objeto <code>panelDefaults</code> define las características físicas y eléctricas de los paneles utilizados en todos los arrays de esta configuración, salvo sobreescritura a nivel de array.</p>
 
@@ -438,7 +456,7 @@
   </svg>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="arrays">10. Arrays de paneles</h2>
+  <h2 id="arrays">11. Arrays de paneles</h2>
 
   <p>Cada configuración contiene uno o más <code>arrays</code>. Un array es una cuadrícula rectangular de paneles idénticos en una posición, inclinación y acimut fijos.</p>
 
@@ -487,7 +505,7 @@
 ]</code></pre>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="panel-overrides">11. Sobreescritura de paneles individuales</h2>
+  <h2 id="panel-overrides">12. Sobreescritura de paneles individuales</h2>
 
   <p>Los paneles individuales dentro de un array pueden sobreescribirse mediante <code>arraysSettings</code>. Cada entrada apunta a un panel concreto por su índice de array, fila y columna.</p>
 
@@ -508,7 +526,7 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <h2 id="full-example">12. Ejemplo completo</h2>
+  <h2 id="full-example">13. Ejemplo completo</h2>
 
   <p>Configuración completa para una instalación de ejemplo: terraza rectangular de 5m × 8m en Madrid, un array de 2 filas × 4 columnas, orientación Sur, inclinación 20°, paneles de 415 Wp con 3 zonas horizontales de bypass.</p>
 
