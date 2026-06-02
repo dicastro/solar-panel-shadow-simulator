@@ -143,6 +143,24 @@ function TypeBlockContent({
         </ul>
       );
     }
+    case 'string-count': {
+      return (
+        <ul className="validation-banner__list">
+          {issues.map((issue, idx) => {
+            if (issue.type !== 'string-count') return null;
+            return (
+              <li key={idx} className="validation-banner__list-item">
+                {t('validationIssues.string-count.message', {
+                  setup: issue.data.setupLabel,
+                  count: issue.data.stringCount,
+                  max: issue.data.maxColours,
+                })}
+              </li>
+            );
+          })}
+        </ul>
+      );
+    }
     default:
       return null;
   }

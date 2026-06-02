@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Text } from '@react-three/drei';
 import { PanelRenderData, SamplePoint } from '../types/installation';
 import { ShadowMap } from '../hooks/useShadowSampler';
-import { StringColoursUtils } from '../utils/StringColorUtils';
+import { StringColoursUtils } from '../utils/StringColourUtils';
 
 interface SolarPanelComponentProps {
   panelId: string;

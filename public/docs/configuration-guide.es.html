@@ -522,7 +522,13 @@
   <p>Esto mueve el panel del array 0, fila 0, columna 2 al string S2 y le añade un optimizador. El resto de propiedades se heredan de los valores predeterminados del array. Se pueden listar varias entradas para sobreescribir varios paneles.</p>
 
   <div class="note">
-    <p>Los paneles con optimizador se muestran en <strong>verde</strong> en la vista 3D; los paneles sin optimizador se muestran en azul oscuro.</p>
+    <p>Los paneles con optimizador se muestran en <strong>verde</strong> en la vista 3D;
+    los paneles sin optimizador se muestran en azul oscuro.</p>
+    <p>A cada string se le asigna automáticamente un color distinto. Se renderiza un borde
+    de color en la cara frontal de cada panel en la vista 3D, en los mapas de sombra del
+    panel de resultados y en los informes PDF. El color es consistente dentro de un setup
+    y se asigna por orden de primera aparición de los identificadores de string. Se pueden
+    distinguir visualmente hasta 10 strings; a partir de ese número, los colores se repiten.</p>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->

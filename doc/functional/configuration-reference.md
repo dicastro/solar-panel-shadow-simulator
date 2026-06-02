@@ -123,7 +123,7 @@ All fields are optional. Present fields override the corresponding `railingDefau
 | `zones` | integer ≥ 1 | ✓ | — | Number of bypass-diode zones |
 | `zonesDisposition` | `horizontal`/`vertical` | ✓ | — | How zones split the panel face |
 | `hasOptimizer` | boolean | ✓ | — | DC power optimizer fitted |
-| `string` | string | ✓ | — | String identifier (e.g. `"S1"`) |
+| `string` | string | ✓ | — | String identifier (e.g. `"S1"`). All panels sharing the same identifier are subject to the series current constraint. Each distinct string within a setup is rendered with a unique colour border in the 3D view, heat maps, and PDF reports (up to 10 colours; beyond that colours repeat). |
 | `temperatureCoefficient` | number (/°C) | — | −0.004 | Pmax temperature coefficient from datasheet |
 | `noct` | number (°C) | — | 45 | Nominal Operating Cell Temperature from datasheet |
 

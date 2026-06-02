@@ -3,6 +3,7 @@ import { Site } from '../types/installation';
 import { PanelSetupConfiguration } from '../types/config';
 import { SolarPanelArrayFactory } from './SolarPanelArrayFactory';
 import { SamplePointFactory } from './SamplePointFactory';
+import { StringColourAllocator } from './StringColourAllocator';
 
 const deriveSetupId = (label: string, index: number): string => {
   const normalised = label
@@ -14,101 +15,47 @@ const deriveSetupId = (label: string, index: number): string => {
   return `${normalised}-${index}`;
 };
 
-const panelColours = (hasOptimizer: boolean) => ({
-  frameColor: hasOptimizer ? '#2ecc71' : '#121e36',
-  emissiveColor: hasOptimizer ? '#0a2a16' : '#050a15',
-});
-
-/**
- * Assigns a stable colour index to each unique string identifier within a
- * setup, based on first-appearance order across all arrays in row-major
- * order (array 0 row 0 col 0 first). This order is deterministic and
- * independent of how many arrays or panels the setup contains.
- */
-const buildStringColorMap = (panels: SolarPanel[]): Map<string, number> => {
-  const map = new Map<string, number>();
-  for (const panel of panels) {
-    if (!map.has(panel.string)) {
-      map.set(panel.string, map.size);
-    }
-  }
-  return map;
-};
-
 export const PanelSetupFactory = {
+  /**
+   * Builds a complete PanelSetup from configuration.
+   *
+   * A StringColourAllocator is created once per setup so string colour
+   * indices are consistent within the setup and independent of other setups.
+   * Panel-level overrides are passed down to SolarPanelArrayFactory so every
+   * panel is built with its definitive configuration in a single pass —
+   * no post-construction correction is needed.
+   */
   create: (
     setupConfig: PanelSetupConfiguration,
     setupIndex: number,
     site: Site,
     density: number,
   ): PanelSetup => {
-    const panelArrays = setupConfig.arrays.map((arrayConfig, index) =>
-      SolarPanelArrayFactory.create(
-        index,
+    const allocator = new StringColourAllocator();
+
+    const panelArrays = setupConfig.arrays.map((arrayConfig, arrayIndex) => {
+      const arrayOverrides = (setupConfig.arraysSettings ?? []).filter(
+        o => o.array === arrayIndex,
+      );
+      return SolarPanelArrayFactory.create(
+        arrayIndex,
         arrayConfig,
         setupConfig.panelDefaults,
+        arrayOverrides,
         density,
         site.centerX,
         site.centerZ,
         site.swCornerX,
         site.swCornerZ,
         site.azimuthRad,
-      ),
-    );
-
-    // Apply per-panel overrides.
-    const overrides = setupConfig.arraysSettings;
-    const arraysAfterOverrides: SolarPanelArray[] = overrides && overrides.length > 0
-      ? panelArrays.map(pa => {
-        const arrayOverrides = overrides.filter(o => o.array === pa.index);
-        if (arrayOverrides.length === 0) return pa;
-
-        const panels: SolarPanel[] = pa.panels.map(panel => {
-          const override = arrayOverrides.find(
-            o => o.row === panel.row && o.col === panel.col,
-          );
-          if (!override) return panel;
-
-          const hasOptimizer = override.hasOptimizer ?? panel.hasOptimizer;
-          const string = override.string ?? panel.string;
-          const { frameColor, emissiveColor } = panelColours(hasOptimizer);
-
-          return {
-            ...panel,
-            hasOptimizer,
-            string,
-            renderData: {
-              ...panel.renderData,
-              frameColor,
-              emissiveColor,
-            },
-          };
-        });
-
-        return { ...pa, panels };
-      })
-      : panelArrays;
-
-    // Build the string colour map from the final panel list (after overrides),
-    // so string reassignments via arraysSettings are reflected in the colours.
-    const allPanels = arraysAfterOverrides.flatMap(pa => pa.panels);
-    const stringColorMap = buildStringColorMap(allPanels);
-
-    const finalArrays: SolarPanelArray[] = arraysAfterOverrides.map(pa => ({
-      ...pa,
-      panels: pa.panels.map(panel => ({
-        ...panel,
-        renderData: {
-          ...panel.renderData,
-          stringColorIndex: stringColorMap.get(panel.string) ?? 0,
-        },
-      })),
-    }));
+        allocator,
+      );
+    });
 
     return {
       id: deriveSetupId(setupConfig.label, setupIndex),
       label: setupConfig.label,
-      panelArrays: finalArrays,
+      panelArrays,
     };
   },
 

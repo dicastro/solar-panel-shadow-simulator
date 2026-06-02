@@ -145,6 +145,10 @@
       "title": "Railing support count",
       "defaultMessage": "Default railing support count must be at least 2 (currently {{count}})",
       "wallMessage": "Wall {{wall}}: railing support count must be at least 2 (currently {{count}})"
+    },
+    "string-count": {
+      "title": "String colour palette exhausted",
+      "message": "Setup '{{setup}}' uses {{count}} distinct strings but only {{max}} colours are available. String colours will repeat."
     }
   },
   "footer": {

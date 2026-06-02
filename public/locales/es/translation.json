@@ -145,6 +145,10 @@
       "title": "Número de soportes de barandilla",
       "defaultMessage": "El número de soportes de barandilla por defecto debe ser al menos 2 (actualmente {{count}})",
       "wallMessage": "Muro {{wall}}: el número de soportes de barandilla debe ser al menos 2 (actualmente {{count}})"
+    },
+    "string-count": {
+      "title": "Paleta de colores de strings agotada",
+      "message": "La configuración '{{setup}}' usa {{count}} strings distintos pero solo hay {{max}} colores disponibles. Los colores de strings se repetirán."
     }
   },
   "footer": {

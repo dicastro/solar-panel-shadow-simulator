@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import { LoadedSetupResult } from '../types/results';
 import { MARGIN, CONTENT_W, C_DARK, C_MUTED, font, Cursor } from './PdfLayout';
 import { SetupColoursUtils } from '../utils/SetupColoursUtils';
-import { StringColoursUtils } from '../utils/StringColorUtils';
+import { StringColoursUtils } from '../utils/StringColourUtils';
 import { drawScaleBar } from './PdfPrimitives';
 
 // ── Shade colour interpolation ────────────────────────────────────────────────

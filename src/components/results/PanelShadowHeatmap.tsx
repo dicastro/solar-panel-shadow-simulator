@@ -4,7 +4,7 @@ import { LoadedSetupResult } from '../../types/results';
 import { PanelAnnualData } from '../../types/simulation';
 import { ZonesDisposition } from '../../types/config';
 import { SetupColoursUtils } from '../../utils/SetupColoursUtils';
-import { StringColoursUtils } from '../../utils/StringColorUtils';
+import { StringColoursUtils } from '../../utils/StringColourUtils';
 
 interface Props {
   results: LoadedSetupResult[];
