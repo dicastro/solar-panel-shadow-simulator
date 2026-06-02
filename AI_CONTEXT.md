@@ -57,9 +57,13 @@ A browser-based 3D solar panel shadow simulator. The user defines their rooftop 
 - **No backend / no router**: single-page app, all routes are `{BASE_URL}` only; the configuration guide is a static HTML page in `public/docs/`
 - **OPFS for config persistence**: `ConfigStorage` reads/writes `config.json` in the OPFS root; `checkOpfsAvailability()` gates the app at startup
 - **Factory pattern**: all domain objects are plain immutable values produced by factory functions; React components only consume pre-computed `renderData`
+- **Single-pass panel construction**: `PanelOverrideResolver` resolves all overrideable panel attributes (string, hasOptimizer, width, height, etc.) in a single cascade (panel override > array config > setup defaults). `SolarPanelFactory` receives fully resolved values and produces a complete, definitive panel with no post-construction corrections.
+- **Panel string colours**: each string within a setup is assigned a colour index by `StringColourAllocator` (one instance per setup, first-appearance order). The index lives in `PanelRenderData.stringColorIndex` and is propagated through `SimulationPanelData` and `PanelAnnualData` so heat maps and PDF reports are consistent with the 3D view.
+- **Functional validation pattern**: extensible strategy pattern under `src/validation/`. Each validator implements `FunctionalValidator` and is registered in `index.ts`. Issues carry `type`, `severity` (`'error' | 'warning'`), and fully typed `data`. Adding a new validation means creating a file and registering it in `index.ts` — no other changes needed.
 - **Density changes do not rebuild geometry**: `PanelSetupFactory.rebuildSamplePoints` reuses panel geometry
 - **Two independent density/threshold pairs**: `renderDensity/renderThreshold` for the 3D view; `simulationDensity/simulationThreshold` for annual simulation
 - **Store slices**: `ConfigSlice`, `RenderSlice`, `SimulationSlice`, `SettingsSlice` composed behind `useAppStore`
+- **Simulation stop flag**: `simulationStopFlag` (module-level ref exported from `useAnnualSimulation.ts`) is activated synchronously by `stopSimulation()` in the store before any React effect cleanup runs, ensuring worker messages are discarded immediately on stop without depending on React's asynchronous effect timing. Note: this coupling between store and hook is a known architectural debt — the worker lifecycle should eventually be moved to a standalone service accessible directly from the store.
 - **Event bus**: `mitt`-based `appEvents` decouples IndexedDB mutations from UI reloads (`simulationResultsChanged`)
 - **Results scoped to active config**: `useResultsPanel` filters by `setupId` derived from current config; results from previous configs are invisible but not deleted
 - **Backup scoped to active config**: `BackupExporter` excludes results from previous configs
@@ -71,11 +75,13 @@ A browser-based 3D solar panel shadow simulator. The user defines their rooftop 
 |---|---|
 | Types | `src/types/config.ts`, `src/types/simulation.ts`, `src/types/installation.ts` |
 | Factories | `src/factory/SiteFactory.ts`, `src/factory/SolarPanelFactory.ts`, `src/factory/PanelSetupFactory.ts` |
+| Panel override resolution | `src/factory/PanelOverrideResolver.ts`, `src/factory/StringColourAllocator.ts` |
 | Store | `src/store/AppStore.ts`, `src/store/slices/` |
 | Annual simulation | `src/workers/AnnualSimulation.worker.ts`, `src/hooks/useAnnualSimulation.ts` |
 | Results panel | `src/hooks/useResultsPanel.ts`, `src/components/SimulationResultsPanel.tsx` |
 | Settings | `src/components/settings/ConfigurationSection.tsx`, `src/utils/ConfigStorage.ts` |
 | Irradiance | `src/irradiance/IrradianceProvider.ts`, `src/irradiance/OpenMeteoIrradianceProvider.ts` |
+| Validation | `src/validation/FunctionalValidator.ts`, `src/validation/index.ts` |
 | PDF | `src/pdf/PdfReportGenerator.ts` (public API only; internals in the other `src/pdf/` files) |
 | Technical docs | `doc/technical/coordinate-system.md`, `doc/technical/solar-production-model.md`, `doc/technical/shadow-detection.md`, `doc/technical/annual-simulation.md` |
 | Functional docs | `doc/functional/configuration-reference.md` |
