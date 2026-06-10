@@ -9,6 +9,8 @@ export interface ArrayOrigin {
   readonly z: number;
   readonly radInclination: number;
   readonly radAzimuth: number;
+  /** Position of the array in site-local config space, from PanelArrayConfiguration.position. */
+  readonly arrayConfigPosition: [number, number];
 }
 
 export const SolarPanelFactory = {
@@ -84,6 +86,7 @@ export const SolarPanelFactory = {
       },
       temperatureCoefficient,
       noct,
+      arrayConfigPosition: origin.arrayConfigPosition,
     };
   },
 };

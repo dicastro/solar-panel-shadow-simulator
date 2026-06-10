@@ -16,8 +16,19 @@
   border-bottom: 1px solid #2e2e2e;
 }
 
-.sim-group__label {
+/**
+ * Two-line info block: label on top, date below. flex: 1 so it takes all
+ * available space, leaving only the delete button on the right.
+ */
+.sim-group__header-info {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sim-group__label {
   font-size: 0.76rem;
   font-weight: 700;
   color: #ccc;
@@ -30,7 +41,6 @@
   font-size: 0.68rem;
   color: #666;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .sim-group__delete-btn {
@@ -64,7 +74,7 @@
 
 .cache-entry {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   padding: 7px 10px;
   border-bottom: 1px solid #282828;

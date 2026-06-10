@@ -7,23 +7,19 @@ interface Props {
   activeSetupIds: Set<string>;
   /** 0-based month index */
   month: number;
+  /** Calendar year of the simulation run, used to compute days in month. */
+  year: number;
 }
 
 /**
  * Line chart showing daily production totals (kWh) for a selected month.
  * One line per setup. The X axis covers all days of the month (1–28/29/30/31).
- * Each point is the sum of all hours for that day across all panels.
  */
-export function MonthlyLineChart({ results, activeSetupIds, month }: Props) {
+export function MonthlyLineChart({ results, activeSetupIds, month, year }: Props) {
   const visible = results.filter(r => activeSetupIds.has(r.setupId));
   if (visible.length === 0) return null;
 
-  const daysInMonth = new Date(
-    visible[0].result.year,
-    month + 1,
-    0,
-  ).getDate();
-
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
   const xData = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   const series = visible.map(r => {

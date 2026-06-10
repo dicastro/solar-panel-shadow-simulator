@@ -5,25 +5,11 @@ import { SimulationCache } from '../../db/SimulationCache';
 import { ConfigStorage } from '../../utils/ConfigStorage';
 import { Config } from '../../types/config';
 import { validateConfig } from '../../utils/ConfigValidator';
+import { SimulationCacheUtils } from '../../utils/SimulationCacheUtils';
 import { appEvents } from '../../events/AppEvents';
 
 type ConfigEditorMode = 'view' | 'edit';
 
-// ── Line-numbered editor ──────────────────────────────────────────────────────
-
-/**
- * JSON editor with a line-number gutter.
- *
- * Layout: flex row with a fixed-width <pre> gutter on the left and a
- * <textarea> on the right. Both elements share identical font metrics so
- * numbers always align with textarea rows. The wrapper has a fixed height
- * (matching the read-only <pre>) so the textarea is clipped and scrollable
- * rather than expanding to fit all content. The user can resize the wrapper
- * vertically by dragging its bottom-right corner.
- *
- * Scroll synchronisation: the gutter follows the textarea's scrollTop via
- * an onScroll handler; it never scrolls independently.
- */
 function LineNumberedEditor({
   value,
   onChange,
@@ -52,11 +38,7 @@ function LineNumberedEditor({
       className={`config-editor-wrapper${hasError ? ' config-editor-wrapper--error' : ''}`}
       style={{ height }}
     >
-      <pre
-        ref={lineNumbersRef}
-        className="config-editor__line-numbers"
-        aria-hidden="true"
-      >
+      <pre ref={lineNumbersRef} className="config-editor__line-numbers" aria-hidden="true">
         {lineNumbers}
       </pre>
       <textarea
@@ -72,8 +54,6 @@ function LineNumberedEditor({
     </div>
   );
 }
-
-// ── Confirmation dialog ───────────────────────────────────────────────────────
 
 function ConfigChangeConfirmDialog({
   onDeleteAndContinue,
@@ -111,25 +91,17 @@ function ConfigChangeConfirmDialog({
   );
 }
 
-// ── Documentation link ────────────────────────────────────────────────────────
-
 function DocLink() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language.startsWith('es') ? 'es' : 'en';
   const guideUrl = `${import.meta.env.BASE_URL}docs/configuration-guide.${lang}.html`;
   return (
-    <a
-      href={guideUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="config-first-launch-banner__link"
-    >
+    <a href={guideUrl} target="_blank" rel="noopener noreferrer"
+      className="config-first-launch-banner__link">
       {t('settings.configuration.firstLaunchDocLink')}
     </a>
   );
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const applyValidatedConfig = async (
   config: Config,
@@ -146,23 +118,17 @@ const applyValidatedConfig = async (
   setIsFirstLaunch(false);
 };
 
-// ── Main component ────────────────────────────────────────────────────────────
-
 /**
  * Configuration section of the settings sidebar.
  *
- * Shows a first-launch banner when the app is running with the built-in
- * default configuration, or a regular documentation link banner otherwise.
+ * The confirmation dialog is shown only when two conditions are simultaneously
+ * true:
+ *   1. The incoming config differs from the current one in fields that affect
+ *      simulation output (anything except timezone and floorColor).
+ *   2. There is at least one simulation result in the cache.
  *
- * Three capabilities:
- * 1. Inline JSON editor with line numbers and two-level validation
- *    (JSON syntax + ajv schema). The editor opens at the same height as the
- *    read-only view and can be resized vertically by the user.
- * 2. Export the current config as a plain config.json file.
- * 3. Load a config.json file from disk.
- *
- * Any config change triggers a confirmation dialog warning that existing
- * simulations will become inaccessible in the results panel.
+ * This avoids interrupting the user when changing purely visual settings or
+ * when there is nothing cached to lose.
  */
 export function ConfigurationSection() {
   const { t } = useTranslation();
@@ -175,25 +141,18 @@ export function ConfigurationSection() {
   const [editorText, setEditorText] = useState('');
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [applyStatus, setApplyStatus] = useState<'idle' | 'success'>('idle');
-
   const [pendingConfig, setPendingConfig] = useState<Config | null>(null);
-
   const [fileImportStatus, setFileImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [fileImportMessage, setFileImportMessage] = useState('');
   const [exportStatus, setExportStatus] = useState<'idle' | 'success'>('idle');
 
-  // Tracks the pixel height of the read-only <pre> so the editor opens at
-  // exactly the same height without a layout jump.
   const readonlyRef = useRef<HTMLPreElement>(null);
   const [editorHeight, setEditorHeight] = useState(320);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const prettyConfig = config ? JSON.stringify(config, null, 2) : '';
 
   const handleEdit = () => {
-    // Capture the current rendered height of the read-only view so the editor
-    // opens at the same size — no layout shift on mode switch.
     if (readonlyRef.current) {
       setEditorHeight(readonlyRef.current.getBoundingClientRect().height);
     }
@@ -221,21 +180,36 @@ export function ConfigurationSection() {
       ]);
       return null;
     }
-
     const result = validateConfig(parsed);
     if (!result.valid) {
       setValidationErrors(result.errors);
       return null;
     }
-
     setValidationErrors([]);
     return parsed as Config;
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     const newConfig = parseAndValidate(editorText);
     if (!newConfig) return;
-    setPendingConfig(newConfig);
+
+    const currentHash = config ? SimulationCacheUtils.buildSimulationInputHash(config) : null;
+    const newHash = SimulationCacheUtils.buildSimulationInputHash(newConfig);
+    const hasRelevantChange = currentHash !== newHash;
+
+    if (hasRelevantChange) {
+      const hasCached = await SimulationCache.hasResults();
+      if (hasCached) {
+        setPendingConfig(newConfig);
+        return;
+      }
+    }
+
+    await applyValidatedConfig(newConfig, false, loadConfig, setIsFirstLaunch);
+    setMode('view');
+    setApplyStatus('success');
+    setFileImportStatus('idle');
+    setTimeout(() => setApplyStatus('idle'), 3000);
   };
 
   const handleConfirmDeleteAndContinue = async () => {
@@ -258,9 +232,7 @@ export function ConfigurationSection() {
     setTimeout(() => setApplyStatus('idle'), 3000);
   };
 
-  const handleConfirmCancel = () => {
-    setPendingConfig(null);
-  };
+  const handleConfirmCancel = () => setPendingConfig(null);
 
   const handleExportFile = () => {
     if (!config) return;
@@ -287,14 +259,11 @@ export function ConfigurationSection() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-
     file.text().then(text => {
       const newConfig = parseAndValidate(text);
       if (!newConfig) {
         setFileImportStatus('error');
-        setFileImportMessage(
-          validationErrors[0] ?? t('settings.configuration.invalidConfig'),
-        );
+        setFileImportMessage(validationErrors[0] ?? t('settings.configuration.invalidConfig'));
         return;
       }
       setPendingConfig(newConfig);
@@ -312,7 +281,6 @@ export function ConfigurationSection() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
       {pendingConfig && (
         <ConfigChangeConfirmDialog
           onDeleteAndContinue={handleConfirmDeleteAndContinue}
@@ -321,7 +289,6 @@ export function ConfigurationSection() {
         />
       )}
 
-      {/* Documentation banner — always visible */}
       <div className="config-first-launch-banner">
         {isFirstLaunch ? (
           <>
@@ -336,12 +303,10 @@ export function ConfigurationSection() {
         )}
       </div>
 
-      {/* ── Inline editor ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <p className="settings-subsection__title" style={{ marginBottom: 0 }}>
           {t('settings.configuration.editorTitle')}
         </p>
-
         {mode === 'view' ? (
           <>
             <pre ref={readonlyRef} className="config-editor config-editor--readonly">
@@ -367,25 +332,15 @@ export function ConfigurationSection() {
             {validationErrors.length > 0 && (
               <div className="config-validation-errors">
                 {validationErrors.map((err, i) => (
-                  <p key={i} className="settings-feedback settings-feedback--error">
-                    {err}
-                  </p>
+                  <p key={i} className="settings-feedback settings-feedback--error">{err}</p>
                 ))}
               </div>
             )}
             <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                className="settings-action-btn"
-                style={{ flex: 1 }}
-                onClick={handleApply}
-              >
+              <button className="settings-action-btn" style={{ flex: 1 }} onClick={handleApply}>
                 {t('settings.configuration.applyBtn')}
               </button>
-              <button
-                className="settings-action-btn"
-                style={{ flex: 1 }}
-                onClick={handleCancel}
-              >
+              <button className="settings-action-btn" style={{ flex: 1 }} onClick={handleCancel}>
                 {t('settings.configuration.cancelBtn')}
               </button>
             </div>
@@ -393,18 +348,12 @@ export function ConfigurationSection() {
         )}
       </div>
 
-      {/* ── Export / load from file ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <p className="settings-subsection__title" style={{ marginBottom: 0 }}>
           {t('settings.configuration.fileTitle')}
         </p>
-
-        <button
-          className="settings-action-btn"
-          onClick={handleExportFile}
-          disabled={!config}
-          title={t('settings.configuration.exportFileTitle')}
-        >
+        <button className="settings-action-btn" onClick={handleExportFile} disabled={!config}
+          title={t('settings.configuration.exportFileTitle')}>
           {t('settings.configuration.exportFileBtn')}
         </button>
         {exportStatus === 'success' && (
@@ -412,39 +361,22 @@ export function ConfigurationSection() {
             {t('settings.configuration.exportFileSuccess')}
           </p>
         )}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".json"
-          style={{ display: 'none' }}
-          onChange={handleFileSelected}
-        />
-        <button
-          className="settings-action-btn"
-          onClick={handleLoadFileClick}
-          title={t('settings.configuration.importFileTitle')}
-        >
+        <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }}
+          onChange={handleFileSelected} />
+        <button className="settings-action-btn" onClick={handleLoadFileClick}
+          title={t('settings.configuration.importFileTitle')}>
           {t('settings.configuration.importFileBtn')}
         </button>
         {fileImportStatus === 'success' && (
-          <p className="settings-feedback settings-feedback--success">
-            {fileImportMessage}
-          </p>
+          <p className="settings-feedback settings-feedback--success">{fileImportMessage}</p>
         )}
         {fileImportStatus === 'error' && (
-          <p className="settings-feedback settings-feedback--error">
-            {fileImportMessage}
-          </p>
+          <p className="settings-feedback settings-feedback--error">{fileImportMessage}</p>
         )}
       </div>
 
-      {/* ── Reset ── */}
-      <button
-        className="settings-danger-btn"
-        onClick={handleReset}
-        title={t('settings.configuration.resetTitle')}
-      >
+      <button className="settings-danger-btn" onClick={handleReset}
+        title={t('settings.configuration.resetTitle')}>
         {t('settings.configuration.resetBtn')}
       </button>
     </div>

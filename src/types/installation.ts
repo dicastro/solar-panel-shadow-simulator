@@ -152,6 +152,13 @@ export interface SolarPanel {
    * Undefined means the simulation will use the default value of 45°C.
    */
   readonly noct?: number;
+  /**
+   * Position of this panel's array in site-local config space (metres from SW
+   * corner). Taken directly from PanelArrayConfiguration.position and carried
+   * through to simulation results so the results panel and PDF can reconstruct
+   * the relative spatial layout of arrays without access to the original config.
+   */
+  readonly arrayConfigPosition: [number, number];
 }
 
 export interface SolarPanelArray {

@@ -5,6 +5,7 @@ import { RenderSlice, createRenderSlice } from './slices/RenderSlice';
 import { SimulationSlice, createSimulationSlice } from './slices/SimulationSlice';
 import { SettingsSlice, createSettingsSlice } from './slices/SettingsSlice';
 import { SiteFactory } from '../factory/SiteFactory';
+import { SimulationCacheUtils } from '../utils/SimulationCacheUtils';
 import { runAllValidators } from '../validation';
 
 type AppStore = ConfigSlice & RenderSlice & SimulationSlice & SettingsSlice;
@@ -32,7 +33,8 @@ export const useAppStore = create<AppStore>((set, get) => {
     loadConfig: (config: Config) => {
       const site = SiteFactory.create(config);
       const validationIssues = runAllValidators(config);
-      typedSet({ config, site, validationIssues });
+      const currentSimulationInputHash = SimulationCacheUtils.buildSimulationInputHash(config);
+      typedSet({ config, site, validationIssues, currentSimulationInputHash });
       renderSlice.initRender(config, site, typedGet().renderDensity);
     },
   };

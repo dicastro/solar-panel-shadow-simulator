@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { SimulationCache } from '../db/SimulationCache';
-import { SimulationGroup, SimulationGroupSetup, LoadedSetupResult } from '../types/results';
+import { SimulationGroup, LoadedSetupResult } from '../types/results';
 import { buildSimulationGroups } from '../utils/SimulationGroupUtils';
 import { appEvents } from '../events/AppEvents';
 import { useAppStore } from '../store/AppStore';
@@ -18,20 +18,16 @@ interface UseResultsPanelReturn {
   setActiveTab: (tab: ResultsTab) => void;
   loadedResults: LoadedSetupResult[];
   isLoadingResults: boolean;
+  /**
+   * True when the selected group's simulationInputHash differs from the
+   * current configuration's hash — meaning the stored result was computed
+   * against a different configuration than the one currently active.
+   */
+  isSelectedGroupOutdated: boolean;
 }
 
-const deriveSetupId = (label: string, index: number): string => {
-  const normalised = label
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '');
-  return `${normalised}-${index}`;
-};
-
 export function useResultsPanel(): UseResultsPanelReturn {
-  const config = useAppStore(s => s.config);
+  const currentSimulationInputHash = useAppStore(s => s.currentSimulationInputHash);
 
   const [groups, setGroups] = useState<SimulationGroup[]>([]);
   const [selectedGroupKey, setSelectedGroupKeyState] = useState<string | null>(null);
@@ -41,26 +37,19 @@ export function useResultsPanel(): UseResultsPanelReturn {
   const [isLoadingResults, setIsLoadingResults] = useState(false);
 
   const reloadGroups = useCallback((autoSelect: boolean) => {
-    if (!config) return;
-
-    const currentValidIds = new Set(
-      config.setups.map((s, i) => deriveSetupId(s.label, i)),
-    );
-
     SimulationCache.listResults()
-      .then(entries => {
-        const filtered = entries.filter(e => currentValidIds.has(e.setupId));
-        const grouped = buildSimulationGroups(filtered);
+      .then(summaries => {
+        const grouped = buildSimulationGroups(summaries);
         setGroups(grouped);
         if (grouped.length > 0 && (autoSelect || selectedGroupKey === null)) {
-          setSelectedGroupKeyState(grouped[0].groupKey);
+          setSelectedGroupKeyState(grouped[0].cacheKey);
         } else if (grouped.length === 0) {
           setSelectedGroupKeyState(null);
         }
       })
       .catch(err => console.warn('useResultsPanel: failed to load cache', err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config]);
+  }, []);
 
   useEffect(() => {
     reloadGroups(false);
@@ -74,21 +63,10 @@ export function useResultsPanel(): UseResultsPanelReturn {
     return () => appEvents.off('simulationResultsChanged', handler);
   }, [reloadGroups]);
 
-  const selectedGroup = groups.find(g => g.groupKey === selectedGroupKey) ?? null;
-
-  /**
-   * Stable signature of the selected group's setup list. Changing when setups
-   * are added or removed from the group (e.g. after a cache deletion) even
-   * though the groupKey itself stays the same. Used as a dependency for the
-   * full-data loading effect so charts refresh without requiring a page reload.
-   */
-  const selectedGroupSignature = useMemo(
-    () => selectedGroup?.setups.map(s => s.cacheKey).join('|') ?? null,
-    [selectedGroup],
-  );
+  const selectedGroup = groups.find(g => g.cacheKey === selectedGroupKey) ?? null;
 
   useEffect(() => {
-    if (!selectedGroup || selectedGroupSignature === null) {
+    if (!selectedGroup) {
       setLoadedResults([]);
       setActiveSetupIds(new Set());
       return;
@@ -98,30 +76,26 @@ export function useResultsPanel(): UseResultsPanelReturn {
     setIsLoadingResults(true);
     setLoadedResults([]);
 
-    Promise.all(
-      selectedGroup.setups.map(setup =>
-        SimulationCache.getResult(setup.cacheKey).then(result => ({ setup, result })),
-      ),
-    )
-      .then(results => {
-        const loaded: LoadedSetupResult[] = results
-          .filter((r): r is { setup: SimulationGroupSetup; result: NonNullable<typeof r.result> } =>
-            r.result !== null,
-          )
-          .map(({ setup, result }) => ({
-            setupId: setup.setupId,
-            result,
-            colourIndex: setup.colourIndex,
-          }));
+    SimulationCache.getResult(selectedGroup.cacheKey)
+      .then(runResult => {
+        if (!runResult) return;
+        // Map each setup result to a LoadedSetupResult, preserving the colour
+        // index assigned during group building (by annualTotalKwh ranking).
+        const colourBySetupId = new Map(
+          selectedGroup.setups.map(s => [s.setupId, s.colourIndex]),
+        );
+        const loaded: LoadedSetupResult[] = runResult.setups.map(setupResult => ({
+          setupId: setupResult.setupId,
+          result: setupResult,
+          colourIndex: colourBySetupId.get(setupResult.setupId) ?? 0,
+        }));
+        // Sort by colour index so charts always render in ranked order.
+        loaded.sort((a, b) => a.colourIndex - b.colourIndex);
         setLoadedResults(loaded);
       })
-      .catch(err => console.warn('useResultsPanel: failed to load full results', err))
+      .catch(err => console.warn('useResultsPanel: failed to load full result', err))
       .finally(() => setIsLoadingResults(false));
-    // selectedGroupSignature captures the content of the group; selectedGroupKey
-    // captures which group is selected. Both are needed: key for group switches,
-    // signature for in-place mutations (setup deletion within the same group).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedGroupKey, selectedGroupSignature]);
+  }, [selectedGroupKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setSelectedGroupKey = useCallback((key: string) => {
     setSelectedGroupKeyState(key);
@@ -140,6 +114,18 @@ export function useResultsPanel(): UseResultsPanelReturn {
     });
   }, []);
 
+  /**
+   * The selected group is outdated when the hash stored in the simulation
+   * result does not match the hash of the current configuration. This covers
+   * all changes that affect simulation output (everything except timezone and
+   * floorColor), including changes to walls, site coordinates, albedo, panel
+   * geometry, strings, and optimizer assignments.
+   */
+  const isSelectedGroupOutdated = useMemo((): boolean => {
+    if (!selectedGroup || !currentSimulationInputHash) return false;
+    return selectedGroup.simulationInputHash !== currentSimulationInputHash;
+  }, [selectedGroup, currentSimulationInputHash]);
+
   return {
     groups,
     selectedGroup,
@@ -151,5 +137,6 @@ export function useResultsPanel(): UseResultsPanelReturn {
     setActiveTab,
     loadedResults,
     isLoadingResults,
+    isSelectedGroupOutdated,
   };
 }

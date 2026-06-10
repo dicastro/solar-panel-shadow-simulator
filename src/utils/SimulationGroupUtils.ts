@@ -1,70 +1,43 @@
-import { SimulationGroup, SimulationGroupSetup } from '../types/results';
-import { SimulationCache } from '../db/SimulationCache';
-
-type CacheEntry = Awaited<ReturnType<typeof SimulationCache.listResults>>[number];
+import { SimulationGroup } from '../types/results';
+import { SimulationRunSummary } from '../types/results';
 
 /**
- * Groups flat per-setup cache entries into logical simulation runs.
+ * Converts flat SimulationRunSummary records from IndexedDB into the
+ * SimulationGroup shape consumed by the results panel UI.
  *
- * Entries sharing the same parameters (year, interval, irradiance source,
- * density, threshold) form one group. Within a group, setups are ordered by
- * annualTotalKwh descending so the ranking is already applied. Groups are
- * ordered by computedAt descending (most recent first).
+ * One SimulationRunSummary maps directly to one SimulationGroup — there is
+ * no grouping step because each IDB record already represents a complete run
+ * (all setups together). Groups are sorted by computedAt descending so the
+ * most recent run appears first in the selector.
  *
- * Extracted here so both the results panel and the settings sidebar cache
- * management UI can consume the same grouping logic without duplication.
+ * Setup colour indices are assigned by annualTotalKwh descending so the
+ * highest-producing setup always receives colour index 0 (green).
  */
-export const buildSimulationGroups = (entries: CacheEntry[]): SimulationGroup[] => {
-  const map = new Map<string, SimulationGroup & { setups: SimulationGroupSetup[] }>();
+export const buildSimulationGroups = (summaries: SimulationRunSummary[]): SimulationGroup[] => {
+  const groups: SimulationGroup[] = summaries
+    .map((summary): SimulationGroup => {
+      const sortedSetups = [...summary.setups]
+        .sort((a, b) => b.annualTotalKwh - a.annualTotalKwh)
+        .map((s, i) => ({
+          setupId: s.setupId,
+          setupLabel: s.setupLabel,
+          annualTotalKwh: s.annualTotalKwh,
+          colourIndex: i,
+        }));
 
-  for (const entry of entries) {
-    const groupKey = [
-      entry.year,
-      entry.intervalMinutes,
-      entry.irradianceSource,
-      entry.density,
-      entry.threshold,
-    ].join('|');
+      return {
+        cacheKey: summary.cacheKey,
+        simulationInputHash: summary.simulationInputHash,
+        year: summary.year,
+        intervalMinutes: summary.intervalMinutes,
+        irradianceSource: summary.irradianceSource,
+        density: summary.density,
+        threshold: summary.threshold,
+        computedAt: summary.computedAt,
+        setups: sortedSetups,
+      };
+    })
+    .sort((a, b) => b.computedAt - a.computedAt);
 
-    const existing = map.get(groupKey);
-    if (existing) {
-      existing.setups.push({
-        cacheKey: entry.cacheKey,
-        setupId: entry.setupId,
-        setupLabel: entry.setupLabel,
-        annualTotalKwh: entry.annualTotalKwh,
-        colourIndex: existing.setups.length,
-      });
-      if (entry.computedAt > existing.computedAt) {
-        (existing as { computedAt: number }).computedAt = entry.computedAt;
-      }
-    } else {
-      map.set(groupKey, {
-        groupKey,
-        year: entry.year,
-        intervalMinutes: entry.intervalMinutes,
-        irradianceSource: entry.irradianceSource,
-        density: entry.density,
-        threshold: entry.threshold,
-        computedAt: entry.computedAt,
-        setups: [{
-          cacheKey: entry.cacheKey,
-          setupId: entry.setupId,
-          setupLabel: entry.setupLabel,
-          annualTotalKwh: entry.annualTotalKwh,
-          colourIndex: 0,
-        }],
-      });
-    }
-  }
-
-  const groups = Array.from(map.values());
-  groups.forEach(g => {
-    g.setups.sort((a, b) => b.annualTotalKwh - a.annualTotalKwh);
-    g.setups.forEach((s, i) => {
-      (s as { colourIndex: number }).colourIndex = i;
-    });
-  });
-  groups.sort((a, b) => b.computedAt - a.computedAt);
   return groups;
 };

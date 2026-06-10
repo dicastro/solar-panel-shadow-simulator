@@ -64,7 +64,7 @@
     "totalRays": "Total rays",
     "run": "RUN CALCULATION",
     "stop": "STOP",
-    "stopConfirm": "Stop the simulation? Progress will be lost for setups still running.",
+    "stopConfirm": "Stop the simulation? Progress will be lost.",
     "pending": "{{count}} setup(s) waiting in queue"
   },
   "simulationResultsPanel": {
@@ -72,7 +72,7 @@
     "placeholder": "Run the annual simulation to see results here. Use the controls on the left to configure the interval, year, and irradiance source, then press RUN CALCULATION.",
     "computing": "Simulation in progress…",
     "selectorLabel": "Simulation run",
-    "groupLabel": "{{year}} · {{interval}} min · {{irradiance}} · {{samplingCode}} · {{setups}} setup(s)",
+    "groupLabel": "{{year}} · {{interval}} min · {{irradiance}} · {{samplingCode}}",
     "irradiance_geometric": "Geometric",
     "irradiance_open-meteo": "Open-Meteo",
     "paramYear": "Year",
@@ -80,7 +80,6 @@
     "paramIrradiance": "Irradiance",
     "paramDensity": "Points per zone",
     "paramThreshold": "Threshold",
-    "paramSetups": "Setups",
     "paramComputedAt": "Computed",
     "liveResults": "In progress"
   },
@@ -103,7 +102,8 @@
     "dragHint": "Drag to resize",
     "monthlyTotal": "Monthly total",
     "dailyTotal": "Daily total",
-    "array": "Array"
+    "array": "Array",
+    "outdatedWarning": "The configuration has changed since this simulation was run. Results may not reflect the current installation. Re-run the simulation to update them."
   },
   "report": {
     "generateBtn": "Generate PDF Report",
@@ -173,7 +173,9 @@
       "simulationsTitle": "Simulation results",
       "noSimulations": "No cached simulation results.",
       "clearAllSimulations": "Delete all simulation results",
-      "deleteGroup": "Delete this simulation run",
+      "deleteRun": "Delete this simulation run",
+      "setupCount_one": "{{count}} setup",
+      "setupCount_other": "{{count}} setups",
       "irradianceTitle": "Irradiance data (Open-Meteo)",
       "noIrradiance": "No cached irradiance data.",
       "clearAllIrradiance": "Delete all irradiance data",
@@ -188,7 +190,7 @@
       "exportError": "Export failed: {{message}}",
       "importBtn": "Load backup",
       "importTitle": "Load a backup file to restore configuration and simulation results",
-      "importSuccess": "Backup loaded: {{count}} simulation result(s) restored.",
+      "importSuccess": "Backup loaded: {{count}} simulation run(s) restored.",
       "importError": "Import failed: {{message}}",
       "importDescription": "Loading a backup replaces the current configuration and all simulation results. Open-Meteo irradiance data in the local cache is preserved."
     },
@@ -214,7 +216,7 @@
       "resetBtn": "Reset to default configuration",
       "resetTitle": "Clear the saved configuration and reload the built-in default",
       "resetConfirm": "Reset to the default configuration? The current configuration will be replaced by the built-in example.",
-      "changeWarning": "Changing the configuration will make existing simulation results inaccessible in the results panel, because those results are linked to the previous configuration. You can keep them in storage and recover them by reloading the previous configuration, or delete them now to free up space.",
+      "changeWarning": "Changing the configuration will make existing simulation results outdated. You can keep them and re-run the simulation to update them, or delete them now to free up space.",
       "changeDeleteAndContinue": "Delete simulations and apply",
       "changeKeepAndContinue": "Keep simulations and apply",
       "changeCancel": "Cancel",

@@ -6,27 +6,25 @@ import { SimulationGroup } from '../../types/results';
 import { buildSimulationGroups } from '../../utils/SimulationGroupUtils';
 import { appEvents } from '../../events/AppEvents';
 
-type SimulationSummary = Awaited<ReturnType<typeof SimulationCache.listResults>>[number];
-
 const formatDate = (ts: number): string =>
   new Date(ts).toLocaleString(undefined, {
     year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
 
-export const buildGroupLabel = (g: SimulationGroup, t: TFunction): string =>
+const buildGroupLabel = (g: SimulationGroup, t: TFunction): string =>
   t('simulationResultsPanel.groupLabel', {
     year: g.year,
     interval: g.intervalMinutes,
     irradiance: t(`simulationResultsPanel.irradiance_${g.irradianceSource}` as any),
     samplingCode: `${g.density * g.density}p${g.threshold}t`,
-    setups: g.setups.length,
   });
 
 /**
  * Cache management sub-section for simulation results.
- * Groups entries by simulation parameters and allows deleting individual
- * setups, entire groups, or all results at once.
+ *
+ * Each entry represents a complete simulation run (all setups together).
+ * Deletion always removes the entire run — there is no per-setup deletion.
  */
 export function SimulationCacheSection() {
   const { t } = useTranslation();
@@ -36,7 +34,7 @@ export function SimulationCacheSection() {
   const reload = useCallback(() => {
     setLoading(true);
     SimulationCache.listResults()
-      .then((entries: SimulationSummary[]) => setGroups(buildSimulationGroups(entries)))
+      .then(summaries => setGroups(buildSimulationGroups(summaries)))
       .catch(() => setGroups([]))
       .finally(() => setLoading(false));
   }, []);
@@ -48,16 +46,8 @@ export function SimulationCacheSection() {
     return () => appEvents.off('simulationResultsChanged', reload);
   }, [reload]);
 
-  const handleDeleteSetup = async (cacheKey: string) => {
+  const handleDeleteRun = async (cacheKey: string) => {
     await SimulationCache.deleteResult(cacheKey).catch(() => null);
-    reload();
-    appEvents.emit('simulationResultsChanged', { autoSelect: false });
-  };
-
-  const handleDeleteGroup = async (group: SimulationGroup) => {
-    await Promise.all(
-      group.setups.map(s => SimulationCache.deleteResult(s.cacheKey).catch(() => null)),
-    );
     reload();
     appEvents.emit('simulationResultsChanged', { autoSelect: false });
   };
@@ -67,8 +57,6 @@ export function SimulationCacheSection() {
     reload();
     appEvents.emit('simulationResultsChanged', { autoSelect: false });
   };
-
-  const totalEntries = groups.reduce((sum, g) => sum + g.setups.length, 0);
 
   return (
     <div>
@@ -80,34 +68,29 @@ export function SimulationCacheSection() {
       ) : (
         <div className="cache-entry-list">
           {groups.map(group => (
-            <div key={group.groupKey} className="sim-group">
+            <div key={group.cacheKey} className="sim-group">
               <div className="sim-group__header">
-                <span className="sim-group__label">{buildGroupLabel(group, t)}</span>
-                <span className="sim-group__meta">{formatDate(group.computedAt)}</span>
+                <div className="sim-group__header-info">
+                  <span className="sim-group__label">{buildGroupLabel(group, t)}</span>
+                  <span className="sim-group__meta">{formatDate(group.computedAt)}</span>
+                </div>
                 <button
                   className="sim-group__delete-btn"
-                  onClick={() => handleDeleteGroup(group)}
-                  title={t('settings.cache.deleteGroup')}
+                  onClick={() => handleDeleteRun(group.cacheKey)}
+                  title={t('settings.cache.deleteRun')}
                 >
                   🗑
                 </button>
               </div>
               <div className="sim-group__setups">
                 {group.setups.map(setup => (
-                  <div key={setup.cacheKey} className="cache-entry">
+                  <div key={setup.setupId} className="cache-entry">
                     <div className="cache-entry__info">
                       <span className="cache-entry__label">{setup.setupLabel}</span>
                     </div>
                     <span className="cache-entry__value">
                       {setup.annualTotalKwh.toFixed(1)} kWh
                     </span>
-                    <button
-                      className="cache-entry__delete-btn"
-                      onClick={() => handleDeleteSetup(setup.cacheKey)}
-                      title={t('settings.cache.deleteEntry')}
-                    >
-                      🗑
-                    </button>
                   </div>
                 ))}
               </div>
@@ -118,7 +101,7 @@ export function SimulationCacheSection() {
       <button
         className="settings-danger-btn"
         onClick={handleClearAll}
-        disabled={totalEntries === 0}
+        disabled={groups.length === 0}
       >
         {t('settings.cache.clearAllSimulations')}
       </button>

@@ -36,6 +36,7 @@ const computeArrayOrigin = (
     z: swWorldZ + offsetWorldZ,
     radInclination,
     radAzimuth,
+    arrayConfigPosition: arrayConfig.position,
   };
 };
 

@@ -26,7 +26,7 @@ const formatComputedAt = (ts: number): string =>
   });
 
 const buildGroupLabel = (
-  g: { year: number; intervalMinutes: number; irradianceSource: string; density: number; threshold: number; setups: { setupId: string }[] },
+  g: { year: number; intervalMinutes: number; irradianceSource: string; density: number; threshold: number },
   t: TFunction,
 ): string =>
   t('simulationResultsPanel.groupLabel', {
@@ -34,24 +34,15 @@ const buildGroupLabel = (
     interval: g.intervalMinutes,
     irradiance: t(`simulationResultsPanel.irradiance_${g.irradianceSource}` as any),
     samplingCode: `${g.density * g.density}p${g.threshold}t`,
-    setups: g.setups.length,
   });
 
-/**
- * Builds the compact simulation code embedded in the PDF filename.
- * Example: "2025-60m-openmeteo-16p1t-4s"
- */
 const buildSimulationCode = (
-  g: { year: number; intervalMinutes: number; irradianceSource: string; density: number; threshold: number; setups: { setupId: string }[] },
+  g: { year: number; intervalMinutes: number; irradianceSource: string; density: number; threshold: number },
 ): string => {
   const src = g.irradianceSource === 'open-meteo' ? 'openmeteo' : g.irradianceSource;
-  return `${g.year}-${g.intervalMinutes}m-${src}-${g.density * g.density}p${g.threshold}t-${g.setups.length}s`;
+  return `${g.year}-${g.intervalMinutes}m-${src}-${g.density * g.density}p${g.threshold}t`;
 };
 
-/**
- * Resolves all strings the PDF generator needs from i18next, so the pure-TS
- * generator has no React or i18next dependency.
- */
 const buildPdfLabels = (t: TFunction): PdfLabels => ({
   title: t('report.pdfTitle'),
   subtitle: t('report.pdfSubtitle'),
@@ -84,25 +75,8 @@ const buildPdfLabels = (t: TFunction): PdfLabels => ({
   zeroSymbol: '—',
 });
 
-/**
- * Report generation state:
- *  idle       — nothing happening; button is enabled
- *  modal      — ReportModal open; user selecting optional days
- *  generating — generatePdfReport running; button disabled with feedback
- */
 type ReportState = 'idle' | 'modal' | 'generating';
 
-/**
- * The results panel floats as a fixed overlay on the right side of the screen.
- *
- * Report generation flow:
- *  1. User clicks "Generate PDF Report" → state = modal
- *  2. User confirms (optionally with selected days) → state = generating
- *  3. generatePdfReport (async, uses ECharts SSR + svg2pdf) runs → state = idle
- *
- * All chart rendering happens inside generatePdfReport via ECharts SSR —
- * no React chart components are mounted for capture.
- */
 export function SimulationResultsPanel() {
   const { t } = useTranslation();
   const isRunning = useAppStore(s => s.isRunning);
@@ -120,6 +94,7 @@ export function SimulationResultsPanel() {
     setActiveTab,
     loadedResults,
     isLoadingResults,
+    isSelectedGroupOutdated,
   } = useResultsPanel();
 
   const {
@@ -232,7 +207,7 @@ export function SimulationResultsPanel() {
                   onChange={e => setSelectedGroupKey(e.target.value)}
                 >
                   {groups.map(g => (
-                    <option key={g.groupKey} value={g.groupKey}>
+                    <option key={g.cacheKey} value={g.cacheKey}>
                       {buildGroupLabel(g, t)}
                     </option>
                   ))}
@@ -328,6 +303,13 @@ export function SimulationResultsPanel() {
                   )}
                 </div>
 
+                {isSelectedGroupOutdated && (
+                  <div className="results-panel__outdated-banner">
+                    <span className="results-panel__outdated-banner-icon">⚠</span>
+                    <span>{t('resultsPanel.outdatedWarning')}</span>
+                  </div>
+                )}
+
                 <div className="results-panel__legend">
                   {selectedGroup.setups.map(setup => (
                     <button
@@ -373,13 +355,14 @@ export function SimulationResultsPanel() {
                         <AnnualTab results={loadedResults} activeSetupIds={activeSetupIds} />
                       )}
                       {activeTab === 'monthly' && (
-                        <MonthlyTab results={loadedResults} activeSetupIds={activeSetupIds} />
+                        <MonthlyTab results={loadedResults} activeSetupIds={activeSetupIds} year={selectedGroup.year} />
                       )}
                       {activeTab === 'daily' && (
                         <DailyTab
                           results={loadedResults}
                           activeSetupIds={activeSetupIds}
                           timezone={timezone}
+                          year={selectedGroup.year}
                         />
                       )}
                     </>

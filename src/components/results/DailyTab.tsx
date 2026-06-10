@@ -9,11 +9,12 @@ import { PanelShadowHeatmap } from './PanelShadowHeatmap';
 interface Props {
   results: LoadedSetupResult[];
   activeSetupIds: Set<string>;
-  /** IANA timezone identifier forwarded to DailyLineChart for UTC→local conversion. */
   timezone: string;
+  /** Calendar year of the simulation run. */
+  year: number;
 }
 
-function DailyTotalBarChart({ results, activeSetupIds, month, day }: Omit<Props, 'timezone'> & { month: number; day: number }) {
+function DailyTotalBarChart({ results, activeSetupIds, month, day }: Omit<Props, 'timezone' | 'year'> & { month: number; day: number }) {
   const visible = results.filter(r => activeSetupIds.has(r.setupId));
   if (visible.length === 0) return null;
 
@@ -58,12 +59,11 @@ function DailyTotalBarChart({ results, activeSetupIds, month, day }: Omit<Props,
   );
 }
 
-export function DailyTab({ results, activeSetupIds, timezone }: Props) {
+export function DailyTab({ results, activeSetupIds, timezone, year }: Props) {
   const { t } = useTranslation();
   const [month, setMonth] = useState(new Date().getMonth());
   const [day, setDay] = useState(new Date().getDate() - 1);
 
-  const year = results[0]?.result.year ?? new Date().getFullYear();
   const monthNames: string[] = t('months.long', { returnObjects: true });
   const daysInMonth = useMemo(() => new Date(year, month + 1, 0).getDate(), [year, month]);
   const clampedDay = Math.min(day, daysInMonth - 1);
@@ -89,7 +89,9 @@ export function DailyTab({ results, activeSetupIds, timezone }: Props) {
 
   const handleMonthChange = (newMonth: number) => {
     setMonth(newMonth);
-    if (day >= new Date(year, newMonth + 1, 0).getDate()) setDay(new Date(year, newMonth + 1, 0).getDate() - 1);
+    if (day >= new Date(year, newMonth + 1, 0).getDate()) {
+      setDay(new Date(year, newMonth + 1, 0).getDate() - 1);
+    }
   };
 
   return (
@@ -110,7 +112,14 @@ export function DailyTab({ results, activeSetupIds, timezone }: Props) {
       <div className="results-section">
         <h4 className="results-section__title">{t('resultsPanel.production')}</h4>
         <DailyTotalBarChart results={results} activeSetupIds={activeSetupIds} month={month} day={clampedDay} />
-        <DailyLineChart results={results} activeSetupIds={activeSetupIds} month={month} day={clampedDay} timezone={timezone} />
+        <DailyLineChart
+          results={results}
+          activeSetupIds={activeSetupIds}
+          month={month}
+          day={clampedDay}
+          timezone={timezone}
+          year={year}
+        />
       </div>
 
       <div className="results-section">

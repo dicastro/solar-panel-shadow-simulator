@@ -35,7 +35,6 @@ export interface SimulationState {
   isRunning: boolean;
   activeProgress: Map<string, SetupSimulationProgress>;
   pendingSetups: number;
-  annualProductionResults: Map<string, { label: string; annualTotalKwh: number }>;
 }
 
 export interface SimulationActions {
@@ -48,7 +47,6 @@ export interface SimulationActions {
   stopSimulation: () => void;
   updateProgress: (progress: SetupSimulationProgress) => void;
   markSetupComplete: (setupId: string) => void;
-  setSetupResult: (setupId: string, label: string, annualTotalKwh: number) => void;
   setPendingSetups: (count: number) => void;
   simulationComplete: () => void;
 }
@@ -70,7 +68,6 @@ export const createSimulationSlice = (
   isRunning: false,
   activeProgress: new Map(),
   pendingSetups: 0,
-  annualProductionResults: new Map(),
 
   setSimulationDensity: (simulationDensity) => set({ simulationDensity }),
   setSimulationThreshold: (simulationThreshold) => set({ simulationThreshold }),
@@ -91,12 +88,7 @@ export const createSimulationSlice = (
     }),
 
   startSimulation: () =>
-    set({
-      isRunning: true,
-      activeProgress: new Map(),
-      pendingSetups: 0,
-      annualProductionResults: new Map<string, { label: string; annualTotalKwh: number }>(),
-    }),
+    set({ isRunning: true, activeProgress: new Map(), pendingSetups: 0 }),
 
   stopSimulation: () => {
     simulationStopFlag.current = true;
@@ -114,11 +106,6 @@ export const createSimulationSlice = (
       next.delete(setupId);
       return { activeProgress: next };
     }),
-
-  setSetupResult: (setupId, label, annualTotalKwh) =>
-    set((state) => ({
-      annualProductionResults: new Map(state.annualProductionResults).set(setupId, { label, annualTotalKwh }),
-    })),
 
   setPendingSetups: (pendingSetups) => set({ pendingSetups }),
 

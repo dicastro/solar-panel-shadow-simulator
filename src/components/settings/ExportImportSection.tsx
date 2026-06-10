@@ -9,8 +9,8 @@ import { appEvents } from '../../events/AppEvents';
 import { ConfigStorage } from '../../utils/ConfigStorage';
 
 /**
- * Export/Import sub-section: full backup including configuration and the
- * simulation results that belong to the current configuration.
+ * Export/Import sub-section: full backup including configuration and all
+ * simulation run results.
  *
  * Export triggers a download of a gzip-compressed .solarsim file.
  * Import replaces the current config and all simulation results, then
@@ -122,14 +122,10 @@ export function ExportImportSection() {
           {t('settings.exportImport.importBtn')}
         </button>
         {importStatus === 'success' && (
-          <p className="settings-feedback settings-feedback--success">
-            {importMessage}
-          </p>
+          <p className="settings-feedback settings-feedback--success">{importMessage}</p>
         )}
         {importStatus === 'error' && (
-          <p className="settings-feedback settings-feedback--error">
-            {importMessage}
-          </p>
+          <p className="settings-feedback settings-feedback--error">{importMessage}</p>
         )}
       </div>
     </div>

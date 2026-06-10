@@ -64,7 +64,7 @@
     "totalRays": "Total rayos",
     "run": "EJECUTAR CÁLCULO",
     "stop": "PARAR",
-    "stopConfirm": "¿Parar la simulación? Se perderá el progreso de los setups en curso.",
+    "stopConfirm": "¿Parar la simulación? Se perderá el progreso.",
     "pending": "{{count}} setup(s) esperando en cola"
   },
   "simulationResultsPanel": {
@@ -72,7 +72,7 @@
     "placeholder": "Ejecuta la simulación anual para ver los resultados aquí. Usa los controles de la izquierda para configurar el intervalo, el año y la fuente de irradiancia, y pulsa EJECUTAR CÁLCULO.",
     "computing": "Simulación en curso…",
     "selectorLabel": "Ejecución de simulación",
-    "groupLabel": "{{year}} · {{interval}} min · {{irradiance}} · {{samplingCode}} · {{setups}} config(s)",
+    "groupLabel": "{{year}} · {{interval}} min · {{irradiance}} · {{samplingCode}}",
     "irradiance_geometric": "Geométrica",
     "irradiance_open-meteo": "Open-Meteo",
     "paramYear": "Año",
@@ -80,7 +80,6 @@
     "paramIrradiance": "Irradiancia",
     "paramDensity": "Puntos por zona",
     "paramThreshold": "Umbral",
-    "paramSetups": "Configuraciones",
     "paramComputedAt": "Calculado",
     "liveResults": "En curso"
   },
@@ -103,7 +102,8 @@
     "dragHint": "Arrastrar para redimensionar",
     "monthlyTotal": "Total del mes",
     "dailyTotal": "Total del día",
-    "array": "Array"
+    "array": "Array",
+    "outdatedWarning": "La configuración ha cambiado desde que se ejecutó esta simulación. Los resultados pueden no reflejar la instalación actual. Vuelve a ejecutar la simulación para actualizarlos."
   },
   "report": {
     "generateBtn": "Generar informe PDF",
@@ -173,7 +173,9 @@
       "simulationsTitle": "Resultados de simulación",
       "noSimulations": "No hay resultados de simulación en caché.",
       "clearAllSimulations": "Eliminar todos los resultados de simulación",
-      "deleteGroup": "Eliminar esta simulación",
+      "deleteRun": "Eliminar esta simulación",
+      "setupCount_one": "{{count}} configuración",
+      "setupCount_other": "{{count}} configuraciones",
       "irradianceTitle": "Datos de irradiancia (Open-Meteo)",
       "noIrradiance": "No hay datos de irradiancia en caché.",
       "clearAllIrradiance": "Eliminar todos los datos de irradiancia",
@@ -188,7 +190,7 @@
       "exportError": "Error al exportar: {{message}}",
       "importBtn": "Cargar copia de seguridad",
       "importTitle": "Cargar un fichero de copia de seguridad para restaurar la configuración y los resultados de simulación",
-      "importSuccess": "Copia de seguridad cargada: {{count}} resultado(s) de simulación restaurados.",
+      "importSuccess": "Copia de seguridad cargada: {{count}} simulación(es) restauradas.",
       "importError": "Error al importar: {{message}}",
       "importDescription": "Cargar una copia de seguridad reemplaza la configuración actual y todos los resultados de simulación. Los datos de irradiancia de Open-Meteo en caché local se conservan."
     },
@@ -214,7 +216,7 @@
       "resetBtn": "Restaurar configuración por defecto",
       "resetTitle": "Eliminar la configuración guardada y cargar la configuración de ejemplo incluida",
       "resetConfirm": "¿Restaurar la configuración por defecto? La configuración actual se reemplazará por la configuración de ejemplo incluida.",
-      "changeWarning": "Cambiar la configuración hará que los resultados de simulación existentes dejen de ser accesibles en el panel de resultados, ya que están vinculados a la configuración anterior. Puedes conservarlos en el almacenamiento y recuperarlos cargando la configuración anterior, o eliminarlos ahora para liberar espacio.",
+      "changeWarning": "Cambiar la configuración dejará los resultados de simulación existentes desactualizados. Puedes conservarlos y volver a ejecutar la simulación para actualizarlos, o eliminarlos ahora para liberar espacio.",
       "changeDeleteAndContinue": "Eliminar simulaciones y aplicar",
       "changeKeepAndContinue": "Conservar simulaciones y aplicar",
       "changeCancel": "Cancelar",

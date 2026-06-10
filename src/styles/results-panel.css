@@ -213,6 +213,34 @@
   padding: 4px 8px;
 }
 
+/* ── Outdated results warning banner ───────────────────────────────────────── */
+
+/**
+ * Shown when one or more setups in the selected simulation group were computed
+ * with a panel geometry that differs from the current configuration. Positioned
+ * between the parameter summary and the legend so it is immediately visible
+ * without scrolling.
+ */
+.results-panel__outdated-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(245, 124, 0, 0.08);
+  border-bottom: 1px solid rgba(245, 124, 0, 0.25);
+  font-family: sans-serif;
+  font-size: 0.78rem;
+  color: #e65100;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
+.results-panel__outdated-banner-icon {
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  margin-top: 1px;
+}
+
 /* ── Setup legend ──────────────────────────────────────────────────────────── */
 
 .results-panel__legend {

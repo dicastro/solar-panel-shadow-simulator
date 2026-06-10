@@ -72,16 +72,9 @@ function RailingSupport({ data }: { data: RailingSupportRenderData }) {
 /**
  * Root 3D scene component.
  *
- * Walls and railings are children of the site group (rotation-y = site.azimuthRad)
- * so they inherit the site orientation automatically.
- *
- * Panels are rendered OUTSIDE the site group. Their worldPosition and
- * worldRotation are already in absolute world space (site azimuth baked in by
- * SolarPanelArrayFactory), which is required for the raycaster in useShadowSampler
- * to operate correctly without Three.js group inheritance.
- *
- * The annual simulation effect lists only isRunning as a dependency — the
- * simulation is a one-shot operation triggered by the false→true transition.
+ * The annual simulation effect triggers on isRunning false→true. Workers run
+ * in parallel per setup; when all complete the main thread assembles and saves
+ * a single SimulationRunResult to IndexedDB.
  */
 export function Scene({
   site, activeSetup, sun, date, showPoints,
@@ -98,7 +91,6 @@ export function Scene({
   const irradianceSource = useAppStore(s => s.irradianceSource);
   const updateProgress = useAppStore(s => s.updateProgress);
   const markSetupComplete = useAppStore(s => s.markSetupComplete);
-  const setSetupResult = useAppStore(s => s.setSetupResult);
   const setPendingSetups = useAppStore(s => s.setPendingSetups);
   const simulationComplete = useAppStore(s => s.simulationComplete);
 
@@ -112,6 +104,7 @@ export function Scene({
     run(
       allSetups,
       site,
+      config,
       simulationDensity,
       simulationThreshold,
       simulationInterval,
@@ -120,7 +113,7 @@ export function Scene({
       {
         onProgress: updateProgress,
         onSetupComplete: markSetupComplete,
-        onResult: setSetupResult,
+        onRunSaved: () => { /* results panel reacts to simulationResultsChanged event */ },
         onError: (setupId, message) => {
           console.error(`Annual simulation error for setup ${setupId}:`, message);
           markSetupComplete(setupId);
@@ -167,7 +160,6 @@ export function Scene({
       <Compass />
       <Sun date={date} />
 
-      {/* Walls and railings — inside the site group, inherit site azimuth rotation. */}
       <group rotation-y={site.azimuthRad}>
         <mesh receiveShadow position={[0, 0.01, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <extrudeGeometry args={[floorShape, { depth: 0.02, bevelEnabled: false }]} />
@@ -203,12 +195,6 @@ export function Scene({
         ))}
       </group>
 
-      {/*
-       * Panels — outside the site group. worldPosition and worldRotation are
-       * in absolute world space (site azimuth already incorporated by
-       * SolarPanelArrayFactory), so the raycaster in useShadowSampler receives
-       * correct world-space coordinates without Three.js group inheritance.
-       */}
       <ShadowedScene
         site={site}
         activeSetup={activeSetup}

@@ -1,11 +1,10 @@
-import { SetupAnnualResult } from './simulation';
+import { SimulationRunResult, SimulationSetupResult } from './simulation';
 
 /**
- * Lightweight metadata for one setup within a simulation run group.
- * Loaded from the IndexedDB summary list — does not include per-panel data.
+ * Lightweight metadata for one setup within a simulation run.
+ * Derived from SimulationRunResult.setups — does not include per-panel data.
  */
 export interface SimulationGroupSetup {
-  readonly cacheKey: string;
   readonly setupId: string;
   readonly setupLabel: string;
   readonly annualTotalKwh: number;
@@ -14,13 +13,13 @@ export interface SimulationGroupSetup {
 }
 
 /**
- * A logical simulation run: all setups that share the same parameters
- * (year, interval, irradiance source, density, threshold).
- * One group corresponds to one option in the run selector dropdown.
+ * A simulation run as presented in the results panel UI.
+ * Maps 1:1 to a SimulationRunResult stored in IndexedDB.
  */
 export interface SimulationGroup {
-  /** Stable key derived from shared parameters — used as React key and selector value. */
-  readonly groupKey: string;
+  /** IDB cache key — also used as React key and selector value. */
+  readonly cacheKey: string;
+  readonly simulationInputHash: string;
   readonly year: number;
   readonly intervalMinutes: number;
   readonly irradianceSource: string;
@@ -31,11 +30,22 @@ export interface SimulationGroup {
 }
 
 /**
- * Full result data for one setup, loaded lazily from IndexedDB when charts
- * require per-panel detail (shade fractions, zone data).
+ * Full result data for one setup within a run, loaded lazily from IndexedDB
+ * when charts require per-panel detail.
  */
 export interface LoadedSetupResult {
   readonly setupId: string;
-  readonly result: SetupAnnualResult;
+  readonly result: SimulationSetupResult;
   readonly colourIndex: number;
 }
+
+/**
+ * Lightweight summary of a SimulationRunResult for list/selector rendering.
+ * Produced by SimulationCache.listResults without loading per-panel data.
+ */
+export type SimulationRunSummary = Pick<SimulationRunResult,
+  'cacheKey' | 'simulationInputHash' | 'computedAt' | 'year' |
+  'intervalMinutes' | 'irradianceSource' | 'density' | 'threshold'
+> & {
+  readonly setups: readonly { readonly setupId: string; readonly setupLabel: string; readonly annualTotalKwh: number }[];
+};

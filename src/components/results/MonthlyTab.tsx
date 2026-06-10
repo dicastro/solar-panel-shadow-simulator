@@ -9,13 +9,11 @@ import { PanelShadowHeatmap } from './PanelShadowHeatmap';
 interface Props {
   results: LoadedSetupResult[];
   activeSetupIds: Set<string>;
+  /** Calendar year of the simulation run. */
+  year: number;
 }
 
-/**
- * Horizontal bar chart comparing the total production (kWh) for the selected
- * month across all active setups.
- */
-function MonthlyTotalBarChart({ results, activeSetupIds, month }: Props & { month: number }) {
+function MonthlyTotalBarChart({ results, activeSetupIds, month }: Omit<Props, 'year'> & { month: number }) {
   const visible = results.filter(r => activeSetupIds.has(r.setupId));
   if (visible.length === 0) return null;
 
@@ -60,7 +58,7 @@ function MonthlyTotalBarChart({ results, activeSetupIds, month }: Props & { mont
   );
 }
 
-export function MonthlyTab({ results, activeSetupIds }: Props) {
+export function MonthlyTab({ results, activeSetupIds, year }: Props) {
   const { t } = useTranslation();
   const [month, setMonth] = useState(new Date().getMonth());
 
@@ -85,7 +83,7 @@ export function MonthlyTab({ results, activeSetupIds }: Props) {
       <div className="results-section">
         <h4 className="results-section__title">{t('resultsPanel.production')}</h4>
         <MonthlyTotalBarChart results={results} activeSetupIds={activeSetupIds} month={month} />
-        <MonthlyLineChart results={results} activeSetupIds={activeSetupIds} month={month} />
+        <MonthlyLineChart results={results} activeSetupIds={activeSetupIds} month={month} year={year} />
       </div>
 
       <div className="results-section">

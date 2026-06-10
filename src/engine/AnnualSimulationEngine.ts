@@ -1,11 +1,5 @@
-import { PanelAnnualData, SetupAnnualResult, SimulationPanelData, IrradianceSource } from '../types/simulation';
+import { PanelAnnualData, SimulationSetupResult, SimulationRunResult, SimulationPanelData, IrradianceSource } from '../types/simulation';
 
-/**
- * Internal mutable accumulator for a single panel's annual data.
- * Counts raw shaded steps and total steps per time bucket so that shade
- * fractions can be computed once at finalisation rather than maintained
- * as running averages (which would accumulate floating-point error).
- */
 export interface PanelAccumulator {
   energyKwh: number[][][];
   stepCountByBucket: number[][][];
@@ -14,11 +8,6 @@ export interface PanelAccumulator {
 }
 
 export const AnnualSimulationEngine = {
-  /**
-   * Allocates a zeroed accumulator for a single panel.
-   * Shape: [month(0–11)][dayOfMonth(0–30)][hourOfDay(0–23)].
-   * Days beyond the actual month length remain 0 throughout.
-   */
   initAccumulator: (zones: number): PanelAccumulator => ({
     energyKwh: Array.from({ length: 12 }, () =>
       Array.from({ length: 31 }, () => new Array<number>(24).fill(0))),
@@ -31,24 +20,9 @@ export const AnnualSimulationEngine = {
         Array.from({ length: 31 }, () => new Array<number>(24).fill(0)))),
   }),
 
-  /**
-   * Allocates one zeroed accumulator per panel, indexed in the same order as
-   * the `panels` array.
-   */
   initAccumulators: (panels: SimulationPanelData[]): PanelAccumulator[] =>
     panels.map(p => AnnualSimulationEngine.initAccumulator(p.zones)),
 
-  /**
-   * Records one time step's contribution into the accumulator for a single panel.
-   *
-   * @param acc         The panel's mutable accumulator (modified in place).
-   * @param month       UTC month index, 0–11.
-   * @param day         UTC day-of-month index, 0–30.
-   * @param hour        UTC hour-of-day index, 0–23.
-   * @param powerKw     Net panel power for this step after string mismatch (kW).
-   * @param shadedZones Boolean array, one entry per zone.
-   * @param hoursPerStep Duration of one simulation interval in hours.
-   */
   accumulateStep: (
     acc: PanelAccumulator,
     month: number,
@@ -60,32 +34,20 @@ export const AnnualSimulationEngine = {
   ): void => {
     acc.energyKwh[month][day][hour] += powerKw * hoursPerStep;
     acc.stepCountByBucket[month][day][hour]++;
-
     if (shadedZones.some(Boolean)) {
       acc.shadedStepsByBucket[month][day][hour]++;
     }
-
     shadedZones.forEach((isShaded, zIdx) => {
       if (isShaded) acc.shadedZoneStepsByBucket[zIdx][month][day][hour]++;
     });
   },
 
-  /**
-   * Converts a panel's raw accumulator into the final `PanelAnnualData` shape.
-   *
-   * Shade fractions are computed here by dividing raw shaded-step counts by
-   * total step counts, avoiding accumulated floating-point error from running
-   * averages. Physical geometry fields are propagated from the input panel data
-   * so the results panel can render heat maps with correct proportions and zone
-   * layouts without needing access to the original config.
-   */
   finalizePanel: (
     panel: SimulationPanelData,
     acc: PanelAccumulator,
   ): PanelAnnualData => {
     const shadeFraction: number[][][] = Array.from({ length: 12 }, () =>
       Array.from({ length: 31 }, () => new Array<number>(24).fill(0)));
-
     const zoneShadeFraction: number[][][][] = Array.from({ length: panel.zones }, () =>
       Array.from({ length: 12 }, () =>
         Array.from({ length: 31 }, () => new Array<number>(24).fill(0))));
@@ -120,28 +82,20 @@ export const AnnualSimulationEngine = {
       zonesDisposition: panel.zonesDisposition,
       string: panel.string,
       stringColorIndex: panel.stringColorIndex,
+      arrayConfigPosition: panel.arrayConfigPosition,
     };
   },
 
   /**
-   * Builds the complete `SetupAnnualResult` from finalized panel data.
-   * Pre-rolls monthly totals across all panels for fast chart rendering.
-   * Records density and threshold so the results panel can display and group
-   * by these parameters without re-deriving them from the cache key hash.
+   * Builds a SimulationSetupResult from finalized panel data.
+   * This is what each worker emits — it contains no cache keys or run metadata.
    */
   buildSetupResult: (
     setupId: string,
     setupLabel: string,
-    cacheKey: string,
-    year: number,
-    intervalMinutes: number,
-    irradianceSource: IrradianceSource,
-    density: number,
-    threshold: number,
     panels: PanelAnnualData[],
-  ): SetupAnnualResult => {
+  ): SimulationSetupResult => {
     const monthlyTotalKwh = new Array<number>(12).fill(0);
-
     panels.forEach(p => {
       p.energyKwh.forEach((days, m) => {
         days.forEach(hours => {
@@ -149,22 +103,32 @@ export const AnnualSimulationEngine = {
         });
       });
     });
-
     const annualTotalKwh = monthlyTotalKwh.reduce((s, v) => s + v, 0);
-
-    return {
-      setupId,
-      setupLabel,
-      cacheKey,
-      computedAt: Date.now(),
-      year,
-      intervalMinutes,
-      irradianceSource,
-      density,
-      threshold,
-      panels,
-      monthlyTotalKwh,
-      annualTotalKwh,
-    };
+    return { setupId, setupLabel, panels, monthlyTotalKwh, annualTotalKwh };
   },
+
+  /**
+   * Assembles the complete SimulationRunResult from all setup results.
+   * Called on the main thread once all workers have completed.
+   */
+  buildRunResult: (
+    cacheKey: string,
+    simulationInputHash: string,
+    year: number,
+    intervalMinutes: number,
+    irradianceSource: IrradianceSource,
+    density: number,
+    threshold: number,
+    setups: SimulationSetupResult[],
+  ): SimulationRunResult => ({
+    cacheKey,
+    simulationInputHash,
+    computedAt: Date.now(),
+    year,
+    intervalMinutes,
+    irradianceSource,
+    density,
+    threshold,
+    setups,
+  }),
 };

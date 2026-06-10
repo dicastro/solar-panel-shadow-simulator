@@ -9,15 +9,18 @@ import {
   IrradianceSource,
   SerializedMesh,
   SystemLossParams,
+  SimulationSetupResult,
 } from '../types/simulation';
 import { SimulationCacheUtils } from '../utils/SimulationCacheUtils';
 import { SimulationCache } from '../db/SimulationCache';
+import { AnnualSimulationEngine } from '../engine/AnnualSimulationEngine';
 import { SolarPanelConverter } from '../converter/SolarPanelConverter';
 import AnnualWorker from '../workers/AnnualSimulation.worker?worker';
 import { MeshFactory } from '../factory/MeshFactory';
 import { PanelMeshFactory } from '../factory/PanelMeshFactory';
 import { createIrradianceProvider } from '../irradiance/IrradianceProvider';
 import { appEvents } from '../events/AppEvents';
+import { Config } from '../types/config';
 
 /**
  * Module-level stop flag. Activated synchronously by stopSimulation() in the
@@ -36,8 +39,7 @@ const isNotPanelFrame = (mesh: THREE.Mesh): boolean =>
 const meanInclinationRad = (setup: PanelSetup): number => {
   const allPanels = setup.panelArrays.flatMap(pa => pa.panels);
   if (allPanels.length === 0) return 0;
-  const sum = allPanels.reduce((acc, p) => acc + p.worldRotation.x, 0);
-  return sum / allPanels.length;
+  return allPanels.reduce((acc, p) => acc + p.worldRotation.x, 0) / allPanels.length;
 };
 
 const buildPayload = (
@@ -48,7 +50,6 @@ const buildPayload = (
   intervalMinutes: number,
   year: number,
   irradianceSource: IrradianceSource,
-  cacheKey: string,
   getStaticMeshes: () => { meshes: SerializedMesh[]; transferables: ArrayBuffer[] },
   weatherData: { dni: Float32Array; dhi: Float32Array; temperature: Float32Array | null } | null,
 ): { payload: WorkerSimulationPayload; transferables: ArrayBuffer[] } => {
@@ -84,7 +85,6 @@ const buildPayload = (
     payload: {
       setupId: setup.id,
       setupLabel: setup.label,
-      cacheKey,
       year,
       intervalMinutes,
       latitude: site.location.latitude,
@@ -105,7 +105,7 @@ const buildPayload = (
 export interface AnnualSimulationCallbacks {
   onProgress: (progress: SetupSimulationProgress) => void;
   onSetupComplete: (setupId: string) => void;
-  onResult: (setupId: string, label: string, annualTotalKwh: number) => void;
+  onRunSaved: () => void;
   onError: (setupId: string, message: string) => void;
   onAllComplete: () => void;
   onPendingUpdate: (count: number) => void;
@@ -124,6 +124,7 @@ export function useAnnualSimulation() {
   const run = useCallback(async (
     setups: PanelSetup[],
     site: Site,
+    config: Config,
     density: number,
     threshold: number,
     intervalMinutes: number,
@@ -134,65 +135,98 @@ export function useAnnualSimulation() {
     stop();
     simulationStopFlag.current = false;
 
+    // Build the cache key from the five UI parameters only.
+    const cacheKeyObj = SimulationCacheUtils.buildCacheKey(
+      year, intervalMinutes, irradianceSource, density, threshold,
+    );
+    const cacheKey = SimulationCacheUtils.hashCacheKey(cacheKeyObj);
+
+    // Hash of all simulation-relevant config fields. Stored in the result so
+    // the UI can detect when the configuration has changed since the run.
+    const simulationInputHash = SimulationCacheUtils.buildSimulationInputHash(config);
+
+    // Check whether a valid cached result already exists for this combination
+    // of UI parameters AND current configuration. If both the cache key and
+    // the simulationInputHash match, the stored result is still valid and
+    // there is nothing to recompute.
+    const existingResult = await SimulationCache.getResult(cacheKey);
+    if (existingResult && existingResult.simulationInputHash === simulationInputHash) {
+      // Cached result is up to date — notify UI and finish immediately.
+      callbacks.onRunSaved();
+      appEvents.emit('simulationResultsChanged', { autoSelect: true });
+      callbacks.onAllComplete();
+      return;
+    }
+
+    // Fetch weather data before spawning workers so all workers share the
+    // same data without each making an independent network request.
     let sharedWeatherData: { dni: Float32Array; dhi: Float32Array; temperature: Float32Array | null } | null = null;
     try {
       const provider = await createIrradianceProvider(irradianceSource);
       const data = await provider.getHourlyWeatherData(
-        site.location.latitude,
-        site.location.longitude,
-        year,
+        site.location.latitude, site.location.longitude, year,
       );
       if (data) {
         sharedWeatherData = { dni: data.dni, dhi: data.dhi, temperature: data.temperature };
       } else if (irradianceSource !== 'geometric') {
-        console.warn(
-          'useAnnualSimulation: irradiance fetch failed, falling back to geometric model',
-        );
+        console.warn('useAnnualSimulation: irradiance fetch failed, falling back to geometric model');
       }
     } catch (err) {
       console.warn('useAnnualSimulation: irradiance provider error', err);
     }
 
-    const uncachedSetups: Array<{ setup: PanelSetup; cacheKey: string }> = [];
-    for (const setup of setups) {
-      const cacheKey = SimulationCacheUtils.hashCacheKey(
-        SimulationCacheUtils.buildCacheKey(
-          setup, density, threshold, intervalMinutes,
-          site.location.latitude, site.location.longitude,
-          year, irradianceSource,
-        ),
-      );
-      const cached = await SimulationCache.getResult(cacheKey);
-      if (cached) {
-        callbacks.onResult(setup.id, setup.label, cached.annualTotalKwh);
-        callbacks.onSetupComplete(setup.id);
-        appEvents.emit('simulationResultsChanged', { autoSelect: true });
-      } else {
-        uncachedSetups.push({ setup, cacheKey });
-      }
-    }
-
-    if (uncachedSetups.length === 0) {
-      callbacks.onAllComplete();
-      return;
-    }
+    if (simulationStopFlag.current) return;
 
     const { build: getStaticMeshes } = MeshFactory.fromScene(scene, isNotPanelFrame);
 
-    const queue = [...uncachedSetups];
+    // Accumulate SimulationSetupResult from each worker. When all have
+    // completed, assemble and persist the single SimulationRunResult.
+    const completedSetupResults = new Map<string, SimulationSetupResult>();
+    const totalSetups = setups.length;
+
+    const queue = [...setups];
     let activeWorkerCount = 0;
-    let completedCount = 0;
-    const total = uncachedSetups.length;
+    let completedWorkerCount = 0;
+    let hasError = false;
     const progressState = new Map<string, SetupSimulationProgress>();
+
+    const persistAndFinish = async () => {
+      if (hasError) {
+        callbacks.onAllComplete();
+        return;
+      }
+
+      // Assemble results in the same order as the input setups array so the
+      // display order is deterministic regardless of which worker finished first.
+      const orderedSetups = setups
+        .map(s => completedSetupResults.get(s.id))
+        .filter((r): r is SimulationSetupResult => r !== undefined);
+
+      const runResult = AnnualSimulationEngine.buildRunResult(
+        cacheKey, simulationInputHash,
+        year, intervalMinutes, irradianceSource, density, threshold,
+        orderedSetups,
+      );
+
+      try {
+        await SimulationCache.saveResult(runResult);
+        callbacks.onRunSaved();
+        appEvents.emit('simulationResultsChanged', { autoSelect: true });
+      } catch (err) {
+        console.warn('useAnnualSimulation: failed to persist to IndexedDB', err);
+      }
+
+      callbacks.onAllComplete();
+    };
 
     const onWorkerDone = (worker: Worker) => {
       activeWorkerCount--;
-      completedCount++;
+      completedWorkerCount++;
       worker.terminate();
       workersRef.current = workersRef.current.filter(w => w !== worker);
 
-      if (completedCount === total) {
-        callbacks.onAllComplete();
+      if (completedWorkerCount === totalSetups) {
+        persistAndFinish();
       } else {
         launchNext();
       }
@@ -200,7 +234,7 @@ export function useAnnualSimulation() {
 
     const launchNext = () => {
       while (activeWorkerCount < maxWorkers() && queue.length > 0) {
-        const { setup, cacheKey } = queue.shift()!;
+        const setup = queue.shift()!;
         activeWorkerCount++;
 
         progressState.set(setup.id, {
@@ -216,7 +250,7 @@ export function useAnnualSimulation() {
         const worker = new AnnualWorker();
         workersRef.current.push(worker);
 
-        worker.onmessage = async (event: MessageEvent<WorkerOutgoingMessage>) => {
+        worker.onmessage = (event: MessageEvent<WorkerOutgoingMessage>) => {
           if (simulationStopFlag.current) return;
 
           const msg = event.data;
@@ -248,18 +282,13 @@ export function useAnnualSimulation() {
           }
 
           if (msg.type === 'result') {
-            try {
-              await SimulationCache.saveResult(msg.result);
-            } catch (err) {
-              console.warn('useAnnualSimulation: failed to persist to IndexedDB', err);
-            }
-            callbacks.onResult(msg.result.setupId, msg.result.setupLabel, msg.result.annualTotalKwh);
+            completedSetupResults.set(msg.result.setupId, msg.result);
             callbacks.onSetupComplete(msg.result.setupId);
-            appEvents.emit('simulationResultsChanged', { autoSelect: true });
             onWorkerDone(worker);
           }
 
           if (msg.type === 'error') {
+            hasError = true;
             callbacks.onError(msg.setupId, msg.message);
             callbacks.onSetupComplete(msg.setupId);
             onWorkerDone(worker);
@@ -268,6 +297,7 @@ export function useAnnualSimulation() {
 
         worker.onerror = (err) => {
           if (simulationStopFlag.current) return;
+          hasError = true;
           callbacks.onError(setup.id, err.message ?? 'Unknown worker error');
           callbacks.onSetupComplete(setup.id);
           onWorkerDone(worker);
@@ -275,7 +305,7 @@ export function useAnnualSimulation() {
 
         const { payload, transferables } = buildPayload(
           setup, site, density, threshold, intervalMinutes,
-          year, irradianceSource, cacheKey, getStaticMeshes, sharedWeatherData,
+          year, irradianceSource, getStaticMeshes, sharedWeatherData,
         );
         worker.postMessage({ type: 'run', payload }, transferables);
       }

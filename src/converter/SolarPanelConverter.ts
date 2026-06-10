@@ -57,16 +57,9 @@ export const SolarPanelConverter = {
    * World-space positions, normals, and sample points are pre-computed so the
    * worker only needs to perform raycasting and arithmetic during its inner loop.
    *
-   * `worldPosition` and `worldRotation` are included so that the main thread can
-   * reconstruct accurate panel frame meshes for BVH raycasting for each simulated
-   * setup independently of which setup is currently rendered in the 3D view.
-   *
-   * Physical geometry fields (orientation, actualWidth, actualHeight, zones,
-   * zonesDisposition) are included so the worker can propagate them into
-   * PanelAnnualData for use by the results panel heat maps.
-   *
-   * `temperatureCoefficient` and `noct` fall back to standard defaults when
-   * not specified in the panel configuration.
+   * `arrayConfigPosition` is carried through so the worker can embed it in
+   * `PanelAnnualData`, enabling the results panel to reconstruct the relative
+   * spatial layout of arrays without access to the original config.
    */
   toSimulationPanelData: (panel: SolarPanel): SimulationPanelData => ({
     id: panel.id,
@@ -88,6 +81,7 @@ export const SolarPanelConverter = {
     samplePoints: SolarPanelConverter.toWorldSpaceSamplePoints(panel),
     temperatureCoefficient: panel.temperatureCoefficient ?? DEFAULT_TEMPERATURE_COEFFICIENT,
     noct: panel.noct ?? DEFAULT_NOCT,
+    arrayConfigPosition: panel.arrayConfigPosition,
   }),
 
   /**

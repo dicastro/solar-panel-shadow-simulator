@@ -19,35 +19,29 @@ export interface InstantProductionResult {
 
 /**
  * Identifies the irradiance data source used for an annual simulation run.
- *
- * - `geometric`: clear-sky model based purely on sun geometry (no weather
- *   correction). Always available, no network required.
- * - `open-meteo`: hourly DNI, DHI and temperature from the Open-Meteo
- *   Historical Weather API. Free, no API key, CORS-compatible. Falls back to
- *   geometric if the fetch fails.
  */
 export type IrradianceSource = 'geometric' | 'open-meteo';
 
 /**
- * The set of inputs that fully determines a simulation result.
- * Two runs with identical cache keys are guaranteed to produce identical output.
+ * The set of UI parameters that determine which cache entry a simulation
+ * belongs to. Two runs with the same five parameters and the same
+ * configuration overwrite each other; changing any parameter produces a
+ * new independent entry that coexists with the previous one.
+ *
+ * Configuration geometry (panels, walls, site) is captured separately via
+ * simulationInputHash inside SimulationRunResult and is used only for the
+ * stale-result disclaimer — it does not affect which cache slot is used.
  */
 export interface SimulationCacheKey {
-  readonly setupId: string;
-  /** FNV-1a hash of panel geometry: positions, zones, peakPower, string, hasOptimizer. */
-  readonly setupHash: string;
+  readonly year: number;
+  readonly intervalMinutes: number;
+  readonly irradianceSource: IrradianceSource;
   readonly density: number;
   readonly threshold: number;
-  readonly intervalMinutes: number;
-  readonly latitude: number;
-  readonly longitude: number;
-  /** Calendar year simulated. Affects both time steps and irradiance data lookup. */
-  readonly year: number;
-  readonly irradianceSource: IrradianceSource;
 }
 
 /**
- * Per-panel annual energy and shade accumulation.
+ * Per-panel annual energy and shade accumulation for one setup.
  *
  * `energyKwh` has shape [month(0–11)][dayOfMonth(0–30)][hourOfDay(0–23)].
  * Days beyond the actual month length are 0.
@@ -58,10 +52,9 @@ export interface SimulationCacheKey {
  * `zoneShadeFraction` adds a leading zone dimension:
  * [zone][month][dayOfMonth][hourOfDay].
  *
- * Physical geometry fields (`orientation`, `actualWidth`, `actualHeight`,
- * `zones`, `zonesDisposition`) are carried here so the results panel can
- * render heat maps with correct proportions and zone layouts without
- * needing access to the original config.
+ * Physical geometry fields and `arrayConfigPosition` are carried here so the
+ * results panel can render heat maps with correct proportions, zone layouts,
+ * and relative array positioning without needing access to the original config.
  */
 export interface PanelAnnualData {
   readonly panelId: string;
@@ -78,60 +71,71 @@ export interface PanelAnnualData {
   readonly zonesDisposition: ZonesDisposition;
   readonly string: string;
   readonly stringColorIndex: number;
+  /**
+   * Position of the panel's array in site-local config space (metres from SW
+   * corner), taken from PanelArrayConfiguration.position. Used by the results
+   * panel and PDF to reconstruct the relative spatial layout of arrays.
+   */
+  readonly arrayConfigPosition: [number, number];
 }
 
-export interface SetupAnnualResult {
+/**
+ * Results for one setup within a simulation run.
+ * Does not carry cache keys or meta-parameters — those live in SimulationRunResult.
+ */
+export interface SimulationSetupResult {
   readonly setupId: string;
   readonly setupLabel: string;
-  /** The hash key used to store and retrieve this result from IndexedDB. */
-  readonly cacheKey: string;
-  /** Unix timestamp (ms) when this result was computed. */
-  readonly computedAt: number;
-  readonly year: number;
-  readonly intervalMinutes: number;
-  readonly irradianceSource: IrradianceSource;
-  /**
-   * Sample point density used for this simulation run (NxN points per zone).
-   * Stored alongside other parameters so the results panel can display and
-   * group by this value without re-deriving it from the cache key hash.
-   */
-  readonly density: number;
-  /**
-   * Zone shadow threshold used for this simulation run.
-   * Stored alongside other parameters so the results panel can display and
-   * group by this value without re-deriving it from the cache key hash.
-   */
-  readonly threshold: number;
   readonly panels: readonly PanelAnnualData[];
   /** Monthly totals (kWh) across all panels, pre-rolled for chart performance. */
   readonly monthlyTotalKwh: readonly number[];
   readonly annualTotalKwh: number;
 }
 
+/**
+ * A complete simulation run — all setups computed with the same five UI
+ * parameters against the same configuration.
+ *
+ * One SimulationRunResult maps to exactly one IndexedDB record. The record
+ * is overwritten when the user re-runs with the same five parameters
+ * regardless of whether the configuration has changed. The simulationInputHash
+ * field allows the results panel to detect when the stored result was computed
+ * against a different configuration than the one currently active.
+ */
+export interface SimulationRunResult {
+  /** IDB record key — hash of the five UI parameters. */
+  readonly cacheKey: string;
+  /**
+   * Hash of the configuration fields that affect simulation output
+   * (everything except site.timezone and site.floorColor). Compared against
+   * the hash of the current configuration to detect stale results and show
+   * the outdated-results disclaimer in the results panel.
+   */
+  readonly simulationInputHash: string;
+  /** Unix timestamp (ms) when this result was computed. */
+  readonly computedAt: number;
+  readonly year: number;
+  readonly intervalMinutes: number;
+  readonly irradianceSource: IrradianceSource;
+  readonly density: number;
+  readonly threshold: number;
+  readonly setups: readonly SimulationSetupResult[];
+}
+
 // ── Worker message protocol ───────────────────────────────────────────────────
 
 /**
  * A single shadow-casting mesh serialised for transfer to a worker.
- * Contains all data the worker needs to reconstruct the geometry and its BVH
- * for raycasting, plus the world matrix to transform ray origins correctly.
  */
 export interface SerializedMesh {
-  /** Flat Float32Array of vertex positions (x,y,z triples). */
   readonly positions: Float32Array;
-  /** Uint32Array of triangle indices. */
   readonly indices: Uint32Array;
-  /**
-   * Serialised MeshBVH produced by MeshBVH.serialize().
-   * Contains typed arrays only — no Three.js class instances.
-   */
   readonly serializedBvh: ReturnType<typeof import('three-mesh-bvh').MeshBVH['serialize']>;
-  /** Column-major 4×4 world matrix as a Float32Array of 16 elements. */
   readonly worldMatrix: Float32Array;
 }
 
 /**
  * A sample point with its position already transformed to world space.
- * Used as the unit of raycasting input in the annual simulation.
  */
 export interface SimulationSamplePoint {
   readonly id: string;
@@ -143,19 +147,6 @@ export interface SimulationSamplePoint {
 
 /**
  * Per-panel data required to run the annual simulation.
- *
- * World-space positions, normals, and sample points are pre-computed on the
- * main thread to avoid repeating matrix multiplications inside the worker at
- * every time step.
- *
- * `worldPosition` and `worldRotation` are included so that the main thread can
- * build accurate panel meshes for BVH raycasting for each simulated setup
- * independently of which setup is currently rendered in the 3D view. Without
- * these fields, the worker payload would have to depend on the live scene,
- * which only ever contains the currently active setup's panels.
- *
- * Physical geometry fields are included so the worker can propagate them into
- * PanelAnnualData without needing access to the original config.
  */
 export interface SimulationPanelData {
   readonly id: string;
@@ -177,38 +168,24 @@ export interface SimulationPanelData {
   readonly samplePoints: SimulationSamplePoint[];
   readonly temperatureCoefficient: number;
   readonly noct: number;
+  readonly arrayConfigPosition: [number, number];
 }
 
 /**
  * System-level loss parameters shared by all panels in a simulation run.
- * Derived from the site configuration and applied as post-processing factors
- * on the total DC power output of each time step.
  */
 export interface SystemLossParams {
-  /** Inverter efficiency (0–1). Typical value: 0.97. */
   readonly inverterEfficiency: number;
-  /** Wiring loss fraction (0–1). Typical value: 0.02. */
   readonly wiringLoss: number;
-  /**
-   * Ground albedo (0–1). Fraction of global horizontal irradiance reflected
-   * by the ground surface toward the panel underside. Typical value: 0.20.
-   */
   readonly groundAlbedo: number;
 }
 
 /**
  * All data the worker needs to run a full annual simulation for one setup.
- * Transferred once per worker launch; large typed arrays are zero-copy transferred.
- *
- * When `weatherData` is present the worker computes full Plane-of-Array (POA)
- * irradiance including direct, diffuse, and albedo components, and applies a
- * temperature correction to panel efficiency. When absent, the worker uses the
- * geometric clear-sky model unchanged.
  */
 export interface WorkerSimulationPayload {
   readonly setupId: string;
   readonly setupLabel: string;
-  readonly cacheKey: string;
   readonly year: number;
   readonly intervalMinutes: number;
   readonly latitude: number;
@@ -216,23 +193,10 @@ export interface WorkerSimulationPayload {
   readonly irradianceSource: IrradianceSource;
   readonly density: number;
   readonly threshold: number;
-  /** All shadow-casting meshes in the scene (walls, railings, panels of this setup). */
   readonly meshes: SerializedMesh[];
   readonly panels: SimulationPanelData[];
-  /**
-   * Inclination of the panel array in radians, used to compute the POA
-   * diffuse and albedo components. When multiple arrays have different
-   * inclinations within the same setup, a representative value (mean) is used
-   * because the worker applies one factor for the whole setup per time step.
-   * In practice most residential setups use a single inclination.
-   */
   readonly panelInclinationRad: number;
-  /** System-level losses applied as a single multiplier after DC production. */
   readonly systemLoss: SystemLossParams;
-  /**
-   * Hourly weather data for the simulated year: DNI, DHI, and ambient
-   * temperature. Null means geometric clear-sky model (no weather correction).
-   */
   readonly weatherData: {
     readonly dni: Float32Array;
     readonly dhi: Float32Array;
@@ -262,21 +226,17 @@ export interface WorkerDiagnostics {
 export type WorkerOutgoingMessage =
   | { type: 'pong'; diagnostics: WorkerDiagnostics }
   | { type: 'progress'; setupId: string; completed: number; total: number }
-  | { type: 'result'; result: SetupAnnualResult }
+  | { type: 'result'; result: SimulationSetupResult }
   | { type: 'error'; setupId: string; message: string };
 
 // ── Annual simulation UI state ────────────────────────────────────────────────
 
-/** Live progress state for a single setup being simulated in a worker. */
 export interface SetupSimulationProgress {
   readonly setupId: string;
   readonly setupLabel: string;
   readonly completed: number;
   readonly total: number;
-  /** Smoothed remaining seconds (EMA). null until 5% complete. */
   readonly smoothedRemainingSeconds: number | null;
-  /** Wall-clock ms when this setup's worker started. */
   readonly startedAt: number;
-  /** Most recent raw remaining estimate, used to compute the EMA. */
   readonly lastRawRemaining: number | null;
 }

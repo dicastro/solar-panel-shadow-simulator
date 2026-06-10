@@ -1,4 +1,5 @@
-import { SetupAnnualResult } from '../types/simulation';
+import { SimulationRunResult } from '../types/simulation';
+import { SimulationRunSummary } from '../types/results';
 import { openDatabase } from './DbUtils';
 
 const DB_NAME = 'solar-simulator';
@@ -15,20 +16,35 @@ const openDb = (): Promise<IDBDatabase> =>
 /**
  * IndexedDB wrapper for annual simulation results.
  *
- * Each result is stored under its `cacheKey` hash (see `hashCacheKey`).
- * The database has a single object store. All public functions open the
- * database on demand — there is no persistent connection to manage.
- *
- * Storage failures (quota exceeded, private browsing restrictions) are caught
- * and reported as a rejected Promise rather than silently ignored. Callers
- * that only want best-effort caching can catch and discard the error.
+ * Each record is a complete SimulationRunResult containing all setups.
+ * The record key is the hash of the five UI simulation parameters (year,
+ * interval, irradiance source, density, threshold). Re-running a simulation
+ * with the same parameters overwrites the existing record regardless of
+ * configuration changes — the simulationInputHash field in the record allows
+ * the UI to detect when the stored result is stale relative to the current
+ * configuration.
  */
 export const SimulationCache = {
   /**
-   * Persists a simulation result. The `cacheKey` field on the result is used as
-   * the record key. Overwrites any existing record with the same key.
+   * Returns true when at least one simulation result exists in the store.
+   * Uses a single IDB count() operation — does not read any record data.
    */
-  saveResult: async (result: SetupAnnualResult): Promise<void> => {
+  hasResults: async (): Promise<boolean> => {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.count();
+      request.onsuccess = (event) => resolve((event.target as IDBRequest<number>).result > 0);
+      request.onerror = (event) => reject((event.target as IDBRequest).error);
+    });
+  },
+
+  /**
+   * Persists a complete simulation run result. Overwrites any existing record
+   * with the same cache key.
+   */
+  saveResult: async (result: SimulationRunResult): Promise<void> => {
     const db = await openDb();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -40,41 +56,47 @@ export const SimulationCache = {
   },
 
   /**
-   * Retrieves the result stored under `cacheKey`, or `null` if none exists.
+   * Retrieves the full simulation run result for `cacheKey`, or null if absent.
    */
-  getResult: async (cacheKey: string): Promise<SetupAnnualResult | null> => {
+  getResult: async (cacheKey: string): Promise<SimulationRunResult | null> => {
     const db = await openDb();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const request = store.get(cacheKey);
-      request.onsuccess = (event) => resolve((event.target as IDBRequest<SetupAnnualResult | undefined>).result ?? null);
+      request.onsuccess = (event) =>
+        resolve((event.target as IDBRequest<SimulationRunResult | undefined>).result ?? null);
       request.onerror = (event) => reject((event.target as IDBRequest).error);
     });
   },
 
   /**
-   * Returns lightweight metadata for all stored results, sorted by `computedAt`
-   * descending. Useful for rendering a cache management UI without loading full
-   * result payloads.
-   *
-   * Includes `density` and `threshold` so the results panel can group and label
-   * simulation runs without re-deriving these values from the cache key hash.
+   * Returns lightweight summaries for all stored runs, sorted by computedAt
+   * descending (most recent first). Does not load per-panel data.
    */
-  listResults: async (): Promise<Pick<SetupAnnualResult,
-    'cacheKey' | 'setupId' | 'setupLabel' | 'computedAt' | 'year' |
-    'intervalMinutes' | 'irradianceSource' | 'density' | 'threshold' | 'annualTotalKwh'
-  >[]> => {
+  listResults: async (): Promise<SimulationRunSummary[]> => {
     const db = await openDb();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const request = store.getAll();
       request.onsuccess = (event) => {
-        const all = (event.target as IDBRequest<SetupAnnualResult[]>).result;
-        const summaries = all
-          .map(({ cacheKey, setupId, setupLabel, computedAt, year, intervalMinutes, irradianceSource, density, threshold, annualTotalKwh }) => ({
-            cacheKey, setupId, setupLabel, computedAt, year, intervalMinutes, irradianceSource, density, threshold, annualTotalKwh,
+        const all = (event.target as IDBRequest<SimulationRunResult[]>).result;
+        const summaries: SimulationRunSummary[] = all
+          .map(r => ({
+            cacheKey: r.cacheKey,
+            simulationInputHash: r.simulationInputHash,
+            computedAt: r.computedAt,
+            year: r.year,
+            intervalMinutes: r.intervalMinutes,
+            irradianceSource: r.irradianceSource,
+            density: r.density,
+            threshold: r.threshold,
+            setups: r.setups.map(s => ({
+              setupId: s.setupId,
+              setupLabel: s.setupLabel,
+              annualTotalKwh: s.annualTotalKwh,
+            })),
           }))
           .sort((a, b) => b.computedAt - a.computedAt);
         resolve(summaries);
@@ -84,28 +106,24 @@ export const SimulationCache = {
   },
 
   /**
-   * Returns all stored results in full (including per-panel data).
-   * Used by the backup exporter to include complete result payloads.
+   * Returns all stored results in full. Used by the backup exporter.
    */
-  getAllResults: async (): Promise<SetupAnnualResult[]> => {
+  getAllResults: async (): Promise<SimulationRunResult[]> => {
     const db = await openDb();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const request = store.getAll();
       request.onsuccess = (event) =>
-        resolve((event.target as IDBRequest<SetupAnnualResult[]>).result);
+        resolve((event.target as IDBRequest<SimulationRunResult[]>).result);
       request.onerror = (event) => reject((event.target as IDBRequest).error);
     });
   },
 
   /**
-   * Replaces all stored simulation results with the provided array.
-   * Clears the store first, then writes each result. Used by the backup
-   * importer to restore a complete result set atomically within one
-   * IndexedDB transaction.
+   * Replaces all stored results atomically. Used by the backup importer.
    */
-  replaceAllResults: async (results: SetupAnnualResult[]): Promise<void> => {
+  replaceAllResults: async (results: SimulationRunResult[]): Promise<void> => {
     const db = await openDb();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -125,8 +143,7 @@ export const SimulationCache = {
   },
 
   /**
-   * Deletes the result stored under `cacheKey`. Resolves silently if the key
-   * does not exist.
+   * Deletes the record stored under `cacheKey`. Resolves silently if absent.
    */
   deleteResult: async (cacheKey: string): Promise<void> => {
     const db = await openDb();
