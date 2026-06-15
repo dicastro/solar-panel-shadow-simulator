@@ -10,16 +10,8 @@ import { ConfigurationSection } from './settings/ConfigurationSection';
 const SIDEBAR_DEFAULT_WIDTH = 440;
 const SIDEBAR_MIN_WIDTH = 300;
 
-/**
- * Persists the sidebar width across open/close cycles within the same browser
- * session. The sidebar component unmounts when closed, so React state alone
- * cannot preserve the value.
- */
 let persistedSidebarWidth = SIDEBAR_DEFAULT_WIDTH;
 
-/**
- * Collapsible section within the settings sidebar.
- */
 export function SidebarSection({
   title,
   defaultOpen = false,
@@ -44,12 +36,6 @@ export function SidebarSection({
   );
 }
 
-/**
- * Full-height settings sidebar rendered as a fixed overlay on the left edge
- * of the viewport. The sidebar width is user-resizable by dragging the right
- * edge handle. Contains three collapsible sections: cache management,
- * backup export/import, and configuration editing.
- */
 export function SettingsSidebar() {
   const { t } = useTranslation();
   const closeSidebar = useAppStore(s => s.closeSidebar);
@@ -81,22 +67,21 @@ export function SettingsSidebar() {
           </div>
 
           <div className="settings-sidebar__body">
-            <SidebarSection title={t('settings.cache.sectionTitle')}>
-              <SimulationCacheSection />
-              <IrradianceCacheSection />
+            {/* Configuration opens automatically on first launch */}
+            <SidebarSection
+              title={t('settings.configuration.sectionTitle')}
+              defaultOpen={isFirstLaunch}
+            >
+              <ConfigurationSection />
             </SidebarSection>
 
             <SidebarSection title={t('settings.exportImport.sectionTitle')}>
               <ExportImportSection />
             </SidebarSection>
 
-            {/* Configuration section opens automatically on first launch
-                so the user is guided to edit their installation details. */}
-            <SidebarSection
-              title={t('settings.configuration.sectionTitle')}
-              defaultOpen={isFirstLaunch}
-            >
-              <ConfigurationSection />
+            <SidebarSection title={t('settings.cache.sectionTitle')}>
+              <SimulationCacheSection />
+              <IrradianceCacheSection />
             </SidebarSection>
           </div>
         </div>

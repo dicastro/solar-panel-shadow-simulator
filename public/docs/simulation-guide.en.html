@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annual Simulation Guide — Solar Panel Shadow Simulator</title>
+  <style>
+    :root {
+      --green: #2e7d32;
+      --green-light: #4caf50;
+      --green-bg: #f1f8f1;
+      --border: #ddd;
+      --code-bg: #f5f5f5;
+      --warn-bg: #fff8e1;
+      --warn-border: #f9a825;
+      --note-bg: #e3f2fd;
+      --note-border: #1565c0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #222;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    .page { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+    h1 { font-size: 2rem; color: var(--green); border-bottom: 3px solid var(--green-light); padding-bottom: 12px; }
+    h2 { font-size: 1.4rem; color: var(--green); margin-top: 56px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    h3 { font-size: 1.1rem; margin-top: 32px; color: #333; }
+    a { color: var(--green); }
+    code { font-family: 'Courier New', monospace; font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+    .note { background: var(--note-bg); border-left: 4px solid var(--note-border); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+    .warn { background: var(--warn-bg); border-left: 4px solid var(--warn-border); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+    .note p, .warn p { margin: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; }
+    th { background: var(--green-bg); color: var(--green); text-align: left; padding: 8px 12px; border: 1px solid var(--border); }
+    td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .toc { background: var(--green-bg); border: 1px solid #c8e6c9; border-radius: 8px; padding: 16px 24px; margin: 32px 0; }
+    .toc h2 { margin-top: 0; font-size: 1rem; border: none; padding: 0; }
+    .toc ol { margin: 0; padding-left: 20px; }
+    .toc li { margin: 4px 0; }
+    .svg-caption { text-align: center; font-size: 0.82rem; color: #666; margin-top: 8px; }
+    svg text { font-family: -apple-system, sans-serif; }
+    .figure { margin: 24px 0; }
+    .figure-row { display: flex; gap: 24px; flex-wrap: wrap; margin: 24px 0; }
+    .figure-row .figure { flex: 1; min-width: 200px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Annual Simulation Guide</h1>
+  <p>This guide explains how the annual simulation works, what each parameter means, and how to interpret the results.</p>
+
+  <div class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#what-it-does">What the annual simulation does</a></li>
+      <li><a href="#irradiance-models">Geometric model vs Open-Meteo</a></li>
+      <li><a href="#sample-points">NxN sample points per zone</a></li>
+      <li><a href="#threshold">Zone shadow threshold</a></li>
+      <li><a href="#parameters">Parameters and their trade-offs</a></li>
+      <li><a href="#parallel">Parallel calculation</a></li>
+      <li><a href="#cache">Cache and result management</a></li>
+    </ol>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="what-it-does">1. What the annual simulation does</h2>
+
+  <p>The annual simulation steps through every time interval of a full calendar year — for example every hour, or every 15 minutes — and for each step it:</p>
+  <ol>
+    <li>Computes the sun's position (altitude and azimuth) from the installation's GPS coordinates.</li>
+    <li>Casts rays from sample points on every panel toward the sun to detect which zones are shaded by walls, railings, or other panels.</li>
+    <li>Calculates the power output of each panel, accounting for bypass diodes, string mismatch losses, DC optimizers, and (when weather data is available) real irradiance and temperature.</li>
+    <li>Accumulates energy (kWh) per panel per hour of the year.</li>
+  </ol>
+
+  <p>The result is a complete picture of annual production for every setup defined in your configuration. Setups can then be compared side by side in the results panel.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="irradiance-models">2. Geometric model vs Open-Meteo</h2>
+
+  <p>The simulator offers two irradiance models that differ in accuracy, data requirements, and available options.</p>
+
+  <table>
+    <tr>
+      <th>Feature</th>
+      <th>Geometric (clear-sky)</th>
+      <th>Open-Meteo (real weather)</th>
+    </tr>
+    <tr>
+      <td>Internet required</td>
+      <td>No</td>
+      <td>Yes (first run per location/year)</td>
+    </tr>
+    <tr>
+      <td>Weather accuracy</td>
+      <td>Assumes constant clear sky — overestimates on cloudy days</td>
+      <td>Uses real historical hourly DNI, DHI, and temperature</td>
+    </tr>
+    <tr>
+      <td>Available years</td>
+      <td>Current year and past 5 years</td>
+      <td>Past 5 completed years only</td>
+    </tr>
+    <tr>
+      <td>Available intervals</td>
+      <td>15 min, 30 min, 1 h</td>
+      <td>1 h only</td>
+    </tr>
+    <tr>
+      <td>Best for</td>
+      <td>Quick layout comparisons, current-year estimates</td>
+      <td>Realistic annual production estimates</td>
+    </tr>
+  </table>
+
+  <h3>Why can't Open-Meteo cover the current year?</h3>
+  <p>Open-Meteo's historical archive only includes <em>completed</em> past years where the full reanalysis dataset is available. The current year is still in progress, so hours in the future would contribute zero production and distort the annual total. The geometric model does not have this limitation — it can project forward in time using the sun's deterministic position.</p>
+
+  <h3>Why does the geometric model support shorter intervals?</h3>
+  <p>Open-Meteo provides irradiance values at hourly resolution. Interpolating between hours would introduce errors, so the minimum interval is locked to 1 hour when using Open-Meteo. The geometric clear-sky model has no such constraint — the sun's position can be computed at any point in time, so 15-minute and 30-minute intervals are available.</p>
+
+  <h3>How Open-Meteo data is used</h3>
+  <p>When Open-Meteo is selected, the simulation fetches hourly Direct Normal Irradiance (DNI), Diffuse Horizontal Irradiance (DHI), and ambient temperature for the full year. The simulator then computes the Plane-of-Array (POA) irradiance — the actual irradiance hitting the tilted panel surface — by combining direct, diffuse sky, and ground-reflected components. A temperature correction is also applied: hot cells lose efficiency, and cold cells gain it slightly.</p>
+
+  <div class="note">
+    <p>Open-Meteo data is cached locally after the first download. Re-running the simulation with the same location and year will not make another network request.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="sample-points">3. NxN sample points per zone</h2>
+
+  <p>Each bypass-diode zone on a panel is sampled by an NxN grid of points. A ray is cast from each point toward the sun. The more points, the more accurately the simulation detects partial shading within a zone.</p>
+
+  <div class="figure-row">
+    <div class="figure">
+      <!-- N=2: 4 points, 2 zones -->
+      <svg viewBox="0 0 140 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="120" height="180" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+        <line x1="10" y1="100" x2="130" y2="100" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="5,4"/>
+        <!-- zone 0 points: 2x2 evenly spaced within top half -->
+        <circle cx="45" cy="45" r="9" fill="#4caf50"/>
+        <circle cx="95" cy="45" r="9" fill="#4caf50"/>
+        <circle cx="45" cy="82" r="9" fill="#4caf50"/>
+        <circle cx="95" cy="82" r="9" fill="#4caf50"/>
+        <!-- zone 1 points -->
+        <circle cx="45" cy="118" r="9" fill="#4caf50"/>
+        <circle cx="95" cy="118" r="9" fill="#4caf50"/>
+        <circle cx="45" cy="155" r="9" fill="#4caf50"/>
+        <circle cx="95" cy="155" r="9" fill="#4caf50"/>
+        <text x="70" y="204" text-anchor="middle" font-size="12" fill="#333">N=2 (4 pts/zone)</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">N=2: 4 sample points per zone</p>
+    </div>
+    <div class="figure">
+      <!-- N=4: 16 points, 2 zones -->
+      <svg viewBox="0 0 140 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="120" height="180" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+        <line x1="10" y1="100" x2="130" y2="100" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="5,4"/>
+        <!-- zone 0: 4x4 -->
+        <circle cx="30" cy="28" r="5" fill="#4caf50"/><circle cx="56" cy="28" r="5" fill="#4caf50"/><circle cx="84" cy="28" r="5" fill="#4caf50"/><circle cx="110" cy="28" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="50" r="5" fill="#4caf50"/><circle cx="56" cy="50" r="5" fill="#4caf50"/><circle cx="84" cy="50" r="5" fill="#4caf50"/><circle cx="110" cy="50" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="72" r="5" fill="#4caf50"/><circle cx="56" cy="72" r="5" fill="#4caf50"/><circle cx="84" cy="72" r="5" fill="#4caf50"/><circle cx="110" cy="72" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="93" r="5" fill="#4caf50"/><circle cx="56" cy="93" r="5" fill="#4caf50"/><circle cx="84" cy="93" r="5" fill="#4caf50"/><circle cx="110" cy="93" r="5" fill="#4caf50"/>
+        <!-- zone 1: 4x4 -->
+        <circle cx="30" cy="114" r="5" fill="#4caf50"/><circle cx="56" cy="114" r="5" fill="#4caf50"/><circle cx="84" cy="114" r="5" fill="#4caf50"/><circle cx="110" cy="114" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="135" r="5" fill="#4caf50"/><circle cx="56" cy="135" r="5" fill="#4caf50"/><circle cx="84" cy="135" r="5" fill="#4caf50"/><circle cx="110" cy="135" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="156" r="5" fill="#4caf50"/><circle cx="56" cy="156" r="5" fill="#4caf50"/><circle cx="84" cy="156" r="5" fill="#4caf50"/><circle cx="110" cy="156" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="178" r="5" fill="#4caf50"/><circle cx="56" cy="178" r="5" fill="#4caf50"/><circle cx="84" cy="178" r="5" fill="#4caf50"/><circle cx="110" cy="178" r="5" fill="#4caf50"/>
+        <text x="70" y="204" text-anchor="middle" font-size="12" fill="#333">N=4 (16 pts/zone)</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">N=4: 16 sample points per zone (default)</p>
+    </div>
+    <div class="figure">
+      <!-- N=8: 64 points schematic, 2 zones -->
+      <svg viewBox="0 0 140 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="120" height="180" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+        <line x1="10" y1="100" x2="130" y2="100" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="5,4"/>
+        <g fill="#4caf50">
+          <!-- zone 0: 8 rows of 8, rows y=17..97 step ~11 -->
+          <circle cx="22" cy="17" r="3"/><circle cx="36" cy="17" r="3"/><circle cx="50" cy="17" r="3"/><circle cx="64" cy="17" r="3"/><circle cx="78" cy="17" r="3"/><circle cx="92" cy="17" r="3"/><circle cx="106" cy="17" r="3"/><circle cx="120" cy="17" r="3"/>
+          <circle cx="22" cy="28" r="3"/><circle cx="36" cy="28" r="3"/><circle cx="50" cy="28" r="3"/><circle cx="64" cy="28" r="3"/><circle cx="78" cy="28" r="3"/><circle cx="92" cy="28" r="3"/><circle cx="106" cy="28" r="3"/><circle cx="120" cy="28" r="3"/>
+          <circle cx="22" cy="39" r="3"/><circle cx="36" cy="39" r="3"/><circle cx="50" cy="39" r="3"/><circle cx="64" cy="39" r="3"/><circle cx="78" cy="39" r="3"/><circle cx="92" cy="39" r="3"/><circle cx="106" cy="39" r="3"/><circle cx="120" cy="39" r="3"/>
+          <circle cx="22" cy="50" r="3"/><circle cx="36" cy="50" r="3"/><circle cx="50" cy="50" r="3"/><circle cx="64" cy="50" r="3"/><circle cx="78" cy="50" r="3"/><circle cx="92" cy="50" r="3"/><circle cx="106" cy="50" r="3"/><circle cx="120" cy="50" r="3"/>
+          <circle cx="22" cy="61" r="3"/><circle cx="36" cy="61" r="3"/><circle cx="50" cy="61" r="3"/><circle cx="64" cy="61" r="3"/><circle cx="78" cy="61" r="3"/><circle cx="92" cy="61" r="3"/><circle cx="106" cy="61" r="3"/><circle cx="120" cy="61" r="3"/>
+          <circle cx="22" cy="72" r="3"/><circle cx="36" cy="72" r="3"/><circle cx="50" cy="72" r="3"/><circle cx="64" cy="72" r="3"/><circle cx="78" cy="72" r="3"/><circle cx="92" cy="72" r="3"/><circle cx="106" cy="72" r="3"/><circle cx="120" cy="72" r="3"/>
+          <circle cx="22" cy="83" r="3"/><circle cx="36" cy="83" r="3"/><circle cx="50" cy="83" r="3"/><circle cx="64" cy="83" r="3"/><circle cx="78" cy="83" r="3"/><circle cx="92" cy="83" r="3"/><circle cx="106" cy="83" r="3"/><circle cx="120" cy="83" r="3"/>
+          <circle cx="22" cy="94" r="3"/><circle cx="36" cy="94" r="3"/><circle cx="50" cy="94" r="3"/><circle cx="64" cy="94" r="3"/><circle cx="78" cy="94" r="3"/><circle cx="92" cy="94" r="3"/><circle cx="106" cy="94" r="3"/><circle cx="120" cy="94" r="3"/>
+          <!-- zone 1 -->
+          <circle cx="22" cy="107" r="3"/><circle cx="36" cy="107" r="3"/><circle cx="50" cy="107" r="3"/><circle cx="64" cy="107" r="3"/><circle cx="78" cy="107" r="3"/><circle cx="92" cy="107" r="3"/><circle cx="106" cy="107" r="3"/><circle cx="120" cy="107" r="3"/>
+          <circle cx="22" cy="118" r="3"/><circle cx="36" cy="118" r="3"/><circle cx="50" cy="118" r="3"/><circle cx="64" cy="118" r="3"/><circle cx="78" cy="118" r="3"/><circle cx="92" cy="118" r="3"/><circle cx="106" cy="118" r="3"/><circle cx="120" cy="118" r="3"/>
+          <circle cx="22" cy="129" r="3"/><circle cx="36" cy="129" r="3"/><circle cx="50" cy="129" r="3"/><circle cx="64" cy="129" r="3"/><circle cx="78" cy="129" r="3"/><circle cx="92" cy="129" r="3"/><circle cx="106" cy="129" r="3"/><circle cx="120" cy="129" r="3"/>
+          <circle cx="22" cy="140" r="3"/><circle cx="36" cy="140" r="3"/><circle cx="50" cy="140" r="3"/><circle cx="64" cy="140" r="3"/><circle cx="78" cy="140" r="3"/><circle cx="92" cy="140" r="3"/><circle cx="106" cy="140" r="3"/><circle cx="120" cy="140" r="3"/>
+          <circle cx="22" cy="151" r="3"/><circle cx="36" cy="151" r="3"/><circle cx="50" cy="151" r="3"/><circle cx="64" cy="151" r="3"/><circle cx="78" cy="151" r="3"/><circle cx="92" cy="151" r="3"/><circle cx="106" cy="151" r="3"/><circle cx="120" cy="151" r="3"/>
+          <circle cx="22" cy="162" r="3"/><circle cx="36" cy="162" r="3"/><circle cx="50" cy="162" r="3"/><circle cx="64" cy="162" r="3"/><circle cx="78" cy="162" r="3"/><circle cx="92" cy="162" r="3"/><circle cx="106" cy="162" r="3"/><circle cx="120" cy="162" r="3"/>
+          <circle cx="22" cy="173" r="3"/><circle cx="36" cy="173" r="3"/><circle cx="50" cy="173" r="3"/><circle cx="64" cy="173" r="3"/><circle cx="78" cy="173" r="3"/><circle cx="92" cy="173" r="3"/><circle cx="106" cy="173" r="3"/><circle cx="120" cy="173" r="3"/>
+          <circle cx="22" cy="184" r="3"/><circle cx="36" cy="184" r="3"/><circle cx="50" cy="184" r="3"/><circle cx="64" cy="184" r="3"/><circle cx="78" cy="184" r="3"/><circle cx="92" cy="184" r="3"/><circle cx="106" cy="184" r="3"/><circle cx="120" cy="184" r="3"/>
+        </g>
+        <text x="70" y="204" text-anchor="middle" font-size="12" fill="#333">N=8 (64 pts/zone)</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">N=8: 64 sample points per zone (high precision)</p>
+    </div>
+  </div>
+
+  <p>Higher N catches more precise shadow boundaries — a thin chimney shadow crossing a zone at an angle is detected accurately with N=8 but might be missed or exaggerated with N=2. However, the number of rays grows as N², so doubling N quadruples computation time. The default N=4 (16 points per zone) is a good balance for most installations.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="threshold">4. Zone shadow threshold</h2>
+
+  <p>The threshold T defines how many sample points must be shaded before the entire zone is considered blocked and its bypass diode activates. This allows you to control sensitivity to partial shading.</p>
+
+  <div class="figure-row">
+    <div class="figure">
+      <!-- T=1, 1 shaded point → blocked. 4x4 grid centred in viewBox -->
+      <svg viewBox="0 0 200 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="180" height="180" rx="6" fill="#dcedc8" stroke="#2e7d32" stroke-width="2"/>
+        <!-- 4x4 grid: cols at 38,72,108,142 / rows at 38,72,108,142 -->
+        <circle cx="38"  cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="80"  cy="38"  r="10" fill="#4caf50"/>
+        <circle cx="122" cy="38"  r="10" fill="#4caf50"/>
+        <circle cx="162" cy="38"  r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="122" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="162" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="162" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="162" r="10" fill="#4caf50"/>
+        <text x="100" y="202" text-anchor="middle" font-size="13" fill="#c62828" font-weight="bold">Zone BLOCKED</text>
+        <text x="100" y="220" text-anchor="middle" font-size="11" fill="#555">Threshold=1, shaded=1</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">T=1: any shaded point blocks the zone (most sensitive)</p>
+    </div>
+    <div class="figure">
+      <!-- T=4, 3 shaded → zone OK -->
+      <svg viewBox="0 0 200 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="180" height="180" rx="6" fill="#dcedc8" stroke="#2e7d32" stroke-width="2"/>
+        <circle cx="38"  cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="80"  cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="122" cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="162" cy="38"  r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="122" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="162" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="162" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="162" r="10" fill="#4caf50"/>
+        <text x="100" y="202" text-anchor="middle" font-size="13" fill="#2e7d32" font-weight="bold">Zone OK</text>
+        <text x="100" y="220" text-anchor="middle" font-size="11" fill="#555">Threshold=4, shaded=3</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">T=4: 3 shaded points — zone still active</p>
+    </div>
+    <div class="figure">
+      <!-- T=4, 4 shaded → blocked -->
+      <svg viewBox="0 0 200 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="180" height="180" rx="6" fill="#dcedc8" stroke="#2e7d32" stroke-width="2"/>
+        <circle cx="38"  cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="80"  cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="122" cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="162" cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="38"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="122" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="162" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="162" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="162" r="10" fill="#4caf50"/>
+        <text x="100" y="202" text-anchor="middle" font-size="13" fill="#c62828" font-weight="bold">Zone BLOCKED</text>
+        <text x="100" y="220" text-anchor="middle" font-size="11" fill="#555">Threshold=4, shaded=4</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">T=4: exactly 4 shaded points — zone blocked</p>
+    </div>
+  </div>
+
+  <p>A threshold of 1 means the zone trips as soon as any single point is in shadow — maximum sensitivity to thin shadows. A higher threshold requires more extensive shading before the diode activates, which models real-world bypass diode behavior more conservatively. The default threshold of 1 gives the most pessimistic (safe) production estimate.</p>
+
+  <div class="note">
+    <p>The maximum threshold is NxN (all points in the zone). Setting it to the maximum means a zone is only considered blocked when every single sample point is shaded.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="parameters">5. Parameters and their trade-offs</h2>
+
+  <p>The simulation panel shows three computed quantities before you run:</p>
+
+  <table>
+    <tr>
+      <th>Quantity</th>
+      <th>Formula</th>
+      <th>Effect on precision / time</th>
+    </tr>
+    <tr>
+      <td><strong>Total sample points</strong></td>
+      <td>Total zones across all panels × N²</td>
+      <td>More points → finer shadow detection → more rays to cast</td>
+    </tr>
+    <tr>
+      <td><strong>Time steps</strong></td>
+      <td>365 days × 24 h × (60 / interval)</td>
+      <td>Shorter interval → smoother production curves → more steps</td>
+    </tr>
+    <tr>
+      <td><strong>Total rays</strong></td>
+      <td>Total sample points × time steps</td>
+      <td>Direct measure of computation work</td>
+    </tr>
+  </table>
+
+  <p>Typical guidance:</p>
+  <ul>
+    <li><strong>Quick comparison</strong>: N=4, interval=60 min. Runs in seconds to a few minutes.</li>
+    <li><strong>Detailed analysis</strong>: N=4 or N=6, interval=30 min. Noticeably longer but still feasible.</li>
+    <li><strong>High precision</strong>: N=8, interval=15 min. Can take many minutes; use only when needed.</li>
+  </ul>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="parallel">6. Parallel calculation</h2>
+
+  <p>When you run the simulation with multiple setups, each setup is calculated independently and simultaneously using the available processor cores. A computer with 8 cores can run up to 7 setups in parallel (one core is always reserved for the browser interface so it stays responsive). If you have more setups than available cores, the remainder are queued and start automatically as others finish.</p>
+
+  <p>Progress bars appear in the simulation panel — one per setup currently being calculated — with a real-time percentage and estimated time remaining. The ETA becomes accurate after the first 5% of the calculation has completed.</p>
+
+  <div class="note">
+    <p>The simulation runs entirely inside your browser. No data is sent to any server. Closing the browser tab or navigating away will interrupt the calculation.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="cache">7. Cache and result management</h2>
+
+  <p>Every completed simulation run is saved automatically in your browser's local storage. The next time you run with the exact same parameters (year, interval, irradiance model, density, threshold) and the same configuration, the result is loaded instantly from cache — no recalculation needed.</p>
+
+  <p>If you change the configuration (panel layout, wall dimensions, GPS coordinates, etc.) after running a simulation, the results panel will show a warning that the stored results are outdated relative to the current configuration. You can keep the old results for reference while re-running the simulation to get fresh ones.</p>
+
+  <p>To view and manage cached results — including deleting individual runs or clearing all cached data — open <strong>Settings → Cache management</strong> in the sidebar.</p>
+
+  <div class="warn">
+    <p>Clearing the browser's site data or storage from the browser settings will also delete cached simulation results. Use the backup export feature (Settings → Export / Import) to save a copy before doing so.</p>
+  </div>
+
+</div>
+</body>
+</html>

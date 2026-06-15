@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guía de la vista 3D — Solar Panel Shadow Simulator</title>
+  <style>
+    :root {
+      --green: #2e7d32;
+      --green-light: #4caf50;
+      --green-bg: #f1f8f1;
+      --border: #ddd;
+      --code-bg: #f5f5f5;
+      --warn-bg: #fff8e1;
+      --warn-border: #f9a825;
+      --note-bg: #e3f2fd;
+      --note-border: #1565c0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #222;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    .page { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+    h1 { font-size: 2rem; color: var(--green); border-bottom: 3px solid var(--green-light); padding-bottom: 12px; }
+    h2 { font-size: 1.4rem; color: var(--green); margin-top: 56px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    h3 { font-size: 1.1rem; margin-top: 32px; color: #333; }
+    a { color: var(--green); }
+    .note { background: var(--note-bg); border-left: 4px solid var(--note-border); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+    .warn { background: var(--warn-bg); border-left: 4px solid var(--warn-border); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+    .note p, .warn p { margin: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; }
+    th { background: var(--green-bg); color: var(--green); text-align: left; padding: 8px 12px; border: 1px solid var(--border); }
+    td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .toc { background: var(--green-bg); border: 1px solid #c8e6c9; border-radius: 8px; padding: 16px 24px; margin: 32px 0; }
+    .toc h2 { margin-top: 0; font-size: 1rem; border: none; padding: 0; }
+    .toc ol { margin: 0; padding-left: 20px; }
+    .toc li { margin: 4px 0; }
+    .svg-caption { text-align: center; font-size: 0.82rem; color: #666; margin-top: 8px; }
+    svg text { font-family: -apple-system, sans-serif; }
+    .figure { margin: 24px 0; }
+    .figure-row { display: flex; gap: 24px; flex-wrap: wrap; margin: 24px 0; }
+    .figure-row .figure { flex: 1; min-width: 220px; }
+    .kbd {
+      display: inline-block;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 1px 7px;
+      font-family: monospace;
+      font-size: 0.9em;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Guía de la vista 3D</h1>
+  <p>Esta guía explica cómo usar la vista 3D interactiva para analizar sombras en cualquier momento del año, entender la estimación de producción instantánea y utilizarla para interpretar los resultados de la simulación anual.</p>
+
+  <div class="toc">
+    <h2>Contenido</h2>
+    <ol>
+      <li><a href="#what-it-shows">Qué muestra la vista 3D</a></li>
+      <li><a href="#time-navigation">Navegación temporal</a></li>
+      <li><a href="#sample-points">Puntos de muestreo y visualización de sombras</a></li>
+      <li><a href="#threshold">Umbral de sombra de zona</a></li>
+      <li><a href="#instant-power">Estimación de producción instantánea</a></li>
+      <li><a href="#debug-use-case">Usar la vista 3D para entender los resultados de la simulación</a></li>
+    </ol>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="what-it-shows">1. Qué muestra la vista 3D</h2>
+
+  <p>La vista 3D renderiza tu instalación en tiempo real: el suelo de la terraza, los muros, las barandillas y todos los paneles solares de la configuración actualmente seleccionada. Una esfera representa la posición del sol en la fecha y hora seleccionadas, y una luz direccional fija a ella proyecta sombras geométricas por toda la escena.</p>
+
+  <p>Puedes rotar la vista haciendo clic y arrastrando, hacer zoom con la rueda del ratón y desplazarte manteniendo pulsado el botón derecho. Esto permite inspeccionar la instalación desde cualquier ángulo — incluido desde abajo, lo que es útil para entender cómo la sombra de una estructura cercana cae sobre varios paneles a la vez.</p>
+
+  <p>El selector de configuración (visible cuando la configuración tiene más de un setup) permite cambiar entre setups al instante sin volver a ejecutar la simulación. Cada setup puede tener una disposición de paneles, asignación de strings o selección de equipos completamente diferente.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="time-navigation">2. Navegación temporal</h2>
+
+  <p>El panel de control en la parte superior izquierda permite fijar cualquier fecha y hora en la zona horaria de la instalación. La posición del sol, las sombras y la estimación de producción se actualizan instantáneamente.</p>
+
+  <h3>Controles manuales</h3>
+
+  <p>La fila de botones debajo de los campos de fecha/hora ofrece saltos rápidos:</p>
+
+  <div class="figure">
+    <svg viewBox="0 0 480 60" width="100%" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="8" width="480" height="44" rx="6" fill="#1e1e1e"/>
+      <rect x="8" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="34" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">−1M</text>
+      <rect x="68" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="94" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">−1D</text>
+      <rect x="128" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="154" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">−1H</text>
+      <rect x="188" y="14" width="52" height="30" rx="4" fill="#2e7d32"/>
+      <text x="214" y="34" text-anchor="middle" font-size="16" fill="#fff">▶</text>
+      <rect x="248" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="274" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">+1H</text>
+      <rect x="308" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="334" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">+1D</text>
+      <rect x="368" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="394" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">+1M</text>
+    </svg>
+    <p class="svg-caption">Botones de navegación temporal: avanzar o retroceder por mes, día u hora</p>
+  </div>
+
+  <table>
+    <tr><th>Botón</th><th>Efecto</th></tr>
+    <tr><td><span class="kbd">−1M</span> / <span class="kbd">+1M</span></td><td>Salta un mes hacia atrás o hacia adelante. Útil para comparar patrones de sombra estacionales.</td></tr>
+    <tr><td><span class="kbd">−1D</span> / <span class="kbd">+1D</span></td><td>Salta un día. Útil para recorrer los solsticios y equinoccios.</td></tr>
+    <tr><td><span class="kbd">−1H</span> / <span class="kbd">+1H</span></td><td>Avanza una hora. El control más granular para seguir la sombra mientras el sol recorre el cielo.</td></tr>
+    <tr><td><span class="kbd">▶</span> / <span class="kbd">❙❙</span></td><td>Inicia o pausa la reproducción automática. El tiempo avanza una hora por fotograma (~100 ms), dando una vista en time-lapse de un día completo en pocos segundos.</td></tr>
+  </table>
+
+  <div class="note">
+    <p>El selector de fecha está limitado al año natural en curso. Esto coincide con el rango de años de la simulación y evita confusiones con resultados pasados calculados en un año diferente.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="sample-points">3. Puntos de muestreo y visualización de sombras</h2>
+
+  <p>Activa <strong>Visualizar puntos</strong> para mostrar la cuadrícula NxN de puntos en cada zona de cada panel. Cada punto es una pequeña esfera coloreada según su estado de sombra:</p>
+
+  <div class="figure-row">
+    <div class="figure">
+      <svg viewBox="0 0 200 180" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="30" y="20" width="140" height="140" rx="4" fill="#121e36" stroke="#4caf50" stroke-width="2"/>
+        <line x1="30" y1="90" x2="170" y2="90" stroke="#4caf50" stroke-width="1" stroke-dasharray="4,3"/>
+        <circle cx="64" cy="44" r="6" fill="#ccff00"/><circle cx="100" cy="44" r="6" fill="#ccff00"/><circle cx="136" cy="44" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="70" r="6" fill="#ccff00"/><circle cx="100" cy="70" r="6" fill="#ccff00"/><circle cx="136" cy="70" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="110" r="6" fill="#ccff00"/><circle cx="100" cy="110" r="6" fill="#ccff00"/><circle cx="136" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="136" r="6" fill="#ccff00"/><circle cx="100" cy="136" r="6" fill="#ccff00"/><circle cx="136" cy="136" r="6" fill="#ccff00"/>
+        <text x="100" y="170" text-anchor="middle" font-size="11" fill="#4caf50">Sin sombra — sol directo</text>
+      </svg>
+      <p class="svg-caption">Puntos amarillo-verde: sin sombra</p>
+    </div>
+    <div class="figure">
+      <svg viewBox="0 0 200 180" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="30" y="20" width="140" height="140" rx="4" fill="#121e36" stroke="#4caf50" stroke-width="2"/>
+        <line x1="30" y1="90" x2="170" y2="90" stroke="#4caf50" stroke-width="1" stroke-dasharray="4,3"/>
+        <circle cx="64" cy="44" r="6" fill="#ff4444"/><circle cx="100" cy="44" r="6" fill="#ff4444"/><circle cx="136" cy="44" r="6" fill="#ff4444"/>
+        <circle cx="64" cy="70" r="6" fill="#ff4444"/><circle cx="100" cy="70" r="6" fill="#ff4444"/><circle cx="136" cy="70" r="6" fill="#ff4444"/>
+        <circle cx="64" cy="110" r="6" fill="#ccff00"/><circle cx="100" cy="110" r="6" fill="#ccff00"/><circle cx="136" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="136" r="6" fill="#ccff00"/><circle cx="100" cy="136" r="6" fill="#ccff00"/><circle cx="136" cy="136" r="6" fill="#ccff00"/>
+        <text x="100" y="170" text-anchor="middle" font-size="11" fill="#ff4444">Zona 0 en sombra</text>
+      </svg>
+      <p class="svg-caption">Puntos rojos: en sombra — diodo de bypass activo</p>
+    </div>
+    <div class="figure">
+      <svg viewBox="0 0 200 180" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="30" y="20" width="140" height="140" rx="4" fill="#121e36" stroke="#4caf50" stroke-width="2"/>
+        <line x1="30" y1="90" x2="170" y2="90" stroke="#4caf50" stroke-width="1" stroke-dasharray="4,3"/>
+        <circle cx="64" cy="44" r="6" fill="#ff4444"/><circle cx="100" cy="44" r="6" fill="#ff4444"/>
+        <circle cx="136" cy="44" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="70" r="6" fill="#ccff00"/><circle cx="100" cy="70" r="6" fill="#ccff00"/><circle cx="136" cy="70" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="110" r="6" fill="#ccff00"/><circle cx="100" cy="110" r="6" fill="#ccff00"/><circle cx="136" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="136" r="6" fill="#ccff00"/><circle cx="100" cy="136" r="6" fill="#ccff00"/><circle cx="136" cy="136" r="6" fill="#ccff00"/>
+        <text x="100" y="170" text-anchor="middle" font-size="11" fill="#888">Sombra parcial zona 0</text>
+      </svg>
+      <p class="svg-caption">Mixto: la sombra cruza el límite de zona (el umbral decide)</p>
+    </div>
+  </div>
+
+  <p>Los puntos de muestreo que se ven en la vista 3D son exactamente los mismos que usa la simulación anual. Activar <strong>Visualizar puntos</strong> permite verificar que las sombras se detectan donde se espera y que la densidad de puntos es suficiente para resolver sombras finas con precisión.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="threshold">4. Umbral de sombra de zona</h2>
+
+  <p>El <strong>Umbral sombra zona</strong> en los controles de renderizado funciona de forma idéntica al umbral de la simulación anual — define cuántos puntos de muestreo deben estar en sombra para que toda la zona se considere bloqueada. Modificarlo en la vista 3D actualiza la estimación de producción instantánea al momento, de forma que puedes ver su efecto sin ejecutar una simulación completa.</p>
+
+  <p>El valor del umbral en los controles de renderizado es independiente del umbral usado para la simulación anual. Cada uno tiene su propio ajuste.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="instant-power">5. Estimación de producción instantánea</h2>
+
+  <p>El valor <strong>Producción estimada instante</strong> en la parte inferior del panel de control muestra la potencia (en kW) que produciría la configuración seleccionada en la fecha y hora actuales, en base a las sombras visibles y la posición del sol.</p>
+
+  <p>El <strong>Pico teórico</strong> es la producción máxima posible — la potencia pico total de todos los paneles (en kW) multiplicada por el coseno del ángulo entre la dirección del sol y la normal del panel. Representa la producción si no existiese ninguna sombra.</p>
+
+  <div class="warn">
+    <p><strong>Esta es una estimación geométrica, no una predicción ajustada por meteorología.</strong> La estimación instantánea asume siempre irradiancia de cielo despejado de 1000 W/m² (Condiciones de Test Estándar). No tiene en cuenta nubes, niebla, humedad ni temperatura. En un día nublado la producción real sería mucho menor. Usa la simulación anual con datos de Open-Meteo para estimaciones de energía realistas.</p>
+  </div>
+
+  <h3>Qué incluye el cálculo</h3>
+  <p>Pese a ser geométrica, la estimación instantánea modela correctamente:</p>
+  <ul>
+    <li><strong>Diodos de bypass</strong>: las zonas en sombra quedan cortocircuitadas y contribuyen cero potencia.</li>
+    <li><strong>Desajuste de string</strong>: los paneles conectados en serie comparten la misma corriente; el panel menos eficiente del string limita a todos los demás (salvo que lleve optimizador).</li>
+    <li><strong>Optimizadores CC</strong>: los paneles con optimizador se tratan de forma independiente — no se les aplica penalización por desajuste de string.</li>
+  </ul>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="debug-use-case">6. Usar la vista 3D para entender los resultados de la simulación</h2>
+
+  <p>El uso más potente de la vista 3D es como herramienta de diagnóstico cuando la simulación anual produce resultados inesperados. El flujo de trabajo es:</p>
+
+  <ol>
+    <li>Ejecutas la simulación anual y observas algo sorprendente — por ejemplo, un setup produce significativamente menos que otro las tardes de agosto.</li>
+    <li>Cambias a la vista 3D. Activas <strong>Visualizar puntos</strong>.</li>
+    <li>Usas el selector de configuración para cambiar entre los dos setups manteniendo fija la fecha y hora.</li>
+    <li>Navegas a agosto y recorres las horas de la tarde (14h, 15h, 16h…) con el botón <span class="kbd">+1H</span>.</li>
+    <li>Observas qué zonas se ponen en rojo — puedes ver directamente que el array oeste queda en la sombra del depósito de agua a partir de las 15h, cosa que la otra disposición evita.</li>
+  </ol>
+
+  <p>Esto permite trazar cualquier diferencia de producción hasta una fuente de sombra concreta, una ventana temporal específica y un panel o zona determinados — sin necesidad de ejecutar otra simulación.</p>
+
+  <div class="note">
+    <p>La vista 3D usa la <strong>densidad de renderizado</strong> y el <strong>umbral de renderizado</strong> de sus propios controles, que pueden diferir de los ajustes usados para la simulación anual. Para una comparación más fiel, iguala los valores de densidad y umbral antes de inspeccionar.</p>
+  </div>
+
+</div>
+</body>
+</html>

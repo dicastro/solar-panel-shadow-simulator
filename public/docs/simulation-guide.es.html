@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guía de simulación anual — Solar Panel Shadow Simulator</title>
+  <style>
+    :root {
+      --green: #2e7d32;
+      --green-light: #4caf50;
+      --green-bg: #f1f8f1;
+      --border: #ddd;
+      --code-bg: #f5f5f5;
+      --warn-bg: #fff8e1;
+      --warn-border: #f9a825;
+      --note-bg: #e3f2fd;
+      --note-border: #1565c0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #222;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    .page { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+    h1 { font-size: 2rem; color: var(--green); border-bottom: 3px solid var(--green-light); padding-bottom: 12px; }
+    h2 { font-size: 1.4rem; color: var(--green); margin-top: 56px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    h3 { font-size: 1.1rem; margin-top: 32px; color: #333; }
+    a { color: var(--green); }
+    code { font-family: 'Courier New', monospace; font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+    .note { background: var(--note-bg); border-left: 4px solid var(--note-border); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+    .warn { background: var(--warn-bg); border-left: 4px solid var(--warn-border); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+    .note p, .warn p { margin: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; }
+    th { background: var(--green-bg); color: var(--green); text-align: left; padding: 8px 12px; border: 1px solid var(--border); }
+    td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .toc { background: var(--green-bg); border: 1px solid #c8e6c9; border-radius: 8px; padding: 16px 24px; margin: 32px 0; }
+    .toc h2 { margin-top: 0; font-size: 1rem; border: none; padding: 0; }
+    .toc ol { margin: 0; padding-left: 20px; }
+    .toc li { margin: 4px 0; }
+    .svg-caption { text-align: center; font-size: 0.82rem; color: #666; margin-top: 8px; }
+    svg text { font-family: -apple-system, sans-serif; }
+    .figure { margin: 24px 0; }
+    .figure-row { display: flex; gap: 24px; flex-wrap: wrap; margin: 24px 0; }
+    .figure-row .figure { flex: 1; min-width: 200px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Guía de simulación anual</h1>
+  <p>Esta guía explica cómo funciona la simulación anual, qué significa cada parámetro y cómo interpretar los resultados.</p>
+
+  <div class="toc">
+    <h2>Contenido</h2>
+    <ol>
+      <li><a href="#what-it-does">Qué hace la simulación anual</a></li>
+      <li><a href="#irradiance-models">Modelo geométrico vs Open-Meteo</a></li>
+      <li><a href="#sample-points">Puntos NxN por zona</a></li>
+      <li><a href="#threshold">Umbral de sombra de zona</a></li>
+      <li><a href="#parameters">Parámetros y sus implicaciones</a></li>
+      <li><a href="#parallel">Cálculo en paralelo</a></li>
+      <li><a href="#cache">Caché y gestión de resultados</a></li>
+    </ol>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="what-it-does">1. Qué hace la simulación anual</h2>
+
+  <p>La simulación anual recorre cada intervalo de tiempo de un año completo — por ejemplo cada hora o cada 15 minutos — y en cada paso:</p>
+  <ol>
+    <li>Calcula la posición del sol (altitud y acimut) a partir de las coordenadas GPS de la instalación.</li>
+    <li>Lanza rayos desde los puntos de muestreo de cada panel hacia el sol para detectar qué zonas están en sombra por muros, barandillas u otros paneles.</li>
+    <li>Calcula la potencia producida por cada panel teniendo en cuenta los diodos de bypass, las pérdidas por desajuste de string, los optimizadores CC y, cuando hay datos meteorológicos disponibles, la irradiancia real y la temperatura.</li>
+    <li>Acumula la energía (kWh) por panel y por hora del año.</li>
+  </ol>
+
+  <p>El resultado es un cuadro completo de la producción anual para cada configuración (setup) definida en tu instalación. Los setups se pueden comparar uno a lado del otro en el panel de resultados.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="irradiance-models">2. Modelo geométrico vs Open-Meteo</h2>
+
+  <p>El simulador ofrece dos modelos de irradiancia que difieren en precisión, requisitos de datos y opciones disponibles.</p>
+
+  <table>
+    <tr>
+      <th>Característica</th>
+      <th>Geométrico (cielo despejado)</th>
+      <th>Open-Meteo (meteorología real)</th>
+    </tr>
+    <tr>
+      <td>Requiere internet</td>
+      <td>No</td>
+      <td>Sí (primera ejecución por ubicación/año)</td>
+    </tr>
+    <tr>
+      <td>Precisión meteorológica</td>
+      <td>Asume cielo despejado constante — sobreestima en días nublados</td>
+      <td>Usa DNI, DHI y temperatura horarios históricos reales</td>
+    </tr>
+    <tr>
+      <td>Años disponibles</td>
+      <td>Año en curso y últimos 5 años</td>
+      <td>Últimos 5 años completados únicamente</td>
+    </tr>
+    <tr>
+      <td>Intervalos disponibles</td>
+      <td>15 min, 30 min, 1 h</td>
+      <td>Solo 1 h</td>
+    </tr>
+    <tr>
+      <td>Mejor para</td>
+      <td>Comparación rápida de layouts, estimaciones del año en curso</td>
+      <td>Estimaciones de producción anual realistas</td>
+    </tr>
+  </table>
+
+  <h3>¿Por qué Open-Meteo no cubre el año en curso?</h3>
+  <p>El archivo histórico de Open-Meteo solo incluye años pasados <em>completados</em> para los que está disponible el conjunto de datos de reanálisis completo. El año en curso todavía está en progreso, por lo que las horas futuras contribuirían con cero de producción y distorsionarían el total anual. El modelo geométrico no tiene esta limitación — puede proyectarse hacia adelante en el tiempo usando la posición determinista del sol.</p>
+
+  <h3>¿Por qué el modelo geométrico permite intervalos más cortos?</h3>
+  <p>Open-Meteo proporciona valores de irradiancia con resolución horaria. Interpolar entre horas introduciría errores, por lo que el intervalo mínimo está fijado en 1 hora cuando se usa Open-Meteo. El modelo geométrico no tiene esa limitación — la posición del sol se puede calcular en cualquier instante, por lo que los intervalos de 15 y 30 minutos están disponibles.</p>
+
+  <h3>Cómo se usan los datos de Open-Meteo</h3>
+  <p>Cuando se selecciona Open-Meteo, la simulación descarga la Irradiancia Normal Directa (DNI), la Irradiancia Horizontal Difusa (DHI) y la temperatura ambiente horarias para el año completo. El simulador calcula entonces la irradiancia en el Plano del Array (POA) — la irradiancia real que incide sobre la superficie inclinada del panel — combinando los componentes directo, difuso de cielo y reflejado por el suelo. También se aplica una corrección por temperatura: las células calientes pierden eficiencia y las frías la ganan ligeramente.</p>
+
+  <div class="note">
+    <p>Los datos de Open-Meteo se guardan en caché local tras la primera descarga. Volver a ejecutar la simulación con la misma ubicación y año no realizará otra petición de red.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="sample-points">3. Puntos NxN por zona</h2>
+
+  <p>Cada zona de diodo de bypass de un panel se muestrea con una cuadrícula NxN de puntos. Desde cada punto se lanza un rayo hacia el sol. Cuantos más puntos haya, más precisamente detectará la simulación la sombra parcial dentro de una zona.</p>
+
+  <div class="figure-row">
+    <div class="figure">
+      <svg viewBox="0 0 140 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="120" height="180" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+        <line x1="10" y1="100" x2="130" y2="100" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="5,4"/>
+        <circle cx="45" cy="45" r="9" fill="#4caf50"/>
+        <circle cx="95" cy="45" r="9" fill="#4caf50"/>
+        <circle cx="45" cy="82" r="9" fill="#4caf50"/>
+        <circle cx="95" cy="82" r="9" fill="#4caf50"/>
+        <circle cx="45" cy="118" r="9" fill="#4caf50"/>
+        <circle cx="95" cy="118" r="9" fill="#4caf50"/>
+        <circle cx="45" cy="155" r="9" fill="#4caf50"/>
+        <circle cx="95" cy="155" r="9" fill="#4caf50"/>
+        <text x="70" y="204" text-anchor="middle" font-size="12" fill="#333">N=2 (4 pts/zona)</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">N=2: 4 puntos de muestreo por zona</p>
+    </div>
+    <div class="figure">
+      <svg viewBox="0 0 140 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="120" height="180" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+        <line x1="10" y1="100" x2="130" y2="100" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="5,4"/>
+        <circle cx="30" cy="28" r="5" fill="#4caf50"/><circle cx="56" cy="28" r="5" fill="#4caf50"/><circle cx="84" cy="28" r="5" fill="#4caf50"/><circle cx="110" cy="28" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="50" r="5" fill="#4caf50"/><circle cx="56" cy="50" r="5" fill="#4caf50"/><circle cx="84" cy="50" r="5" fill="#4caf50"/><circle cx="110" cy="50" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="72" r="5" fill="#4caf50"/><circle cx="56" cy="72" r="5" fill="#4caf50"/><circle cx="84" cy="72" r="5" fill="#4caf50"/><circle cx="110" cy="72" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="93" r="5" fill="#4caf50"/><circle cx="56" cy="93" r="5" fill="#4caf50"/><circle cx="84" cy="93" r="5" fill="#4caf50"/><circle cx="110" cy="93" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="114" r="5" fill="#4caf50"/><circle cx="56" cy="114" r="5" fill="#4caf50"/><circle cx="84" cy="114" r="5" fill="#4caf50"/><circle cx="110" cy="114" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="135" r="5" fill="#4caf50"/><circle cx="56" cy="135" r="5" fill="#4caf50"/><circle cx="84" cy="135" r="5" fill="#4caf50"/><circle cx="110" cy="135" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="156" r="5" fill="#4caf50"/><circle cx="56" cy="156" r="5" fill="#4caf50"/><circle cx="84" cy="156" r="5" fill="#4caf50"/><circle cx="110" cy="156" r="5" fill="#4caf50"/>
+        <circle cx="30" cy="178" r="5" fill="#4caf50"/><circle cx="56" cy="178" r="5" fill="#4caf50"/><circle cx="84" cy="178" r="5" fill="#4caf50"/><circle cx="110" cy="178" r="5" fill="#4caf50"/>
+        <text x="70" y="204" text-anchor="middle" font-size="12" fill="#333">N=4 (16 pts/zona)</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">N=4: 16 puntos de muestreo por zona (por defecto)</p>
+    </div>
+    <div class="figure">
+      <svg viewBox="0 0 140 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="120" height="180" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+        <line x1="10" y1="100" x2="130" y2="100" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="5,4"/>
+        <g fill="#4caf50">
+          <circle cx="22" cy="17" r="3"/><circle cx="36" cy="17" r="3"/><circle cx="50" cy="17" r="3"/><circle cx="64" cy="17" r="3"/><circle cx="78" cy="17" r="3"/><circle cx="92" cy="17" r="3"/><circle cx="106" cy="17" r="3"/><circle cx="120" cy="17" r="3"/>
+          <circle cx="22" cy="28" r="3"/><circle cx="36" cy="28" r="3"/><circle cx="50" cy="28" r="3"/><circle cx="64" cy="28" r="3"/><circle cx="78" cy="28" r="3"/><circle cx="92" cy="28" r="3"/><circle cx="106" cy="28" r="3"/><circle cx="120" cy="28" r="3"/>
+          <circle cx="22" cy="39" r="3"/><circle cx="36" cy="39" r="3"/><circle cx="50" cy="39" r="3"/><circle cx="64" cy="39" r="3"/><circle cx="78" cy="39" r="3"/><circle cx="92" cy="39" r="3"/><circle cx="106" cy="39" r="3"/><circle cx="120" cy="39" r="3"/>
+          <circle cx="22" cy="50" r="3"/><circle cx="36" cy="50" r="3"/><circle cx="50" cy="50" r="3"/><circle cx="64" cy="50" r="3"/><circle cx="78" cy="50" r="3"/><circle cx="92" cy="50" r="3"/><circle cx="106" cy="50" r="3"/><circle cx="120" cy="50" r="3"/>
+          <circle cx="22" cy="61" r="3"/><circle cx="36" cy="61" r="3"/><circle cx="50" cy="61" r="3"/><circle cx="64" cy="61" r="3"/><circle cx="78" cy="61" r="3"/><circle cx="92" cy="61" r="3"/><circle cx="106" cy="61" r="3"/><circle cx="120" cy="61" r="3"/>
+          <circle cx="22" cy="72" r="3"/><circle cx="36" cy="72" r="3"/><circle cx="50" cy="72" r="3"/><circle cx="64" cy="72" r="3"/><circle cx="78" cy="72" r="3"/><circle cx="92" cy="72" r="3"/><circle cx="106" cy="72" r="3"/><circle cx="120" cy="72" r="3"/>
+          <circle cx="22" cy="83" r="3"/><circle cx="36" cy="83" r="3"/><circle cx="50" cy="83" r="3"/><circle cx="64" cy="83" r="3"/><circle cx="78" cy="83" r="3"/><circle cx="92" cy="83" r="3"/><circle cx="106" cy="83" r="3"/><circle cx="120" cy="83" r="3"/>
+          <circle cx="22" cy="94" r="3"/><circle cx="36" cy="94" r="3"/><circle cx="50" cy="94" r="3"/><circle cx="64" cy="94" r="3"/><circle cx="78" cy="94" r="3"/><circle cx="92" cy="94" r="3"/><circle cx="106" cy="94" r="3"/><circle cx="120" cy="94" r="3"/>
+          <circle cx="22" cy="107" r="3"/><circle cx="36" cy="107" r="3"/><circle cx="50" cy="107" r="3"/><circle cx="64" cy="107" r="3"/><circle cx="78" cy="107" r="3"/><circle cx="92" cy="107" r="3"/><circle cx="106" cy="107" r="3"/><circle cx="120" cy="107" r="3"/>
+          <circle cx="22" cy="118" r="3"/><circle cx="36" cy="118" r="3"/><circle cx="50" cy="118" r="3"/><circle cx="64" cy="118" r="3"/><circle cx="78" cy="118" r="3"/><circle cx="92" cy="118" r="3"/><circle cx="106" cy="118" r="3"/><circle cx="120" cy="118" r="3"/>
+          <circle cx="22" cy="129" r="3"/><circle cx="36" cy="129" r="3"/><circle cx="50" cy="129" r="3"/><circle cx="64" cy="129" r="3"/><circle cx="78" cy="129" r="3"/><circle cx="92" cy="129" r="3"/><circle cx="106" cy="129" r="3"/><circle cx="120" cy="129" r="3"/>
+          <circle cx="22" cy="140" r="3"/><circle cx="36" cy="140" r="3"/><circle cx="50" cy="140" r="3"/><circle cx="64" cy="140" r="3"/><circle cx="78" cy="140" r="3"/><circle cx="92" cy="140" r="3"/><circle cx="106" cy="140" r="3"/><circle cx="120" cy="140" r="3"/>
+          <circle cx="22" cy="151" r="3"/><circle cx="36" cy="151" r="3"/><circle cx="50" cy="151" r="3"/><circle cx="64" cy="151" r="3"/><circle cx="78" cy="151" r="3"/><circle cx="92" cy="151" r="3"/><circle cx="106" cy="151" r="3"/><circle cx="120" cy="151" r="3"/>
+          <circle cx="22" cy="162" r="3"/><circle cx="36" cy="162" r="3"/><circle cx="50" cy="162" r="3"/><circle cx="64" cy="162" r="3"/><circle cx="78" cy="162" r="3"/><circle cx="92" cy="162" r="3"/><circle cx="106" cy="162" r="3"/><circle cx="120" cy="162" r="3"/>
+          <circle cx="22" cy="173" r="3"/><circle cx="36" cy="173" r="3"/><circle cx="50" cy="173" r="3"/><circle cx="64" cy="173" r="3"/><circle cx="78" cy="173" r="3"/><circle cx="92" cy="173" r="3"/><circle cx="106" cy="173" r="3"/><circle cx="120" cy="173" r="3"/>
+          <circle cx="22" cy="184" r="3"/><circle cx="36" cy="184" r="3"/><circle cx="50" cy="184" r="3"/><circle cx="64" cy="184" r="3"/><circle cx="78" cy="184" r="3"/><circle cx="92" cy="184" r="3"/><circle cx="106" cy="184" r="3"/><circle cx="120" cy="184" r="3"/>
+        </g>
+        <text x="70" y="204" text-anchor="middle" font-size="12" fill="#333">N=8 (64 pts/zona)</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">N=8: 64 puntos de muestreo por zona (alta precisión)</p>
+    </div>
+  </div>
+
+  <p>Un N mayor detecta con más precisión los límites de sombra — la sombra de una chimenea fina que atraviesa una zona en ángulo se detecta correctamente con N=8 pero podría pasarse por alto o exagerarse con N=2. Sin embargo, el número de rayos crece como N², por lo que doblar N cuadruplica el tiempo de cálculo. El valor por defecto N=4 (16 puntos por zona) es un buen equilibrio para la mayoría de instalaciones.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="threshold">4. Umbral de sombra de zona</h2>
+
+  <p>El umbral T define cuántos puntos de muestreo deben estar en sombra para que se considere toda la zona como bloqueada y su diodo de bypass se active. Permite controlar la sensibilidad ante la sombra parcial.</p>
+
+  <div class="figure-row">
+    <div class="figure">
+      <svg viewBox="0 0 200 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="180" height="180" rx="6" fill="#dcedc8" stroke="#2e7d32" stroke-width="2"/>
+        <circle cx="38"  cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="80"  cy="38"  r="10" fill="#4caf50"/>
+        <circle cx="122" cy="38"  r="10" fill="#4caf50"/>
+        <circle cx="162" cy="38"  r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="122" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="162" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="162" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="162" r="10" fill="#4caf50"/>
+        <text x="100" y="202" text-anchor="middle" font-size="13" fill="#c62828" font-weight="bold">Zona BLOQUEADA</text>
+        <text x="100" y="220" text-anchor="middle" font-size="11" fill="#555">Umbral=1. en sombra=1</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">T=1: cualquier punto en sombra bloquea la zona (máxima sensibilidad)</p>
+    </div>
+    <div class="figure">
+      <svg viewBox="0 0 200 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="180" height="180" rx="6" fill="#dcedc8" stroke="#2e7d32" stroke-width="2"/>
+        <circle cx="38"  cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="80"  cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="122" cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="162" cy="38"  r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="122" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="162" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="162" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="162" r="10" fill="#4caf50"/>
+        <text x="100" y="202" text-anchor="middle" font-size="13" fill="#2e7d32" font-weight="bold">Zona OK</text>
+        <text x="100" y="220" text-anchor="middle" font-size="11" fill="#555">Umbral=4. en sombra=3</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">T=4: 3 puntos en sombra — zona todavía activa</p>
+    </div>
+    <div class="figure">
+      <svg viewBox="0 0 200 230" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="10" width="180" height="180" rx="6" fill="#dcedc8" stroke="#2e7d32" stroke-width="2"/>
+        <circle cx="38"  cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="80"  cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="122" cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="162" cy="38"  r="10" fill="#ff4444"/>
+        <circle cx="38"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="122" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="162" cy="80"  r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="122" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="122" r="10" fill="#4caf50"/>
+        <circle cx="38"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="80"  cy="162" r="10" fill="#4caf50"/>
+        <circle cx="122" cy="162" r="10" fill="#4caf50"/>
+        <circle cx="162" cy="162" r="10" fill="#4caf50"/>
+        <text x="100" y="202" text-anchor="middle" font-size="13" fill="#c62828" font-weight="bold">Zona BLOQUEADA</text>
+        <text x="100" y="220" text-anchor="middle" font-size="11" fill="#555">Umbral=4. en sombra=4</text>
+      </svg>
+      <p class="svg-caption" style="margin-top:4px">T=4: exactamente 4 puntos en sombra — zona bloqueada</p>
+    </div>
+  </div>
+
+  <p>Un umbral de 1 significa que la zona se activa en cuanto cualquier punto queda en sombra — sensibilidad máxima ante sombras finas. Un umbral mayor requiere una sombra más extensa antes de que el diodo se active, lo que modela el comportamiento real del diodo de bypass de forma más conservadora. El umbral por defecto de 1 da la estimación de producción más pesimista (más segura).</p>
+
+  <div class="note">
+    <p>El umbral máximo es NxN (todos los puntos de la zona). Fijarlo al máximo significa que una zona solo se considera bloqueada cuando absolutamente todos los puntos de muestreo están en sombra.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="parameters">5. Parámetros y sus implicaciones</h2>
+
+  <p>El panel de simulación muestra tres magnitudes calculadas antes de ejecutar:</p>
+
+  <table>
+    <tr>
+      <th>Magnitud</th>
+      <th>Fórmula</th>
+      <th>Efecto sobre precisión / tiempo</th>
+    </tr>
+    <tr>
+      <td><strong>Total puntos de muestreo</strong></td>
+      <td>Total zonas de todos los paneles × N²</td>
+      <td>Más puntos → detección de sombra más fina → más rayos que lanzar</td>
+    </tr>
+    <tr>
+      <td><strong>Pasos de tiempo</strong></td>
+      <td>365 días × 24 h × (60 / intervalo)</td>
+      <td>Intervalo más corto → curvas de producción más suaves → más pasos</td>
+    </tr>
+    <tr>
+      <td><strong>Total rayos</strong></td>
+      <td>Total puntos de muestreo × pasos de tiempo</td>
+      <td>Medida directa del trabajo de cálculo</td>
+    </tr>
+  </table>
+
+  <p>Orientación práctica:</p>
+  <ul>
+    <li><strong>Comparación rápida</strong>: N=4, intervalo=60 min. Se ejecuta en segundos o pocos minutos.</li>
+    <li><strong>Análisis detallado</strong>: N=4 o N=6, intervalo=30 min. Notablemente más lento pero viable.</li>
+    <li><strong>Alta precisión</strong>: N=8, intervalo=15 min. Puede tardar muchos minutos; usar solo cuando sea necesario.</li>
+  </ul>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="parallel">6. Cálculo en paralelo</h2>
+
+  <p>Cuando ejecutas la simulación con varios setups, cada setup se calcula de forma independiente y simultánea usando los núcleos disponibles del procesador. Un ordenador con 8 núcleos puede calcular hasta 7 setups en paralelo (siempre se reserva un núcleo para la interfaz del navegador para que siga siendo ágil). Si tienes más setups que núcleos disponibles, el resto se pone en cola y empieza automáticamente conforme los otros terminan.</p>
+
+  <p>En el panel de simulación aparecen barras de progreso — una por cada setup en cálculo activo — con el porcentaje en tiempo real y el tiempo estimado restante. El ETA se vuelve preciso a partir del 5% del cálculo completado.</p>
+
+  <div class="note">
+    <p>La simulación se ejecuta íntegramente dentro de tu navegador. No se envía ningún dato a ningún servidor. Cerrar la pestaña del navegador o navegar a otra página interrumpirá el cálculo.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="cache">7. Caché y gestión de resultados</h2>
+
+  <p>Cada simulación completada se guarda automáticamente en el almacenamiento local del navegador. La próxima vez que ejecutes con exactamente los mismos parámetros (año, intervalo, modelo de irradiancia, densidad, umbral) y la misma configuración, el resultado se carga instantáneamente desde la caché — sin recálculo.</p>
+
+  <p>Si modificas la configuración (disposición de paneles, dimensiones de muros, coordenadas GPS, etc.) después de ejecutar una simulación, el panel de resultados mostrará un aviso de que los resultados almacenados están desactualizados respecto a la configuración actual. Puedes conservar los resultados anteriores como referencia mientras vuelves a ejecutar la simulación para obtener unos nuevos.</p>
+
+  <p>Para ver y gestionar los resultados en caché — incluyendo eliminar ejecuciones individuales o borrar todos los datos — abre <strong>Ajustes → Gestión de caché</strong> en el sidebar.</p>
+
+  <div class="warn">
+    <p>Limpiar los datos del sitio o el almacenamiento desde la configuración del navegador también eliminará los resultados de simulación en caché. Usa la función de exportación de copia de seguridad (Ajustes → Exportar / Importar) para guardar una copia antes de hacerlo.</p>
+  </div>
+
+</div>
+</body>
+</html>

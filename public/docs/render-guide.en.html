@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D View Guide — Solar Panel Shadow Simulator</title>
+  <style>
+    :root {
+      --green: #2e7d32;
+      --green-light: #4caf50;
+      --green-bg: #f1f8f1;
+      --border: #ddd;
+      --code-bg: #f5f5f5;
+      --warn-bg: #fff8e1;
+      --warn-border: #f9a825;
+      --note-bg: #e3f2fd;
+      --note-border: #1565c0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #222;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    .page { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+    h1 { font-size: 2rem; color: var(--green); border-bottom: 3px solid var(--green-light); padding-bottom: 12px; }
+    h2 { font-size: 1.4rem; color: var(--green); margin-top: 56px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    h3 { font-size: 1.1rem; margin-top: 32px; color: #333; }
+    a { color: var(--green); }
+    .note { background: var(--note-bg); border-left: 4px solid var(--note-border); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+    .warn { background: var(--warn-bg); border-left: 4px solid var(--warn-border); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0; }
+    .note p, .warn p { margin: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; }
+    th { background: var(--green-bg); color: var(--green); text-align: left; padding: 8px 12px; border: 1px solid var(--border); }
+    td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .toc { background: var(--green-bg); border: 1px solid #c8e6c9; border-radius: 8px; padding: 16px 24px; margin: 32px 0; }
+    .toc h2 { margin-top: 0; font-size: 1rem; border: none; padding: 0; }
+    .toc ol { margin: 0; padding-left: 20px; }
+    .toc li { margin: 4px 0; }
+    .svg-caption { text-align: center; font-size: 0.82rem; color: #666; margin-top: 8px; }
+    svg text { font-family: -apple-system, sans-serif; }
+    .figure { margin: 24px 0; }
+    .figure-row { display: flex; gap: 24px; flex-wrap: wrap; margin: 24px 0; }
+    .figure-row .figure { flex: 1; min-width: 220px; }
+    .kbd {
+      display: inline-block;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 1px 7px;
+      font-family: monospace;
+      font-size: 0.9em;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <h1>3D View Guide</h1>
+  <p>This guide explains how to use the interactive 3D view to analyse shadows at any point in time, understand the instant production estimate, and use it to debug your annual simulation results.</p>
+
+  <div class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#what-it-shows">What the 3D view shows</a></li>
+      <li><a href="#time-navigation">Navigating through time</a></li>
+      <li><a href="#sample-points">Sample points and shadow visualisation</a></li>
+      <li><a href="#threshold">Zone shadow threshold</a></li>
+      <li><a href="#instant-power">Instant production estimate</a></li>
+      <li><a href="#debug-use-case">Using the 3D view to understand simulation results</a></li>
+    </ol>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="what-it-shows">1. What the 3D view shows</h2>
+
+  <p>The 3D view renders your installation in real time: the terrace floor, walls, railings, and all solar panels from the currently selected setup. A sphere represents the sun's position at the selected date and time, and a directional light attached to it casts geometric shadows across the scene.</p>
+
+  <p>You can rotate the view by clicking and dragging, zoom with the scroll wheel, and pan by holding the right mouse button. This lets you inspect the installation from any angle — including from below, which is useful for understanding how a shadow from a nearby structure falls across several panels at once.</p>
+
+  <p>The setup selector (visible when your configuration has more than one setup) lets you switch between setups instantly without re-running the simulation. Each setup may have a completely different panel layout, string assignment, or equipment selection.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="time-navigation">2. Navigating through time</h2>
+
+  <p>The control panel on the top left lets you set any date and time for the installation's timezone. The sun position, shadows, and production estimate all update instantly.</p>
+
+  <h3>Manual controls</h3>
+
+  <p>The button row below the date/time inputs provides quick adjustments:</p>
+
+  <div class="figure">
+    <svg viewBox="0 0 480 60" width="100%" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="8" width="480" height="44" rx="6" fill="#1e1e1e"/>
+      <!-- buttons -->
+      <rect x="8" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="34" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">−1M</text>
+      <rect x="68" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="94" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">−1D</text>
+      <rect x="128" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="154" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">−1H</text>
+      <rect x="188" y="14" width="52" height="30" rx="4" fill="#2e7d32"/>
+      <text x="214" y="34" text-anchor="middle" font-size="16" fill="#fff">▶</text>
+      <rect x="248" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="274" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">+1H</text>
+      <rect x="308" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="334" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">+1D</text>
+      <rect x="368" y="14" width="52" height="30" rx="4" fill="#444"/>
+      <text x="394" y="34" text-anchor="middle" font-size="13" fill="#fff" font-weight="bold">+1M</text>
+      <!-- labels below -->
+    </svg>
+    <p class="svg-caption">Time navigation buttons: step backwards or forwards by month, day, or hour</p>
+  </div>
+
+  <table>
+    <tr><th>Button</th><th>Effect</th></tr>
+    <tr><td><span class="kbd">−1M</span> / <span class="kbd">+1M</span></td><td>Jump one month backwards or forwards. Useful for comparing seasonal shadow patterns.</td></tr>
+    <tr><td><span class="kbd">−1D</span> / <span class="kbd">+1D</span></td><td>Jump one day. Useful for stepping through the solstices and equinoxes.</td></tr>
+    <tr><td><span class="kbd">−1H</span> / <span class="kbd">+1H</span></td><td>Step one hour. The most granular control for tracking the shadow as the sun moves across the sky.</td></tr>
+    <tr><td><span class="kbd">▶</span> / <span class="kbd">❙❙</span></td><td>Start or pause the automatic playback. The time advances one hour per animation frame (~100 ms), giving a fast-forward view of a full day in a few seconds.</td></tr>
+  </table>
+
+  <div class="note">
+    <p>The date picker is restricted to the current calendar year. This matches the simulation year range and avoids confusion with past results that may have been run on a different year.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="sample-points">3. Sample points and shadow visualisation</h2>
+
+  <p>Enable <strong>Show sample points</strong> to display the NxN grid of points on every panel zone. Each point is a small sphere coloured by its shadow status:</p>
+
+  <div class="figure-row">
+    <div class="figure">
+      <svg viewBox="0 0 200 180" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <!-- Panel tilted schematic, top view -->
+        <rect x="30" y="20" width="140" height="140" rx="4" fill="#121e36" stroke="#4caf50" stroke-width="2"/>
+        <!-- zone line -->
+        <line x1="30" y1="90" x2="170" y2="90" stroke="#4caf50" stroke-width="1" stroke-dasharray="4,3"/>
+        <!-- all green points -->
+        <circle cx="64" cy="44" r="6" fill="#ccff00"/>
+        <circle cx="100" cy="44" r="6" fill="#ccff00"/>
+        <circle cx="136" cy="44" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="70" r="6" fill="#ccff00"/>
+        <circle cx="100" cy="70" r="6" fill="#ccff00"/>
+        <circle cx="136" cy="70" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="100" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="136" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="136" r="6" fill="#ccff00"/>
+        <circle cx="100" cy="136" r="6" fill="#ccff00"/>
+        <circle cx="136" cy="136" r="6" fill="#ccff00"/>
+        <text x="100" y="170" text-anchor="middle" font-size="11" fill="#4caf50">All points unshaded</text>
+      </svg>
+      <p class="svg-caption">Yellow-green points: no shadow — full sun</p>
+    </div>
+    <div class="figure">
+      <svg viewBox="0 0 200 180" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="30" y="20" width="140" height="140" rx="4" fill="#121e36" stroke="#4caf50" stroke-width="2"/>
+        <line x1="30" y1="90" x2="170" y2="90" stroke="#4caf50" stroke-width="1" stroke-dasharray="4,3"/>
+        <!-- zone 0: all red (shaded by shadow) -->
+        <circle cx="64" cy="44" r="6" fill="#ff4444"/>
+        <circle cx="100" cy="44" r="6" fill="#ff4444"/>
+        <circle cx="136" cy="44" r="6" fill="#ff4444"/>
+        <circle cx="64" cy="70" r="6" fill="#ff4444"/>
+        <circle cx="100" cy="70" r="6" fill="#ff4444"/>
+        <circle cx="136" cy="70" r="6" fill="#ff4444"/>
+        <!-- zone 1: green -->
+        <circle cx="64" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="100" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="136" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="136" r="6" fill="#ccff00"/>
+        <circle cx="100" cy="136" r="6" fill="#ccff00"/>
+        <circle cx="136" cy="136" r="6" fill="#ccff00"/>
+        <text x="100" y="170" text-anchor="middle" font-size="11" fill="#ff4444">Zone 0 fully shaded</text>
+      </svg>
+      <p class="svg-caption">Red points: shaded — bypass diode active for this zone</p>
+    </div>
+    <div class="figure">
+      <svg viewBox="0 0 200 180" width="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect x="30" y="20" width="140" height="140" rx="4" fill="#121e36" stroke="#4caf50" stroke-width="2"/>
+        <line x1="30" y1="90" x2="170" y2="90" stroke="#4caf50" stroke-width="1" stroke-dasharray="4,3"/>
+        <!-- partial shade zone 0 -->
+        <circle cx="64" cy="44" r="6" fill="#ff4444"/>
+        <circle cx="100" cy="44" r="6" fill="#ff4444"/>
+        <circle cx="136" cy="44" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="70" r="6" fill="#ccff00"/>
+        <circle cx="100" cy="70" r="6" fill="#ccff00"/>
+        <circle cx="136" cy="70" r="6" fill="#ccff00"/>
+        <!-- zone 1: green -->
+        <circle cx="64" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="100" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="136" cy="110" r="6" fill="#ccff00"/>
+        <circle cx="64" cy="136" r="6" fill="#ccff00"/>
+        <circle cx="100" cy="136" r="6" fill="#ccff00"/>
+        <circle cx="136" cy="136" r="6" fill="#ccff00"/>
+        <text x="100" y="170" text-anchor="middle" font-size="11" fill="#888">Partial shade zone 0</text>
+      </svg>
+      <p class="svg-caption">Mixed: shadow crosses zone boundary (threshold decides)</p>
+    </div>
+  </div>
+
+  <p>The sample points you see in the 3D view are the exact same points used by the annual simulation. Enabling <strong>Show sample points</strong> lets you verify that shadows are being detected where you expect them, and that the point density is sufficient to resolve thin shadows accurately.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="threshold">4. Zone shadow threshold</h2>
+
+  <p>The <strong>Zone shadow threshold</strong> in the render controls works identically to the threshold in the annual simulation — it sets how many sample points must be shaded before the entire zone is considered blocked. Changing it in the 3D view updates the instant production estimate immediately, so you can see its effect without running a full simulation.</p>
+
+  <p>The threshold value in the render controls is independent of the threshold used for the annual simulation. Each has its own setting.</p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="instant-power">5. Instant production estimate</h2>
+
+  <p>The <strong>Estimated instant output</strong> value at the bottom of the control panel shows the power (in kW) the selected setup would produce at the current date and time, based on the visible shadows and the sun's position.</p>
+
+  <p>The <strong>Theoretical peak</strong> is the maximum possible output — the total peak power of all panels (in kW) multiplied by the cosine of the angle between the sun direction and the panel normal. It represents the output if no shadows existed.</p>
+
+  <div class="warn">
+    <p><strong>This is a geometric estimate, not a weather-adjusted prediction.</strong> The instant estimate always assumes clear-sky irradiance of 1000 W/m² (Standard Test Conditions). It does not account for clouds, haze, humidity, or temperature. On an overcast day the real output would be much lower. Use the annual simulation with Open-Meteo data for realistic energy estimates.</p>
+  </div>
+
+  <h3>What the calculation includes</h3>
+  <p>Despite being geometric, the instant estimate correctly models:</p>
+  <ul>
+    <li><strong>Bypass diodes</strong>: shaded zones are bypassed and contribute zero power.</li>
+    <li><strong>String mismatch</strong>: panels connected in series share the same current; the least-efficient panel in a string limits all others (unless an optimizer is fitted).</li>
+    <li><strong>DC optimizers</strong>: panels with optimizers are treated as independent — no string mismatch penalty applies to them.</li>
+  </ul>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <h2 id="debug-use-case">6. Using the 3D view to understand simulation results</h2>
+
+  <p>The most powerful use of the 3D view is as a diagnostic tool when the annual simulation produces unexpected results. The workflow is:</p>
+
+  <ol>
+    <li>Run the annual simulation and notice something surprising — for example, one setup produces significantly less than another in August afternoons.</li>
+    <li>Switch to the 3D view. Enable <strong>Show sample points</strong>.</li>
+    <li>Use the setup selector to switch between the two setups while keeping the date/time fixed.</li>
+    <li>Navigate to August and step through the afternoon hours (2 PM, 3 PM, 4 PM…) using the <span class="kbd">+1H</span> button.</li>
+    <li>Observe which zones go red — you can immediately see that the western array is in the shadow of the water tank from 3 PM onward, which the other layout avoids.</li>
+  </ol>
+
+  <p>This lets you trace any production difference back to a specific shadow source, a specific time window, and a specific panel or zone — without running another simulation.</p>
+
+  <div class="note">
+    <p>The 3D view uses the <strong>render density</strong> and <strong>render threshold</strong> from its own controls, which may differ from the settings used for the annual simulation. For the most faithful comparison, match the density and threshold values before inspecting.</p>
+  </div>
+
+</div>
+</body>
+</html>

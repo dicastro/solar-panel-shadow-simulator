@@ -3,31 +3,23 @@ import { useAppStore, availableSimulationYears, availableIntervals, SimulationIn
 import { IrradianceSource } from '../types/simulation';
 import { AnnualSimulationProgress } from './AnnualSimulationProgress';
 
-/**
- * Bottom-left panel: annual simulation parameters, run/stop control,
- * per-setup progress bars, and annual results summary.
- *
- * All sampling parameters here (simulationDensity, simulationThreshold) are
- * independent of the render controls in RenderControls. Changing them only
- * affects future simulation runs — the 3D view is unaffected.
- *
- * Both the interval selector and the year selector are conditioned to the
- * selected irradiance source:
- *
- * - Open-Meteo only provides DNI at hourly resolution, so intervals below
- *   60 min are hidden.
- * - Open-Meteo only covers completed past years via its historical archive.
- *   The current year is excluded to prevent the user from obtaining results
- *   where all future hours are 0 W/m².
- *
- * Switching the irradiance source resets both interval and year to valid
- * defaults atomically in the store (SimulationSlice.setIrradianceSource).
- *
- * Ray count derivation:
- *   totalZones        = sum of zone counts across every panel in the active setup
- *   totalSamplePoints = totalZones × simulationDensity²
- *   totalRays         = totalSamplePoints × timeSteps
- */
+function SimulationGuideLink() {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language.startsWith('es') ? 'es' : 'en';
+  const url = `${import.meta.env.BASE_URL}docs/simulation-guide.${lang}.html`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="config-first-launch-banner__link"
+      style={{ fontSize: '0.75rem' }}
+    >
+      {t('simulationControls.guideLink')}
+    </a>
+  );
+}
+
 export function SimulationControls() {
   const { t } = useTranslation();
 
@@ -68,7 +60,10 @@ export function SimulationControls() {
 
   return (
     <div className="controls-panel simulation-panel">
-      <h3>{t('simulationControls.title')}</h3>
+      <div className="control-row">
+        <h3>{t('simulationControls.title')}</h3>
+        <SimulationGuideLink />
+      </div>
 
       <div className="control-row">
         <label>{t('simulationControls.irradianceSource')}:</label>

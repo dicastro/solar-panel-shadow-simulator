@@ -4,40 +4,29 @@ import { useAppStore, makeDateInTimezone } from '../store/AppStore';
 import { TimeUtils } from '../utils/TimeUtils';
 
 const CURRENT_YEAR = dayjs().year();
-
 const ALL_TIMEZONES = TimeUtils.getAllTimezones();
 
 interface RenderControlsProps {
-  /**
-   * When true, adds a top-offset modifier class so the panel clears the
-   * gear button that sits at the same top-left anchor point.
-   */
   offsetTop: boolean;
 }
 
-/**
- * Top-left control panel for the 3D interactive view.
- *
- * Covers setup selection, date/time pickers, playback controls, timezone and
- * language selection, and the rendering-specific sampling controls (showPoints,
- * renderDensity, renderThreshold). Changes to these controls affect only the
- * 3D visualisation and the instant production readout — they are completely
- * independent of the annual simulation parameters in SimulationControls.
- *
- * Setup selector is only rendered when more than one setup is defined in the
- * config. Switching setup triggers a full PanelSetup rebuild (geometry +
- * sample points) via the store action setActiveSetupIndex.
- *
- * All date construction goes through makeDateInTimezone(), which calls
- * dayjs.tz(isoString, timezone). This interprets the components as local
- * time in the configured timezone — not the browser timezone. This ensures
- * that what the user types in the inputs always matches what is displayed,
- * regardless of the configured timezone or DST transitions.
- *
- * The `offsetTop` prop adds a CSS modifier class that shifts the panel down
- * by the height of the gear button + gap (68px total from viewport top) so
- * the two elements do not overlap.
- */
+function RenderGuideLink() {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language.startsWith('es') ? 'es' : 'en';
+  const url = `${import.meta.env.BASE_URL}docs/render-guide.${lang}.html`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="config-first-launch-banner__link"
+      style={{ fontSize: '0.75rem' }}
+    >
+      {t('renderControls.guideLink')}
+    </a>
+  );
+}
+
 export function RenderControls({ offsetTop }: RenderControlsProps) {
   const { t, i18n } = useTranslation();
 
@@ -89,6 +78,7 @@ export function RenderControls({ offsetTop }: RenderControlsProps) {
 
       <div className="control-row">
         <h2 className="controls-title">{t('title')}</h2>
+        <RenderGuideLink />
         <select
           value={i18n.language}
           onChange={e => i18n.changeLanguage(e.target.value)}
@@ -171,8 +161,6 @@ export function RenderControls({ offsetTop }: RenderControlsProps) {
         {displayDate.locale(i18n.language).format('DD MMM YYYY - HH:mm')}
       </div>
 
-      {/* ── Render sampling controls ─────────────────────────────────────────── */}
-
       <div className="control-row">
         <label>{t('renderControls.pointsPerZone')}:</label>
         <input
@@ -208,8 +196,6 @@ export function RenderControls({ offsetTop }: RenderControlsProps) {
         />
         <span className="simulation-threshold-max">/ {maxPointsPerZone}</span>
       </div>
-
-      {/* ── Instant production readout ────────────────────────────────────────── */}
 
       <div className="instant-results">
         <p>

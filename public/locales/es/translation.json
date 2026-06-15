@@ -12,7 +12,8 @@
     "threshold": "Umbral sombra zona",
     "thresholdTooltip": "Número mínimo de puntos en sombra para anular una zona",
     "instantPower": "Producción estimada instante",
-    "theoreticalPeak": "Pico teórico"
+    "theoreticalPeak": "Pico teórico",
+    "guideLink": "Guía de la vista 3D →"
   },
   "coordinates": {
     "north": "N",
@@ -65,7 +66,8 @@
     "run": "EJECUTAR CÁLCULO",
     "stop": "PARAR",
     "stopConfirm": "¿Parar la simulación? Se perderá el progreso.",
-    "pending": "{{count}} setup(s) esperando en cola"
+    "pending": "{{count}} setup(s) esperando en cola",
+    "guideLink": "Guía de simulación →"
   },
   "simulationResultsPanel": {
     "title": "Resultados anuales",

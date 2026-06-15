@@ -12,7 +12,8 @@
     "threshold": "Zone shadow threshold",
     "thresholdTooltip": "Minimum number of shaded points to consider a zone as shaded",
     "instantPower": "Estimated instant output",
-    "theoreticalPeak": "Theoretical peak"
+    "theoreticalPeak": "Theoretical peak",
+    "guideLink": "3D view guide →"
   },
   "coordinates": {
     "north": "N",
@@ -65,7 +66,8 @@
     "run": "RUN CALCULATION",
     "stop": "STOP",
     "stopConfirm": "Stop the simulation? Progress will be lost.",
-    "pending": "{{count}} setup(s) waiting in queue"
+    "pending": "{{count}} setup(s) waiting in queue",
+    "guideLink": "Simulation guide →"
   },
   "simulationResultsPanel": {
     "title": "Annual Results",
