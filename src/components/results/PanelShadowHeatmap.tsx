@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import { LoadedSetupResult } from '../../types/results';
 import { PanelAnnualData } from '../../types/simulation';
 import { ZonesDisposition } from '../../types/config';
@@ -16,12 +15,6 @@ interface Props {
 const MAX_PANEL_PX = 88;
 const MAX_CONTAINER_W = 520;
 const PANEL_GAP_PX = 3;
-const LABEL_H_PX = 18;
-/**
- * Minimum block width in px to fit "Array XX" (two-digit) label on one line.
- * At ~10px/char, "Array 00" ≈ 56px. Panel grid is centred within this width.
- */
-const MIN_BLOCK_W_PX = 56;
 
 const shadeToColour = (fraction: number): string => {
   const clamped = Math.max(0, Math.min(1, fraction));
@@ -184,53 +177,37 @@ function PanelCell({ panel, month, day, cellW, cellH }: {
   );
 }
 
-/**
- * Renders one array block: label centred above the panel grid.
- * blockW = max(arrayGridW, MIN_BLOCK_W_PX). The label spans blockW.
- * The panel grid is centred within blockW via margin-left.
- */
-function ArrayBlock({ group, month, day, cellW, cellH, blockW }: {
+function ArrayBlock({ group, month, day, cellW, cellH }: {
   group: PanelGroup;
   month: number | null;
   day: number | null;
   cellW: number;
   cellH: number;
-  blockW: number;
 }) {
-  const { t } = useTranslation();
   const arrayGridH = group.rows * cellH + (group.rows - 1) * PANEL_GAP_PX;
   const arrayGridW = group.cols * cellW + (group.cols - 1) * PANEL_GAP_PX;
-  const gridOffsetLeft = Math.round((blockW - arrayGridW) / 2);
 
   return (
-    <div style={{ width: blockW, display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <div
-        className="heatmap-array__label"
-        style={{ width: blockW, whiteSpace: 'nowrap', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis' }}
-      >
-        {t('resultsPanel.array')} {group.arrayIndex}
-      </div>
-      <div style={{ position: 'relative', width: arrayGridW, height: arrayGridH, marginLeft: gridOffsetLeft }}>
-        {Array.from({ length: group.rows }, (_, i) => group.rows - 1 - i).map(rowIdx => (
-          <div
-            key={rowIdx}
-            style={{
-              position: 'absolute',
-              bottom: rowIdx * (cellH + PANEL_GAP_PX),
-              left: 0,
-              display: 'flex',
-              gap: PANEL_GAP_PX,
-            }}
-          >
-            {Array.from({ length: group.cols }, (_, colIdx) => {
-              const panel = group.grid[rowIdx][colIdx];
-              return panel
-                ? <PanelCell key={colIdx} panel={panel} month={month} day={day} cellW={cellW} cellH={cellH} />
-                : <div key={colIdx} style={{ width: cellW, height: cellH }} />;
-            })}
-          </div>
-        ))}
-      </div>
+    <div style={{ position: 'relative', width: arrayGridW, height: arrayGridH }}>
+      {Array.from({ length: group.rows }, (_, i) => group.rows - 1 - i).map(rowIdx => (
+        <div
+          key={rowIdx}
+          style={{
+            position: 'absolute',
+            bottom: rowIdx * (cellH + PANEL_GAP_PX),
+            left: 0,
+            display: 'flex',
+            gap: PANEL_GAP_PX,
+          }}
+        >
+          {Array.from({ length: group.cols }, (_, colIdx) => {
+            const panel = group.grid[rowIdx][colIdx];
+            return panel
+              ? <PanelCell key={colIdx} panel={panel} month={month} day={day} cellW={cellW} cellH={cellH} />
+              : <div key={colIdx} style={{ width: cellW, height: cellH }} />;
+          })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -276,45 +253,14 @@ function SingleHeatmap({ result, month, day }: {
     const items = groups.map(g => {
       const arrayGridW = g.cols * cellW + (g.cols - 1) * PANEL_GAP_PX;
       const arrayGridH = g.rows * cellH + (g.rows - 1) * PANEL_GAP_PX;
-      const blockW = Math.max(arrayGridW, MIN_BLOCK_W_PX);
-      const blockH = LABEL_H_PX + arrayGridH;
       return {
         group: g,
         pixelLeft: Math.round((g.configPosition[0] - minX) * pxPerMetre),
         pixelBottom: Math.round((g.configPosition[1] - minZ) * pxPerMetre),
-        blockW,
-        blockH,
+        blockW: arrayGridW,
+        blockH: arrayGridH,
       };
     });
-
-    /**
-     * Vertical post-pass: within each column (same pixelLeft), ensure the
-     * gap between adjacent blocks is at least LABEL_H_PX. This handles the
-     * case where arrays are very close in Z so the proportional gap is < label
-     * height. We only push north blocks up — never reduce gaps.
-     * This does NOT affect pxPerMetre so horizontal positions are unchanged.
-     */
-    const byCol = new Map<number, typeof items>();
-    for (const item of items) {
-      const col = byCol.get(item.pixelLeft) ?? [];
-      col.push(item);
-      byCol.set(item.pixelLeft, col);
-    }
-    for (const col of byCol.values()) {
-      col.sort((a, b) => a.pixelBottom - b.pixelBottom); // south first
-      for (let i = 1; i < col.length; i++) {
-        const south = col[i - 1];
-        const north = col[i];
-        // gap = north.bottom - (south.bottom + south.blockH)
-        // north block's label sits at the top of north.blockH, so the visual
-        // bottom of north's label is at north.bottom + north.blockH.
-        // We need: north.bottom >= south.bottom + south.blockH + LABEL_H_PX
-        const minNorthBottom = south.pixelBottom + south.blockH + LABEL_H_PX;
-        if (north.pixelBottom < minNorthBottom) {
-          north.pixelBottom = minNorthBottom;
-        }
-      }
-    }
 
     const containerW = Math.max(...items.map(p => p.pixelLeft + p.blockW));
     const containerH = Math.max(...items.map(p => p.pixelBottom + p.blockH));
@@ -345,22 +291,18 @@ function SingleHeatmap({ result, month, day }: {
       </div>
 
       <div style={{ position: 'relative', width: containerW, height: containerH, minHeight: 40 }}>
-        {positionedGroups.map(({ group, pixelLeft, pixelBottom, blockW, blockH }) => (
+        {positionedGroups.map(({ group, pixelLeft, pixelBottom }) => (
           <div
             key={group.arrayIndex}
             style={{
               position: 'absolute',
               left: pixelLeft,
-              bottom: pixelBottom,
-              height: blockH,
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'flex-end',
+              bottom: pixelBottom
             }}
           >
             <ArrayBlock
               group={group} month={month} day={day}
-              cellW={cellW} cellH={cellH} blockW={blockW}
+              cellW={cellW} cellH={cellH}
             />
           </div>
         ))}

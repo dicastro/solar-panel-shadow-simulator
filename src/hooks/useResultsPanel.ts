@@ -35,6 +35,7 @@ export function useResultsPanel(): UseResultsPanelReturn {
   const [activeTab, setActiveTab] = useState<ResultsTab>('annual');
   const [loadedResults, setLoadedResults] = useState<LoadedSetupResult[]>([]);
   const [isLoadingResults, setIsLoadingResults] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0);
 
   const reloadGroups = useCallback((autoSelect: boolean) => {
     SimulationCache.listResults()
@@ -43,6 +44,7 @@ export function useResultsPanel(): UseResultsPanelReturn {
         setGroups(grouped);
         if (grouped.length > 0 && (autoSelect || selectedGroupKey === null)) {
           setSelectedGroupKeyState(grouped[0].cacheKey);
+          if (autoSelect) setRefreshCounter(c => c + 1);
         } else if (grouped.length === 0) {
           setSelectedGroupKeyState(null);
         }
@@ -95,7 +97,7 @@ export function useResultsPanel(): UseResultsPanelReturn {
       })
       .catch(err => console.warn('useResultsPanel: failed to load full result', err))
       .finally(() => setIsLoadingResults(false));
-  }, [selectedGroupKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedGroupKey, refreshCounter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setSelectedGroupKey = useCallback((key: string) => {
     setSelectedGroupKeyState(key);

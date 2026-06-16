@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { LoadedSetupResult } from '../types/results';
-import { MARGIN, CONTENT_W, PAGE_H, C_DARK, C_MUTED, font, Cursor } from './PdfLayout';
+import { MARGIN, CONTENT_W, PAGE_H, C_DARK, font, Cursor } from './PdfLayout';
 import { SetupColoursUtils } from '../utils/SetupColoursUtils';
 import { StringColoursUtils } from '../utils/StringColourUtils';
 import { drawScaleBar } from './PdfPrimitives';
@@ -37,10 +37,8 @@ export const zoneAvgShade = (
 
 const CELL_GAP_MM = 1.0;
 const ARRAY_LABEL_H_MM = 5.5;
-const SCALE_BAR_H_MM = 12; // includes top margin
+const SCALE_BAR_H_MM = 12;
 const MAX_CELL_W_MM = 28;
-/** Minimum block width so "Array XX" label fits at 7pt. */
-const MIN_LABEL_W_MM = 18;
 
 interface ArrayEntry {
   arrayIndex: number;
@@ -103,39 +101,12 @@ const computePdfPositions = (
   const raw: PositionedEntry[] = entries.map(e => {
     const gridW = e.cols * cellW + (e.cols - 1) * CELL_GAP_MM;
     const gridH = e.rows * cellH + (e.rows - 1) * CELL_GAP_MM;
-    const blockW = Math.max(gridW, MIN_LABEL_W_MM);
-    const blockH = ARRAY_LABEL_H_MM + gridH;
+    const blockW = gridW;
+    const blockH = gridH;
     const xMm = (e.configPosition[0] - minX) * mmPerMetre;
-    // North at top: higher Z → smaller y (closer to top of page).
     const yMm = (maxZ - e.configPosition[1]) * mmPerMetre;
     return { entry: e, xMm, yMm, gridW, gridH, blockW, blockH };
   });
-
-  /**
-   * Vertical post-pass: ensure the label of a lower block (larger yMm) is
-   * not obscured by the grid of the block above it (smaller yMm).
-   * In PDF coordinates, yMm increases downward (top = smaller yMm).
-   * For two blocks in the same column, upper.yMm < lower.yMm.
-   * We need: lower.yMm >= upper.yMm + upper.blockH + ARRAY_LABEL_H_MM.
-   */
-  const byCol = new Map<number, PositionedEntry[]>();
-  for (const item of raw) {
-    const key = Math.round(item.xMm * 10);
-    const col = byCol.get(key) ?? [];
-    col.push(item);
-    byCol.set(key, col);
-  }
-  for (const col of byCol.values()) {
-    col.sort((a, b) => a.yMm - b.yMm); // top to bottom (north to south)
-    for (let i = 1; i < col.length; i++) {
-      const upper = col[i - 1]; // more north (smaller yMm)
-      const lower = col[i];     // more south (larger yMm)
-      const minLowerY = upper.yMm + upper.blockH + ARRAY_LABEL_H_MM;
-      if (lower.yMm < minLowerY) {
-        lower.yMm = minLowerY;
-      }
-    }
-  }
 
   const totalH = Math.max(...raw.map(p => p.yMm + p.blockH));
   return { positioned: raw, totalH, cellW, cellH };
@@ -159,14 +130,9 @@ const drawArrayBlock = (
   );
   panels.forEach(p => { grid[p.row][p.col] = p; });
 
-  // Label centred over the block width.
-  font(doc, 7, 'normal', C_MUTED);
-  doc.text(`Array ${entry.arrayIndex}`, xMm + blockW / 2, yMm + ARRAY_LABEL_H_MM - 1, { align: 'center' });
-
-  // Panel grid centred within blockW.
   const gridW = cols * cellW + (cols - 1) * CELL_GAP_MM;
   const gridOffsetX = (blockW - gridW) / 2;
-  const gridTop = yMm + ARRAY_LABEL_H_MM;
+  const gridTop = yMm;
 
   for (let rowIdx = rows - 1; rowIdx >= 0; rowIdx--) {
     const yRow = gridTop + (rows - 1 - rowIdx) * (cellH + CELL_GAP_MM);
@@ -206,7 +172,7 @@ const drawArrayBlock = (
       }
 
       doc.setDrawColor(StringColoursUtils.getStringColour(panel.stringColorIndex));
-      doc.setLineWidth(0.15);
+      doc.setLineWidth(0.40);
       doc.rect(xCell, yRow, cellW, cellH, 'S');
     }
   }
@@ -231,7 +197,6 @@ export const drawSetupHeatmap = (
   doc.text(result.result.setupLabel, MARGIN, cursor.y + 6);
   cursor.advance(8);
 
-  // String legend — compact horizontal layout.
   const stringLegend = new Map<string, number>();
   for (const panel of panels) {
     if (!stringLegend.has(panel.string)) stringLegend.set(panel.string, panel.stringColorIndex);
@@ -265,6 +230,6 @@ export const drawSetupHeatmap = (
     drawArrayBlock(doc, entry, MARGIN + xMm, blockTop + yMm, cellW, cellH, blockW, month, day);
   }
 
-  cursor.advance(totalH + 4); // 4mm gap before scale bar
+  cursor.advance(totalH + 4);
   drawScaleBar(doc, cursor, shadeToRgb);
 };
