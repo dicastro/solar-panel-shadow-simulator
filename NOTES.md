@@ -1,2 +1,1 @@
 * Representación más fiel de los setups en los heatmaps, ahora mismo no se refleja el azimuth de los arrays, siempre se muestran en vertical
-* Si ya se tiene un setup con una simulación ejecutada y se carga un backup, se reflejan los cambios en el renderizado en 3d, pero no se actualiza el sidebar de resultados de la simulación, hay que refrescar la página
